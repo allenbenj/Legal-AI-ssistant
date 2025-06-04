@@ -51,7 +51,7 @@ class LegalAIMigrator:
     """Migrates existing codebase to new organized structure"""
     
     def __init__(self, base_dir: Path = None):
-        self.base_dir = base_dir or Path("/mnt/e/A_Scripts")
+        self.base_dir = base_dir or Path("/mnt/e/core_system")
         self.target_dir = self.base_dir / "legal_ai_system"
         self.backup_dir = self.base_dir / f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         
@@ -498,11 +498,11 @@ def main():
     parser.add_argument("--plan-file", help="Load migration plan from file")
     parser.add_argument("--backup", action="store_true", help="Create backup before migration")
     parser.add_argument("--output", help="Output file for migration plan")
-    parser.add_argument("--base-dir", help="Base directory (default: /mnt/e/A_Scripts)")
+    parser.add_argument("--base-dir", help="Base directory (default: /mnt/e/core_system)")
     
     args = parser.parse_args()
     
-    base_dir = Path(args.base_dir) if args.base_dir else Path("/mnt/e/A_Scripts")
+    base_dir = Path(args.base_dir) if args.base_dir else Path("/mnt/e/core_system")
     migrator = LegalAIMigrator(base_dir)
     
     if args.analyze:

@@ -2,7 +2,7 @@
 echo 🔧 Setting up Legal AI System Environment...
 
 REM Navigate to project directory
-cd /d "E:\A_Scripts\legal_ai_system"
+cd /d "E:\core_system\legal_ai_system"
 
 REM Create virtual environment if it doesn't exist
 if not exist "venv" (
