@@ -19,9 +19,9 @@ import uuid
 from enum import Enum
 
 # Use detailed_logging
-from .detailed_logging import get_detailed_logger, LogCategory, detailed_log_function
+from ..core.detailed_logging import get_detailed_logger, LogCategory, detailed_log_function
 # Import constants from the config module
-from ..config.constants import Constants
+from ..core.constants import Constants
 from ..persistence.repositories.user_repository import UserRepository 
 # Import exceptions for specific error types if needed
 # from .unified_exceptions import SecurityError # Example

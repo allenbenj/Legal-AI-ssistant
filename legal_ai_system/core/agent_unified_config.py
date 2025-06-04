@@ -18,7 +18,7 @@ try:
         create_agent_grok_config, get_agent_grok_manager, AGENT_DEFAULT_MODEL
     )
     from legal_ai_system.memory.unified_memory_manager import UnifiedMemoryManager, MemoryType
-    from legal_ai_system.core.service_container import ServiceContainer
+    from legal_ai_system.services.service_container import ServiceContainer
 except ImportError:
     # Fallback for relative imports
     try:
@@ -26,7 +26,7 @@ except ImportError:
             create_agent_grok_config, get_agent_grok_manager, AGENT_DEFAULT_MODEL
         )
         from ..memory.unified_memory_manager import UnifiedMemoryManager, MemoryType
-        from ..core.service_container import ServiceContainer
+        from ..services.service_container import ServiceContainer
     except ImportError:
         # Final fallback - create minimal classes
         class ServiceContainer:
