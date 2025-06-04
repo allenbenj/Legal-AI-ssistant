@@ -19,7 +19,7 @@ import threading
 import hashlib
 
 # Import detailed logging
-from .detailed_logging import get_detailed_logger, LogCategory, detailed_log_function
+from ..core.detailed_logging import get_detailed_logger, LogCategory, detailed_log_function
 
 # Initialize loggers
 kg_logger = get_detailed_logger("Knowledge_Graph_Manager", LogCategory.KNOWLEDGE_GRAPH)

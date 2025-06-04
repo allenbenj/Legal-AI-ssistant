@@ -16,8 +16,8 @@ from datetime import datetime, timezone # Added timezone
 # Use detailed_logging
 from ..core.detailed_logging import get_detailed_logger, LogCategory, detailed_log_function
 # Import core components it will interact with via ServiceContainer
-from ..core.service_container import ServiceContainer
-from ..core.security_manager import SecurityManager, AuthUser, AccessLevel # For user context
+from .service_container import ServiceContainer
+from .security_manager import SecurityManager, AuthUser, AccessLevel  # For user context
 from ..core.unified_exceptions import ServiceLayerError, DocumentNotFoundError, ProcessingError
 # Import result types from agents/workflows if this service returns them directly
 from ..agents.document_processor.document_processor_agent import DocumentProcessingOutput
