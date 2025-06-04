@@ -1,0 +1,84 @@
+# Refactoring Notes for Legal AI System
+
+## General
+- The project contains a large number of Python files, indicating a complex system.
+- Many files have overlapping responsibilities (e.g., multiple vector store implementations, multiple document processors/pipelines). Consolidation will be key.
+- The `memory_management.md` file serves as the architectural blueprint.
+
+## File-Specific Notes & Actions:
+
+### Frontend Assets (Moved to `frontend/`)
+- `package.json`, `package-lock.json`, `vite.config.ts`, `tailwind.config.js`, `eslint.config.js`, `index.html`, `README.md` (Vite/React), `tsconfig.json`, `postcss.config.js`, `tsconfig.node.json`, `tsconfig.app.json`
+- **Action:** These files constitute a Vite/React frontend. They have been moved to `legal_ai_system/frontend/`. Further integration or refactoring of the frontend itself is outside the current backend refactoring scope but should be planned.
+
+### Utility & Test Scripts
+- `py_to_md_converter.py`: Utility. Keep in `scripts/` or `utils/tooling/`.
+- `convert_project_to_docs.py`: Script using the converter. Keep in `scripts/` or `utils/tooling/`.
+- `transfer_memories_to_neo4j.py`: Data migration script. Keep in `scripts/migrations/` or `utils/migrations/`.
+- `minimal_api.py`: Simplified FastAPI for testing. Could be moved to `tests/dev_api/` or `scripts/testing/`. Likely superseded by the main FastAPI app for production.
+- `quick_start_vis_service.py`: Simplified server. Similar to `minimal_api.py`, for testing or quick demos. Likely superseded.
+
+### Informational Files (Content to be extracted to `docs/notes/`)
+- `modular_improvements.py`: Contains ideas for improvements. Extract content to a Markdown file in `docs/notes/modular_improvements_ideas.md`.
+
+### Consolidation Candidates
+- **Document Processing:**
+    - `document_processor.py` (wrapper)
+    - `document_processor_full.py` (main logic)
+    - `document_processor_clean.py` (no GUI dependencies)
+    - **Action:** Consolidate into `agents/document_processor/document_processor.py`, taking the best features from `_full` and `_clean`. Ensure no GUI dependencies in the agent core.
+- **Vector Stores:**
+    - `enhanced_vector_store.py`
+    - (Mention of `ultimate_vector_store.py`, `optimized_vector_store.py` in other files, but not provided directly)
+    - **Action:** Use `enhanced_vector_store.py` as the basis for `knowledge/vector_store/vector_store.py`.
+- **Pipelines/Processors:**
+    - `unified_processor.py`
+    - `unified_pipeline.py`
+    - **Action:** Review and merge into a single `processing/unified_processor.py`. `unified_processor.py` seems more aligned with `shared_components.py`.
+- **Knowledge Graph:**
+    - `knowledge_graph_enhanced.py`
+    - (Mention of `knowledge_graph_builder.py`)
+    - **Action:** Use `knowledge_graph_enhanced.py` as the basis for `knowledge/knowledge_graph_manager.py`.
+- **Memory Management:**
+    - `claude_memory_store.py`
+    - `unified_memory_manager.py`
+    - **Action:** Integrate functionalities of `claude_memory_store.py` into `memory/unified_memory_manager.py` or ensure UMM already covers its scope as per `memory_management.md`.
+
+### Core Component Placement & Refactoring
+- `settings.py` -> `config/settings.py` (Done)
+- `constants.py` -> `config/constants.py` (Done)
+- `grok_3_mini_setup.py` -> `config/grok_config.py` (Next)
+- `detailed_logging.py` -> `core/detailed_logging.py` (Done)
+- `unified_exceptions.py` -> `core/unified_exceptions.py` (Done)
+- `base_agent.py` -> `core/base_agent.py` (Next)
+- `configuration_manager.py` -> `core/configuration_manager.py` (Next)
+- `llm_providers.py` -> `core/llm_providers.py` (Next)
+- `model_switcher.py` -> `core/model_switcher.py` (Next)
+- `security_manager.py` -> `core/security_manager.py` (Next)
+- `embedding_manager.py` -> `core/embedding_manager.py` (or `knowledge/vector_store/`)
+- `shared_components.py` -> `core/shared_components.py`
+- `system_initializer.py` -> `core/system_initializer.py` (and `__main__.py` from new batch)
+- `ontology.py` -> `utils/ontology.py` (Next)
+- `error_recovery.py` -> `utils/error_recovery.py`
+- `enhanced_persistence.py` -> `persistence/enhanced_persistence.py`
+- `integration_service.py` -> `services/integration_service.py`
+- `system_commands.py` -> `cli/system_commands.py`
+- `main.py` (FastAPI from first batch) -> `main.py` (root) (Next)
+- `main.py` (Streamlit from second batch) -> `gui/streamlit_app.py`
+- `__main__.py` (from second batch) -> `__main__.py` (root, to launch Streamlit GUI)
+- `requirements.txt` -> `requirements.txt` (root)
+
+### Agent Refactoring (`agents/`)
+- Each agent file (`ontology_extraction.py`, `semantic_analysis.py`, etc.) to be moved to its own subdirectory in `agents/` and renamed (e.g., `agents/ontology_extraction/ontology_extractor.py`).
+
+### Workflow Refactoring (`workflows/`)
+- `realtime_analysis_workflow.py`
+- `ultimate_orchestrator.py`
+- `ontology_integration.py` (rename to `ontology_integration_workflow.py`)
+
+## Next Steps in Refactoring
+1.  Complete refactoring of remaining `core/` components.
+2.  Address `config/grok_config.py`.
+3.  Tackle `memory/` components, ensuring alignment with `memory_management.md`.
+4.  Proceed with other modules as outlined in the plan.
+5.  Structure the `main.py` (FastAPI) and the Streamlit GUI entry point.
