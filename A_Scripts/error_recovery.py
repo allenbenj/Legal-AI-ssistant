@@ -1,402 +1,382 @@
+# legal_ai_system/utils/error_recovery.py
 """
-Basic Error Recovery System - Phase 2
-Intelligent error handling with retry logic and fallback strategies
+Error Recovery System - Phase 2
+Intelligent error handling with retry logic and fallback strategies for various operations.
 """
 
 import asyncio
-import logging
-from typing import Any, Dict, List, Optional, Callable
-from dataclasses import dataclass
+# import logging # Replaced by detailed_logging
+from typing import Any, Dict, List, Optional, Callable, Coroutine # Added Coroutine
+from dataclasses import dataclass, field # Added field
 from enum import Enum
 import time
 
+# Use detailed_logging
+from ..core.detailed_logging import get_detailed_logger, LogCategory, detailed_log_function
+
+# Initialize logger for this module
+error_recovery_logger = get_detailed_logger("ErrorRecoveryUtil", LogCategory.ERROR_HANDLING)
+
 
 class ErrorType(Enum):
-    """Classification of error types for recovery strategies"""
+    """Classification of error types for recovery strategies."""
     FILE_CORRUPTED = "file_corrupted"
     LLM_TIMEOUT = "llm_timeout"
-    MEMORY_ERROR = "memory_error"
+    LLM_API_ERROR = "llm_api_error" # More specific than just timeout
+    MEMORY_ALLOCATION_ERROR = "memory_allocation_error" # Renamed
     PARSING_ERROR = "parsing_error"
-    NETWORK_ERROR = "network_error"
+    NETWORK_CONNECTIVITY_ERROR = "network_connectivity_error" # Renamed
     DEPENDENCY_MISSING = "dependency_missing"
-    UNKNOWN = "unknown"
-
+    DATABASE_TRANSACTION_ERROR = "database_transaction_error" # Added
+    RATE_LIMIT_EXCEEDED = "rate_limit_exceeded" # Added
+    UNKNOWN_SYSTEM_ERROR = "unknown_system_error" # Renamed
 
 @dataclass
 class RecoveryAttempt:
-    """Record of a recovery attempt"""
+    """Record of a recovery attempt."""
     error_type: ErrorType
-    strategy: str
+    strategy_used: str # Renamed from strategy
     success: bool
-    duration: float
+    duration_sec: float # Renamed
+    attempt_number: int # Added
     error_message: Optional[str] = None
-
+    context_modifications: Optional[Dict[str, Any]] = None # What context was changed
 
 class ErrorRecovery:
     """
-    Basic error recovery with multiple strategies.
-    
-    Features:
-    - Automatic error classification
-    - Multiple recovery strategies per error type
-    - Exponential backoff for retries
-    - Recovery history tracking
-    - Fallback mechanisms
+    Provides mechanisms for recovering from common operational errors.
     """
     
-    def __init__(self, max_retries: int = 3, base_delay: float = 1.0):
-        self.max_retries = max_retries
-        self.base_delay = base_delay
-        self.recovery_history = []
-        self.logger = logging.getLogger(__name__)
-        
+    @detailed_log_function(LogCategory.ERROR_HANDLING)
+    def __init__(self, max_retries_default: int = 3, base_delay_sec_default: float = 1.0): # Renamed params
+        error_recovery_logger.info("Initializing ErrorRecovery utility.")
+        self.max_retries_default = max_retries_default
+        self.base_delay_sec_default = base_delay_sec_default
+        self.recovery_attempt_history: List[RecoveryAttempt] = [] # Renamed, consider capping size
+
         # Define recovery strategies for each error type
-        self.recovery_strategies = {
+        # Each strategy function should return True if recovery action was taken (and caller should retry),
+        # False if no recovery action applicable or recovery failed.
+        # They can modify the 'context' dict to influence retries.
+        self.error_type_strategies: Dict[ErrorType, List[Callable[[Exception, Dict[str, Any]], Coroutine[Any, Any, bool]]]] = { # Type hint
             ErrorType.FILE_CORRUPTED: [
-                self._try_alternative_reader,
-                self._try_raw_text_extraction,
-                self._try_partial_recovery
+                self._strategy_try_alternative_reader, self._strategy_try_raw_extraction
             ],
             ErrorType.LLM_TIMEOUT: [
-                self._reduce_chunk_size,
-                self._switch_to_faster_model,
-                self._use_simpler_prompt
+                self._strategy_reduce_llm_request_size, self._strategy_switch_to_faster_llm_model
             ],
-            ErrorType.MEMORY_ERROR: [
-                self._reduce_batch_size,
-                self._enable_streaming,
-                self._clear_cache_and_retry
+            ErrorType.LLM_API_ERROR: [ # Different from timeout, might be server error
+                self._strategy_retry_with_backoff, self._strategy_switch_llm_provider_or_model
+            ],
+            ErrorType.MEMORY_ALLOCATION_ERROR: [
+                self._strategy_reduce_batch_or_chunk_size, self._strategy_trigger_gc_and_retry
             ],
             ErrorType.PARSING_ERROR: [
-                self._try_different_encoding,
-                self._try_fallback_parser,
-                self._extract_raw_content
+                self._strategy_try_different_encoding, self._strategy_use_fallback_parser
             ],
-            ErrorType.NETWORK_ERROR: [
-                self._retry_with_backoff,
-                self._switch_provider,
-                self._use_local_fallback
+            ErrorType.NETWORK_CONNECTIVITY_ERROR: [
+                self._strategy_retry_with_backoff # Network errors are often transient
             ],
-            ErrorType.DEPENDENCY_MISSING: [
-                self._suggest_installation,
-                self._use_alternative_library,
-                self._fallback_to_basic_processing
-            ]
+            ErrorType.DATABASE_TRANSACTION_ERROR: [
+                self._strategy_retry_transaction # DB deadlocks or transient issues
+            ],
+            ErrorType.RATE_LIMIT_EXCEEDED: [
+                self._strategy_wait_for_rate_limit_reset # Wait longer
+            ],
+            # DEPENDENCY_MISSING usually cannot be recovered at runtime automatically
+            ErrorType.DEPENDENCY_MISSING: [self._strategy_log_dependency_issue],
+            ErrorType.UNKNOWN_SYSTEM_ERROR: [self._strategy_log_and_no_retry] # Default for unknown
         }
-    
-    async def recover_with_retry(self, 
-                               func: Callable, 
-                               *args, 
-                               context: Dict[str, Any] = None, 
-                               **kwargs) -> Any:
+        error_recovery_logger.info("ErrorRecovery initialized.", 
+                                 parameters={'max_retries': self.max_retries_default, 'base_delay': self.base_delay_sec_default})
+
+    @detailed_log_function(LogCategory.ERROR_HANDLING)
+    async def attempt_recovery_async(self, # Renamed from recover_with_retry
+                               func_to_recover: Callable[..., Coroutine[Any, Any, Any]], # Renamed, type hint
+                               *args: Any, 
+                               error_context: Optional[Dict[str, Any]] = None, # Renamed
+                               max_retries_override: Optional[int] = None, # Renamed
+                               **kwargs: Any) -> Any:
         """
-        Execute function with automatic error recovery and retries.
-        
-        Args:
-            func: Function to execute
-            *args: Function arguments
-            context: Additional context for recovery
-            **kwargs: Function keyword arguments
-        
-        Returns:
-            Function result or raises exception if all recovery attempts fail
+        Executes an async function with automatic error recovery and retries.
         """
-        context = context or {}
-        last_error = None
-        
-        for attempt in range(self.max_retries):
+        error_recovery_logger.info(f"Attempting recovery for function: {func_to_recover.__name__}")
+        current_error_context = error_context or {}
+        retries = max_retries_override if max_retries_override is not None else self.max_retries_default
+        last_exception_caught: Optional[Exception] = None # Renamed
+
+        for attempt_num in range(retries + 1): # Allow initial attempt + number of retries
+            current_error_context['current_attempt'] = attempt_num + 1 # For strategies to know
             try:
-                result = await func(*args, **kwargs)
+                # Pass modified context (args/kwargs) to the function if strategies changed them
+                modified_args = current_error_context.get("modified_args", args)
+                modified_kwargs = current_error_context.get("modified_kwargs", kwargs)
                 
-                # Success - record if this was a retry
-                if attempt > 0:
-                    self.logger.info(f"Function succeeded on attempt {attempt + 1}")
+                result = await func_to_recover(*modified_args, **modified_kwargs)
                 
+                if attempt_num > 0: # Log if a retry was successful
+                    error_recovery_logger.info(f"Function {func_to_recover.__name__} succeeded on attempt {attempt_num + 1}.")
                 return result
                 
             except Exception as e:
-                last_error = e
-                error_type = self._classify_error(e)
+                last_exception_caught = e
+                error_type_classified = self._classify_error_type(e) # Renamed
                 
-                self.logger.warning(f"Attempt {attempt + 1} failed: {str(e)}")
+                error_recovery_logger.warning(f"Attempt {attempt_num + 1} for {func_to_recover.__name__} failed.", 
+                                             parameters={'error_type': error_type_classified.value}, exception=e)
                 
-                # Try recovery strategies if not the last attempt
-                if attempt < self.max_retries - 1:
-                    recovery_success = await self._attempt_recovery(
-                        error_type, e, context, attempt
+                if attempt_num < retries:
+                    recovery_strategy_applied = await self._apply_recovery_strategies(
+                        error_type_classified, e, current_error_context, attempt_num
                     )
                     
-                    if recovery_success:
-                        # Update context with recovery modifications
-                        if "modified_args" in context:
-                            args = context["modified_args"]
-                        if "modified_kwargs" in context:
-                            kwargs.update(context["modified_kwargs"])
-                        
-                        # Wait before retry with exponential backoff
-                        delay = self.base_delay * (2 ** attempt)
-                        await asyncio.sleep(delay)
-                        continue
-                
-                # If we're here, recovery failed or this is the last attempt
-                break
+                    if recovery_strategy_applied: # If a strategy modified context and suggests retry
+                        delay_sec = self.base_delay_sec_default * (2 ** attempt_num) # Exponential backoff
+                        error_recovery_logger.info(f"Retrying {func_to_recover.__name__} in {delay_sec:.2f}s after recovery strategy.",
+                                                 parameters={'strategy_applied': recovery_strategy_applied})
+                        await asyncio.sleep(delay_sec)
+                        continue # Retry the loop
+                    else: # No applicable/successful recovery strategy, or strategy advises not to retry
+                        error_recovery_logger.warning(f"No successful recovery strategy applied for {func_to_recover.__name__} on attempt {attempt_num + 1}. Failing.")
+                        break # Break loop and re-raise
+                else: # Max retries reached
+                    error_recovery_logger.error(f"Max retries ({retries}) reached for {func_to_recover.__name__}. Failing.")
+                    break # Break loop
         
-        # All attempts failed
-        self.logger.error(f"All {self.max_retries} attempts failed. Last error: {str(last_error)}")
-        raise last_error
-    
-    def _classify_error(self, error: Exception) -> ErrorType:
-        """Classify error type for appropriate recovery strategy"""
-        error_str = str(error).lower()
-        error_type_name = type(error).__name__.lower()
+        # If loop finished due to exhausted retries or failed recovery
+        error_recovery_logger.error(f"All recovery attempts for {func_to_recover.__name__} failed.", 
+                                   parameters={'last_error': str(last_exception_caught)})
+        if last_exception_caught:
+            raise last_exception_caught # Re-raise the last caught exception
+        else: # Should not happen if loop broke due to error
+            raise RuntimeError(f"Error recovery failed for {func_to_recover.__name__} without a specific exception.")
+
+
+    def _classify_error_type(self, error: Exception) -> ErrorType: # Renamed
+        """Classifies an exception into an ErrorType for strategy selection."""
+        # This can be made more sophisticated, checking specific exception types
+        error_str_lower = str(error).lower()
+        error_class_name_lower = type(error).__name__.lower()
+
+        if isinstance(error, (FileNotFoundError, PermissionError)): return ErrorType.FILE_CORRUPTED # Or FILE_ACCESS_ERROR
+        if isinstance(error, (asyncio.TimeoutError, TimeoutError)): return ErrorType.LLM_TIMEOUT # Or GENERIC_TIMEOUT
+        if "timeout" in error_str_lower: return ErrorType.LLM_TIMEOUT
+
+        if isinstance(error, MemoryError): return ErrorType.MEMORY_ALLOCATION_ERROR
+        if isinstance(error, (json.JSONDecodeError, SyntaxError)): return ErrorType.PARSING_ERROR # SyntaxError for bad JSON too
         
-        # File-related errors
-        if any(keyword in error_str for keyword in ["corrupted", "invalid file", "bad file"]):
-            return ErrorType.FILE_CORRUPTED
+        # For network/DB, check for specific library exceptions if possible
+        # Example: if isinstance(error, (requests.exceptions.ConnectionError, asyncpg.exceptions.InterfaceError)):
+        if any(kw in error_str_lower for kw in ["connection refused", "host not found", "network is unreachable"]):
+            return ErrorType.NETWORK_CONNECTIVITY_ERROR
+        if "deadlock" in error_str_lower or "transaction aborted" in error_str_lower:
+            return ErrorType.DATABASE_TRANSACTION_ERROR
+        if "rate limit" in error_str_lower or "quota exceeded" in error_str_lower:
+            return ErrorType.RATE_LIMIT_EXCEEDED
+
+        if isinstance(error, ImportError): return ErrorType.DEPENDENCY_MISSING
         
-        # Timeout errors
-        if any(keyword in error_str for keyword in ["timeout", "timed out"]):
-            return ErrorType.LLM_TIMEOUT
-        
-        # Memory errors
-        if any(keyword in error_str for keyword in ["memory", "out of memory", "memoryerror"]):
-            return ErrorType.MEMORY_ERROR
-        
-        # Parsing errors
-        if any(keyword in error_str for keyword in ["parsing", "decode", "encoding", "invalid format"]):
-            return ErrorType.PARSING_ERROR
-        
-        # Network errors
-        if any(keyword in error_str for keyword in ["network", "connection", "http", "ssl"]):
-            return ErrorType.NETWORK_ERROR
-        
-        # Import/dependency errors
-        if "importerror" in error_type_name or "modulenotfounderror" in error_type_name:
-            return ErrorType.DEPENDENCY_MISSING
-        
-        return ErrorType.UNKNOWN
-    
-    async def _attempt_recovery(self, 
-                              error_type: ErrorType, 
-                              error: Exception, 
-                              context: Dict[str, Any], 
-                              attempt: int) -> bool:
-        """
-        Attempt recovery using appropriate strategies for error type.
-        
-        Returns:
-            True if recovery was attempted and might help, False otherwise
-        """
-        strategies = self.recovery_strategies.get(error_type, [])
-        
-        if not strategies:
-            self.logger.warning(f"No recovery strategies for error type: {error_type}")
+        # Check for LLM specific API errors (e.g. based on status codes if it's an HTTPError from a library)
+        # if hasattr(error, 'response') and hasattr(error.response, 'status_code'):
+        #     if error.response.status_code in [500, 502, 503, 504]: return ErrorType.LLM_API_ERROR
+        #     if error.response.status_code == 429: return ErrorType.RATE_LIMIT_EXCEEDED
+
+        error_recovery_logger.debug("Error classified.", parameters={'error_class': error_class_name_lower, 'error_str': error_str_lower, 'classified_as': ErrorType.UNKNOWN_SYSTEM_ERROR.value})
+        return ErrorType.UNKNOWN_SYSTEM_ERROR
+
+    async def _apply_recovery_strategies(self, error_type: ErrorType, error_obj: Exception, # Renamed params
+                                       current_context: Dict[str, Any], attempt_num: int) -> bool:
+        """Applies suitable recovery strategies for the given error type."""
+        strategies_to_try = self.error_type_strategies.get(error_type, [])
+        if not strategies_to_try:
+            error_recovery_logger.debug(f"No defined recovery strategies for error type.", parameters={'error_type': error_type.value})
             return False
+
+        # Try strategies in order. Some strategies might be mutually exclusive or progressive.
+        # This simple version tries the strategy corresponding to the attempt number, if available.
+        strategy_idx_to_try = attempt_num % len(strategies_to_try) # Cycle through strategies on retries
+        selected_strategy_func = strategies_to_try[strategy_idx_to_try]
         
-        # Try the first available strategy that hasn't been tried yet
-        strategy_index = min(attempt, len(strategies) - 1)
-        strategy = strategies[strategy_index]
+        strategy_name = selected_strategy_func.__name__
+        error_recovery_logger.info(f"Attempting recovery strategy.", 
+                                 parameters={'error_type': error_type.value, 'strategy': strategy_name, 'attempt': attempt_num + 1})
         
+        start_time = time.perf_counter()
         try:
-            start_time = time.time()
-            success = await strategy(error, context)
-            duration = time.time() - start_time
+            # Strategy functions are async and modify current_context if they change params for retry
+            strategy_succeeded = await selected_strategy_func(error_obj, current_context)
+            duration_sec = time.perf_counter() - start_time
             
-            # Record recovery attempt
-            recovery_record = RecoveryAttempt(
-                error_type=error_type,
-                strategy=strategy.__name__,
-                success=success,
-                duration=duration,
-                error_message=str(error) if not success else None
+            recovery_attempt_obj = RecoveryAttempt( # Renamed
+                error_type=error_type, strategy_used=strategy_name, success=strategy_succeeded,
+                duration_sec=duration_sec, attempt_number=attempt_num + 1,
+                error_message=str(error_obj) if not strategy_succeeded else None,
+                context_modifications=current_context.get("last_strategy_modifications") # Strategy should populate this
             )
-            self.recovery_history.append(recovery_record)
+            self.recovery_attempt_history.append(recovery_attempt_obj)
             
-            if success:
-                self.logger.info(f"Recovery strategy '{strategy.__name__}' succeeded")
+            if strategy_succeeded:
+                error_recovery_logger.info(f"Recovery strategy '{strategy_name}' applied successfully.", parameters={'duration_sec': duration_sec})
+                return True # Indicates a retry with potentially modified context is warranted
             else:
-                self.logger.warning(f"Recovery strategy '{strategy.__name__}' failed")
-            
-            return success
-            
-        except Exception as recovery_error:
-            self.logger.error(f"Recovery strategy '{strategy.__name__}' threw exception: {str(recovery_error)}")
-            return False
-    
-    # Recovery strategy implementations
-    
-    async def _try_alternative_reader(self, error: Exception, context: Dict[str, Any]) -> bool:
-        """Try alternative file reading methods"""
-        self.logger.info("Attempting alternative file reader")
-        # This would implement fallback readers
-        context["use_alternative_reader"] = True
+                error_recovery_logger.warning(f"Recovery strategy '{strategy_name}' did not lead to a retryable state.")
+                return False
+        except Exception as recovery_exec_err:
+            error_recovery_logger.error(f"Recovery strategy '{strategy_name}' itself raised an exception.", exception=recovery_exec_err)
+            return False # Strategy failed
+
+    # --- Placeholder Recovery Strategy Implementations ---
+    # These should modify `context` if they change parameters for the next retry.
+    # They return True if a retry is sensible after the strategy, False otherwise.
+
+    async def _strategy_try_alternative_reader(self, error: Exception, context: Dict[str, Any]) -> bool:
+        error_recovery_logger.info("Applying strategy: Try alternative file reader.")
+        context["use_alternative_reader_flag"] = True # Example modification
+        context["last_strategy_modifications"] = {"use_alternative_reader_flag": True}
         return True
-    
-    async def _try_raw_text_extraction(self, error: Exception, context: Dict[str, Any]) -> bool:
-        """Try basic text extraction as fallback"""
-        self.logger.info("Attempting raw text extraction")
-        context["use_raw_extraction"] = True
+
+    async def _strategy_try_raw_extraction(self, error: Exception, context: Dict[str, Any]) -> bool:
+        error_recovery_logger.info("Applying strategy: Try raw text extraction.")
+        context["use_raw_extraction_flag"] = True
+        context["last_strategy_modifications"] = {"use_raw_extraction_flag": True}
         return True
-    
-    async def _try_partial_recovery(self, error: Exception, context: Dict[str, Any]) -> bool:
-        """Try to recover partial content"""
-        self.logger.info("Attempting partial content recovery")
-        context["allow_partial_content"] = True
-        return True
-    
-    async def _reduce_chunk_size(self, error: Exception, context: Dict[str, Any]) -> bool:
-        """Reduce chunk size for LLM processing"""
-        current_size = context.get("chunk_size", 3000)
-        new_size = max(500, current_size // 2)
         
-        if new_size < 500:
-            return False  # Too small to be useful
+    async def _strategy_reduce_llm_request_size(self, error: Exception, context: Dict[str, Any]) -> bool:
+        error_recovery_logger.info("Applying strategy: Reduce LLM request size (e.g. chunk size).")
+        current_chunk_size = context.get("modified_kwargs", {}).get("chunk_size", context.get("initial_chunk_size", 3000))
+        new_chunk_size = max(500, int(current_chunk_size * 0.75))
+        if new_chunk_size == current_chunk_size and new_chunk_size == 500: return False # Cannot reduce further
+
+        context.setdefault("modified_kwargs", {})["chunk_size"] = new_chunk_size
+        context["last_strategy_modifications"] = {"chunk_size": new_chunk_size}
+        error_recovery_logger.info(f"Reduced chunk size to {new_chunk_size}")
+        return True
+
+    async def _strategy_switch_to_faster_llm_model(self, error: Exception, context: Dict[str, Any]) -> bool:
+        error_recovery_logger.info("Applying strategy: Switch to a faster/smaller LLM model.")
+        # This requires ModelSwitcher integration or knowledge of available models.
+        # context.setdefault("modified_kwargs", {})["model_name"] = "faster-model-xyz"
+        context["last_strategy_modifications"] = {"switched_to_faster_model": True} # Placeholder
+        return True # Assume switch is possible
+
+    async def _strategy_retry_with_backoff(self, error: Exception, context: Dict[str, Any]) -> bool:
+        # The main retry loop already handles backoff. This strategy just confirms a retry is okay.
+        error_recovery_logger.info("Applying strategy: Retry with backoff (handled by main loop).")
+        context["last_strategy_modifications"] = {"retry_confirmed": True}
+        return True
+
+    # ... Implement other strategy placeholders similarly ...
+    async def _strategy_reduce_batch_or_chunk_size(self, error: Exception, context: Dict[str, Any]) -> bool:
+        return await self._strategy_reduce_llm_request_size(error, context) # Reuse logic for now
+
+    async def _strategy_trigger_gc_and_retry(self, error: Exception, context: Dict[str, Any]) -> bool:
+        error_recovery_logger.info("Applying strategy: Triggering GC and retrying.")
+        import gc
+        gc.collect()
+        context["last_strategy_modifications"] = {"gc_triggered": True}
+        return True
+
+    async def _strategy_try_different_encoding(self, error: Exception, context: Dict[str, Any]) -> bool:
+        # This would require the original function to accept an encoding parameter
+        # and for this context to track tried encodings.
+        tried_encodings = context.get("tried_encodings_list", [])
+        possible_encodings = ["utf-8", "latin-1", "cp1252"]
+        next_encoding_to_try = next((enc for enc in possible_encodings if enc not in tried_encodings), None)
+        if next_encoding_to_try:
+            context.setdefault("modified_kwargs", {})["encoding_override"] = next_encoding_to_try
+            tried_encodings.append(next_encoding_to_try)
+            context["tried_encodings_list"] = tried_encodings
+            context["last_strategy_modifications"] = {"encoding_override": next_encoding_to_try}
+            error_recovery_logger.info(f"Applying strategy: Trying encoding {next_encoding_to_try}.")
+            return True
+        error_recovery_logger.info("Applying strategy: No more encodings to try.")
+        return False
+
+    async def _strategy_use_fallback_parser(self, error: Exception, context: Dict[str, Any]) -> bool:
+        error_recovery_logger.info("Applying strategy: Use fallback parser.")
+        context.setdefault("modified_kwargs", {})["use_fallback_parser_flag"] = True
+        context["last_strategy_modifications"] = {"use_fallback_parser_flag": True}
+        return True
+
+    async def _strategy_switch_llm_provider_or_model(self, error: Exception, context: Dict[str, Any]) -> bool:
+        error_recovery_logger.info("Applying strategy: Switch LLM provider or model.")
+        # Requires integration with LLMManager/ModelSwitcher
+        # context.setdefault("modified_kwargs", {})["use_fallback_llm_provider"] = True
+        context["last_strategy_modifications"] = {"switched_llm_provider": True} # Placeholder
+        return True
+
+    async def _strategy_retry_transaction(self, error: Exception, context: Dict[str, Any]) -> bool:
+        error_recovery_logger.info("Applying strategy: Retry database transaction (handled by main loop).")
+        context["last_strategy_modifications"] = {"db_retry_confirmed": True}
+        return True
+
+    async def _strategy_wait_for_rate_limit_reset(self, error: Exception, context: Dict[str, Any]) -> bool:
+        # Extract 'Retry-After' header if possible from error, or use a default long wait
+        retry_after_sec = 60.0 # Default wait for rate limits
+        error_str = str(error).lower()
+        match = re.search(r'retry after (\d+)', error_str)
+        if match: retry_after_sec = float(match.group(1))
         
-        self.logger.info(f"Reducing chunk size from {current_size} to {new_size}")
-        context["chunk_size"] = new_size
+        error_recovery_logger.info(f"Applying strategy: Waiting for rate limit reset.", parameters={'wait_sec': retry_after_sec})
+        await asyncio.sleep(retry_after_sec)
+        context["last_strategy_modifications"] = {"waited_for_rate_limit": retry_after_sec}
+        return True # Retry after waiting
+
+    async def _strategy_log_dependency_issue(self, error: Exception, context: Dict[str, Any]) -> bool:
+        error_recovery_logger.critical(f"Dependency Missing: {str(error)}. This usually requires manual intervention (installation).")
+        context["last_strategy_modifications"] = {"dependency_issue_logged": str(error)}
+        return False # Cannot auto-recover
+
+    async def _strategy_log_and_no_retry(self, error: Exception, context: Dict[str, Any]) -> bool:
+        error_recovery_logger.error(f"Unknown error encountered. No automatic retry strategy.", parameters={'error': str(error)})
+        context["last_strategy_modifications"] = {"unknown_error_no_retry": True}
+        return False # Do not retry unknown errors by default
+
+    @detailed_log_function(LogCategory.ERROR_HANDLING)
+    def get_recovery_statistics_summary(self) -> Dict[str, Any]: # Renamed
+        """Get summary statistics about recovery attempts."""
+        if not self.recovery_attempt_history:
+            return {"total_recovery_attempts": 0}
         
-        # Update kwargs if present
-        if "modified_kwargs" not in context:
-            context["modified_kwargs"] = {}
-        context["modified_kwargs"]["chunk_size"] = new_size
+        total = len(self.recovery_attempt_history)
+        successful = sum(1 for r in self.recovery_attempt_history if r.success)
         
-        return True
-    
-    async def _switch_to_faster_model(self, error: Exception, context: Dict[str, Any]) -> bool:
-        """Switch to a faster model for processing"""
-        self.logger.info("Switching to faster model")
-        context["use_faster_model"] = True
-        return True
-    
-    async def _use_simpler_prompt(self, error: Exception, context: Dict[str, Any]) -> bool:
-        """Use a simpler prompt to reduce processing load"""
-        self.logger.info("Using simpler prompt")
-        context["use_simple_prompt"] = True
-        return True
-    
-    async def _reduce_batch_size(self, error: Exception, context: Dict[str, Any]) -> bool:
-        """Reduce batch size to use less memory"""
-        current_batch = context.get("batch_size", 10)
-        new_batch = max(1, current_batch // 2)
-        
-        self.logger.info(f"Reducing batch size from {current_batch} to {new_batch}")
-        context["batch_size"] = new_batch
-        return True
-    
-    async def _enable_streaming(self, error: Exception, context: Dict[str, Any]) -> bool:
-        """Enable streaming to reduce memory usage"""
-        self.logger.info("Enabling streaming mode")
-        context["enable_streaming"] = True
-        return True
-    
-    async def _clear_cache_and_retry(self, error: Exception, context: Dict[str, Any]) -> bool:
-        """Clear cache to free memory"""
-        self.logger.info("Clearing cache to free memory")
-        context["clear_cache"] = True
-        return True
-    
-    async def _try_different_encoding(self, error: Exception, context: Dict[str, Any]) -> bool:
-        """Try different text encoding"""
-        encodings = context.get("tried_encodings", [])
-        available_encodings = ["utf-8", "latin-1", "cp1252", "utf-16"]
-        
-        for encoding in available_encodings:
-            if encoding not in encodings:
-                self.logger.info(f"Trying encoding: {encoding}")
-                context["encoding"] = encoding
-                context.setdefault("tried_encodings", []).append(encoding)
-                return True
-        
-        return False  # No more encodings to try
-    
-    async def _try_fallback_parser(self, error: Exception, context: Dict[str, Any]) -> bool:
-        """Try fallback parser"""
-        self.logger.info("Using fallback parser")
-        context["use_fallback_parser"] = True
-        return True
-    
-    async def _extract_raw_content(self, error: Exception, context: Dict[str, Any]) -> bool:
-        """Extract raw content without parsing"""
-        self.logger.info("Extracting raw content")
-        context["extract_raw_only"] = True
-        return True
-    
-    async def _retry_with_backoff(self, error: Exception, context: Dict[str, Any]) -> bool:
-        """Simple retry with backoff (already handled by main retry loop)"""
-        return True
-    
-    async def _switch_provider(self, error: Exception, context: Dict[str, Any]) -> bool:
-        """Switch to alternative provider"""
-        self.logger.info("Switching to alternative provider")
-        context["switch_provider"] = True
-        return True
-    
-    async def _use_local_fallback(self, error: Exception, context: Dict[str, Any]) -> bool:
-        """Use local processing as fallback"""
-        self.logger.info("Using local fallback processing")
-        context["use_local_fallback"] = True
-        return True
-    
-    async def _suggest_installation(self, error: Exception, context: Dict[str, Any]) -> bool:
-        """Suggest installing missing dependency"""
-        self.logger.warning(f"Missing dependency: {str(error)}")
-        context["suggest_install"] = str(error)
-        return False  # Can't automatically fix this
-    
-    async def _use_alternative_library(self, error: Exception, context: Dict[str, Any]) -> bool:
-        """Use alternative library"""
-        self.logger.info("Using alternative library")
-        context["use_alternative_lib"] = True
-        return True
-    
-    async def _fallback_to_basic_processing(self, error: Exception, context: Dict[str, Any]) -> bool:
-        """Fallback to basic processing without optional dependencies"""
-        self.logger.info("Falling back to basic processing")
-        context["basic_processing_only"] = True
-        return True
-    
-    def get_recovery_stats(self) -> Dict[str, Any]:
-        """Get recovery statistics"""
-        if not self.recovery_history:
-            return {"total_attempts": 0}
-        
-        total_attempts = len(self.recovery_history)
-        successful_recoveries = sum(1 for r in self.recovery_history if r.success)
-        
-        error_type_counts = {}
-        strategy_success_rates = {}
-        
-        for record in self.recovery_history:
-            # Count by error type
-            error_type = record.error_type.value
-            error_type_counts[error_type] = error_type_counts.get(error_type, 0) + 1
-            
-            # Track strategy success rates
-            strategy = record.strategy
-            if strategy not in strategy_success_rates:
-                strategy_success_rates[strategy] = {"attempts": 0, "successes": 0}
-            
-            strategy_success_rates[strategy]["attempts"] += 1
-            if record.success:
-                strategy_success_rates[strategy]["successes"] += 1
+        by_error_type: Dict[str, Dict[str, int]] = defaultdict(lambda: {"attempts": 0, "successes": 0})
+        by_strategy: Dict[str, Dict[str, int]] = defaultdict(lambda: {"attempts": 0, "successes": 0})
+
+        for rec in self.recovery_attempt_history:
+            by_error_type[rec.error_type.value]["attempts"] += 1
+            by_strategy[rec.strategy_used]["attempts"] += 1
+            if rec.success:
+                by_error_type[rec.error_type.value]["successes"] += 1
+                by_strategy[rec.strategy_used]["successes"] += 1
         
         # Calculate success rates
-        for strategy_data in strategy_success_rates.values():
-            attempts = strategy_data["attempts"]
-            successes = strategy_data["successes"]
-            strategy_data["success_rate"] = successes / attempts if attempts > 0 else 0
-        
-        return {
-            "total_attempts": total_attempts,
-            "successful_recoveries": successful_recoveries,
-            "overall_success_rate": successful_recoveries / total_attempts,
-            "error_type_distribution": error_type_counts,
-            "strategy_performance": strategy_success_rates
+        for data in by_error_type.values(): data["success_rate"] = (data["successes"] / data["attempts"]) if data["attempts"] > 0 else 0
+        for data in by_strategy.values(): data["success_rate"] = (data["successes"] / data["attempts"]) if data["attempts"] > 0 else 0
+            
+        summary = {
+            "total_recovery_attempts": total,
+            "successful_recovery_attempts": successful,
+            "overall_recovery_success_rate": (successful / total) if total > 0 else 0,
+            "attempts_by_error_type": dict(by_error_type),
+            "performance_by_strategy": dict(by_strategy)
         }
+        error_recovery_logger.info("Error recovery statistics summary generated.", parameters={'total_attempts': total})
+        return summary
 
+# Global error recovery instance (singleton pattern)
+_error_recovery_instance: Optional[ErrorRecovery] = None
+_instance_lock = threading.Lock()
 
-# Global error recovery instance
-error_recovery = ErrorRecovery()
+def get_error_recovery_instance(max_retries: int = 3, base_delay_sec: float = 1.0) -> ErrorRecovery:
+    """Get the global singleton instance of ErrorRecovery."""
+    global _error_recovery_instance
+    if _error_recovery_instance is None:
+        with _instance_lock: # Thread-safe initialization
+            if _error_recovery_instance is None:
+                _error_recovery_instance = ErrorRecovery(max_retries_default=max_retries, base_delay_sec_default=base_delay_sec)
+    return _error_recovery_instance
 
-# Export
-__all__ = ["ErrorRecovery", "ErrorType", "RecoveryAttempt", "error_recovery"]
+# Export for easy use
+__all__ = ["ErrorRecovery", "ErrorType", "RecoveryAttempt", "get_error_recovery_instance"]

@@ -9,7 +9,6 @@ import time # Replaced logging with detailed_logging
 from typing import Dict, Any, Optional, List
 from enum import Enum
 from dataclasses import dataclass, field # Added field
-from collections import defaultdict
 from datetime import datetime # For timestamps
 
 # Use detailed_logging
