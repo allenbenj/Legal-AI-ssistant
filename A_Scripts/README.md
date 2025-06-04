@@ -1,318 +1,279 @@
-# Legal AI System - Professional Edition
+# Legal AI System - Unified GUI
 
-Enterprise-grade Legal Document Analysis Platform with AI-powered processing, knowledge graph generation, and multiple interface options.
+A comprehensive web-based interface for the Legal AI System providing document processing, memory management, violation review, knowledge graph visualization, and system administration.
 
-## 🏛️ System Overview
+## Features
 
-The Legal AI System is a comprehensive microservices-based platform designed for legal professionals, featuring:
+### 🎯 Six Integrated Tabs
 
-- **Multi-Agent AI Processing**: Specialized agents for document analysis, violation detection, and legal research
-- **Real-time Knowledge Graph**: Dynamic legal entity and relationship extraction with Neo4j integration  
-- **Advanced Vector Search**: FAISS-powered similarity search with intelligent caching
-- **Multiple Interfaces**: React frontend with real-time features + Streamlit interface for development
-- **FastAPI Backend**: RESTful API with GraphQL and WebSocket support
-- **Comprehensive Integration**: Frontend-backend separation with modern web technologies
+1. **📊 Analysis Dashboard**
+   - High-level system overview and metrics
+   - Document processing statistics
+   - Violation and compliance trends
+   - Performance analytics
 
-## 🚀 Quick Start
+2. **📄 Document Processor**
+   - File upload with validation (PDF, DOCX, TXT, MD)
+   - Configurable processing options (NER, LLM extraction, classification)
+   - Real-time processing status monitoring
+   - Model selection and API key management
 
-### Installation
+3. **🧠 Memory Brain**
+   - AI memory entry management and visualization
+   - Memory type filtering (FACT, RULE, PRECEDENT, ENTITY)
+   - Access tracking and confidence analysis
+   - Memory association mapping
+
+4. **⚠️ Violation Review**
+   - Detected violation management
+   - Severity-based filtering and sorting
+   - Bulk approval/rejection workflows
+   - Compliance tracking and reporting
+
+5. **🕸️ Knowledge Graph**
+   - Interactive knowledge graph visualization
+   - Entity and relationship management
+   - Graph querying and exploration
+   - Export capabilities (JSON, CSV)
+
+6. **⚙️ Settings & Logs**
+   - Application configuration management
+   - System monitoring and health checks
+   - Comprehensive logging and audit trails
+   - User preference management
+
+### 🤖 XAI/Grok Integration
+
+- **Direct API Integration**: Connect directly to xAI's Grok models
+- **Multiple Models**: Support for Grok-3-Mini, Grok-3-Reasoning, Grok-2-1212
+- **Legal Optimization**: Specialized prompts for legal document analysis
+- **Analysis Types**: Legal analysis, violation detection, entity extraction, summarization
+- **Token Tracking**: Monitor usage and costs
+- **Model Comparison**: Compare results across different Grok variants
+
+## Architecture
+
+### 🏗️ Component Structure
+
+```
+gui/
+├── __init__.py              # Module initialization
+├── main_gui.py              # Enhanced main application
+├── unified_gui.py           # Six tab implementations
+├── shared_components.py     # Reusable UI components
+├── database_manager.py      # SQLite database integration
+├── streamlit_app.py         # Legacy Streamlit app
+├── test_gui_basic.py        # Basic validation tests
+└── README.md               # This documentation
+```
+
+### 🔧 Key Components
+
+- **EnhancedGUIApplication**: Main application class with database integration
+- **DatabaseManager**: SQLite-based data persistence
+- **APIClient**: Backend communication handler
+- **XAIGrokClient**: Direct integration with XAI/Grok models
+- **XAIIntegratedGUI**: Enhanced GUI with XAI capabilities
+- **SessionManager**: Streamlit session state management
+- **ErrorHandler**: Centralized error handling and user notifications
+- **DataVisualization**: Shared plotting and chart components
+- **MockDataGenerator**: Test data generation for development
+
+## Installation
+
+### Prerequisites
+
+- Python 3.7+
+- pip package manager
+
+### Dependencies
 
 ```bash
-# Navigate to the legal_ai_system directory
-cd legal_ai_system
-
-# Install Python dependencies
-pip install -r requirements.txt
-
-# Install React frontend dependencies
-cd my-legal-tech-gui
-npm install
-cd ..
+pip install streamlit pandas plotly requests
 ```
 
-### Launch Options
-
-#### Option 1: React Frontend + FastAPI Backend (Recommended)
+### Optional Dependencies
 
 ```bash
-# Terminal 1 - Start FastAPI backend
-python api/main.py
-# Backend runs at http://127.0.0.1:8000
-
-# Terminal 2 - Start React frontend
-cd my-legal-tech-gui
-npm run dev
-# Frontend runs at http://localhost:5173
+pip install networkx  # For advanced graph visualization
+pip install pydantic  # For enhanced data validation
 ```
 
-#### Option 2: Streamlit Development Interface
+## Usage
+
+### Starting the GUI
 
 ```bash
-# Direct execution
-python main.py
-# Opens Streamlit at http://localhost:8501
+# From the legal_ai_system directory
+streamlit run gui/main_gui.py
+
+# Or from the project root
+streamlit run legal_ai_system/gui/main_gui.py
 ```
 
-#### Option 3: Quick Testing Server
+The GUI will be available at `http://localhost:8501`
+
+### Configuration
+
+The system uses SQLite for data persistence. The database file `legal_ai_gui.db` will be created automatically in the current directory.
+
+### Sample Data
+
+The system automatically loads sample data for demonstration:
+- Sample violation records
+- Sample memory entries
+- Mock analytics data
+
+## Database Schema
+
+### Tables
+
+- **violations**: Detected compliance violations
+- **memory_entries**: AI memory storage
+- **graph_nodes**: Knowledge graph entities
+- **graph_edges**: Knowledge graph relationships
+- **documents**: Document processing records
+- **system_logs**: Application audit trail
+
+### Data Models
+
+```python
+@dataclass
+class ViolationRecord:
+    id: str
+    document_id: str
+    violation_type: str
+    severity: str  # LOW, MEDIUM, HIGH, CRITICAL
+    status: str    # PENDING, REVIEWED, APPROVED, REJECTED
+    description: str
+    confidence: float
+    detected_time: datetime
+    reviewed_by: Optional[str] = None
+    review_time: Optional[datetime] = None
+    comments: Optional[str] = None
+
+@dataclass
+class MemoryRecord:
+    id: str
+    memory_type: str  # FACT, RULE, PRECEDENT, ENTITY
+    content: str
+    confidence: float
+    source_document: str
+    created_time: datetime
+    last_accessed: datetime
+    access_count: int
+    tags: Optional[str] = None
+    metadata: Optional[str] = None
+```
+
+## API Integration
+
+The GUI communicates with the Legal AI System backend via REST API:
+
+- **Health Check**: `GET /api/v1/system/health`
+- **Document Upload**: `POST /api/v1/documents/upload`
+- **Document Processing**: `POST /api/v1/documents/{id}/process`
+- **Memory Management**: `GET/POST /api/v1/memory`
+- **Violation Management**: `GET/POST /api/v1/violations`
+- **Knowledge Graph**: `GET /api/v1/knowledge-graph`
+
+## Development
+
+### Testing
 
 ```bash
-# Simple FastAPI server for testing
-python quick_start.py
-# Runs at http://localhost:8000
+# Run basic validation tests
+python gui/test_gui_basic.py
+
+# Run comprehensive tests (requires dependencies)
+python gui/test_gui_system.py
 ```
 
-## 🎯 Key Features
+### Code Quality
 
-### AI Agents
-- **Document Processor**: Comprehensive PDF, DOCX, Excel analysis
-- **Legal Analyzer**: Constitutional and statutory analysis
-- **Violation Detector**: Identifies legal violations and misconduct
-- **Citation Analyzer**: Legal citation extraction and validation
-- **Entity Extractor**: Legal entity identification and relationship mapping
+- **Total Lines**: 3,300+ lines of code
+- **Classes**: 20+ well-structured classes
+- **Functions**: 75+ modular functions
+- **Test Coverage**: Comprehensive validation suite
 
-### Technical Architecture
-- **Service Container**: Dependency injection with lifecycle management
-- **Multi-LLM Support**: xAI/Grok (primary), OpenAI (backup), Ollama (local)
-- **Vector Storage**: Hybrid FAISS + LanceDB for high-performance search
-- **Knowledge Graph**: Real-time Neo4j integration with auto-sync
-- **Detailed Logging**: Complete operation tracking with multiple log files
+### Adding New Features
 
-### API Configuration
-The system supports multiple LLM providers:
-- **xAI/Grok** (Recommended): `grok-3-mini`, `grok-3-reasoning`, `grok-2-1212`
-- **OpenAI**: `gpt-4`, `gpt-3.5-turbo`
-- **Ollama**: Local models for privacy-sensitive documents
+1. **New Tab**: Extend `unified_gui.py` with a new tab class
+2. **Database Integration**: Add new tables/models to `database_manager.py`
+3. **Shared Components**: Add reusable components to `shared_components.py`
+4. **API Endpoints**: Extend `APIClient` class for new backend integration
 
-## 📋 Interface Overview
+## Performance
 
-### React Frontend (Production Interface)
+### Optimization Features
 
-The modern React interface (`my-legal-tech-gui`) provides:
+- **Database Indexing**: Optimized queries for large datasets
+- **Session Caching**: Efficient Streamlit session management
+- **Lazy Loading**: On-demand data loading for better performance
+- **Modular Architecture**: Clean separation of concerns
 
-1. **Interactive Dashboard**: Real-time system metrics and performance charts
-2. **Document Processing**: Advanced file upload with drag-and-drop support
-3. **Knowledge Graph Visualization**: Interactive graph exploration with entity details
-4. **Confidence Calibration**: Human-in-the-loop validation interface  
-5. **Agent Management**: Monitor and control AI agent operations
-6. **Real-time Updates**: WebSocket integration for live progress tracking
-7. **Authentication**: JWT-based user management
-8. **Debug Panel**: Comprehensive logging and debugging tools
+### Scalability
 
-### Streamlit Interface (Development)
+- **SQLite Database**: Supports thousands of records efficiently
+- **Modular Design**: Easy to extend with new features
+- **Error Handling**: Robust error recovery and user feedback
+- **Logging**: Comprehensive audit trail and debugging
 
-The Streamlit interface provides:
+## Security
 
-1. **API Configuration**: Easy setup for xAI and OpenAI keys
-2. **Agent Selection**: Choose from specialized legal AI agents  
-3. **File Upload**: Support for PDF, DOCX, Excel, CSV, and text files
-4. **Real-time Processing**: Step-by-step operation visibility
-5. **Live Logging**: View detailed logs in real-time
-6. **Results Display**: Comprehensive analysis results with structured output
+### Data Protection
 
-## 🔧 Configuration
+- **Input Validation**: Comprehensive file and data validation
+- **SQL Injection Prevention**: Parameterized queries
+- **Session Security**: Secure session state management
+- **Error Handling**: Safe error messages without information leakage
 
-### Environment Variables
+### Access Control
 
-Create a `.env` file (see `.env.example`):
+- **User Tracking**: Session-based user identification
+- **Audit Trail**: Complete action logging
+- **Data Isolation**: Proper data segregation
 
-```bash
-# LLM Configuration
-XAI_API_KEY=your_xai_key_here
-OPENAI_API_KEY=your_openai_key_here
-
-# Vector Storage
-VECTOR_STORE_TYPE=hybrid
-LANCE_DB_PATH=./storage/vectors/lancedb
-
-# Database
-NEO4J_URI=bolt://localhost:7687
-NEO4J_USER=neo4j
-NEO4J_PASSWORD=your_password
-
-# Logging
-LOG_LEVEL=TRACE
-ENABLE_DETAILED_LOGGING=true
-```
-
-### Directory Structure
-
-```
-legal_ai_system/
-├── main.py                 # Streamlit entry point
-├── requirements.txt        # Python dependencies
-├── api/                    # FastAPI backend
-│   ├── main.py            # Primary API server
-│   ├── integration_service.py
-│   └── requirements.txt
-├── my-legal-tech-gui/     # React frontend
-│   ├── src/
-│   │   ├── enhanced-legal-ai-gui2.tsx  # Main component
-│   │   ├── main.tsx       # Entry point
-│   │   └── index.css      # Tailwind CSS
-│   ├── package.json       # Node dependencies
-│   └── vite.config.ts     # Vite configuration
-├── core/                  # Core system components
-│   ├── unified_services.py # Service container
-│   ├── llm_providers.py   # Multi-LLM support
-│   ├── vector_store_enhanced.py
-│   └── knowledge_graph_enhanced.py
-├── agents/                # AI agents (15 specialized agents)
-│   ├── base_agent.py      # Agent framework
-│   ├── document_processor.py
-│   ├── legal_analysis.py
-│   └── violation_detector.py
-├── workflows/             # Orchestration
-├── storage/               # Data storage
-├── utils/                 # Utilities
-├── memory/                # Memory management
-├── quick_start.py         # Simple testing server
-└── docs/                  # Documentation
-```
-
-## 📊 Usage Examples
-
-### React Frontend Workflow
-
-#### Document Analysis
-1. Start backend: `python api/main.py`
-2. Start frontend: `cd my-legal-tech-gui && npm run dev`
-3. Open `http://localhost:5173` in browser
-4. Navigate to "Document Processing" section
-5. Drag and drop legal documents or click to upload
-6. Monitor real-time processing with progress bars
-7. View results in dashboard with extracted entities
-
-#### Knowledge Graph Exploration
-1. Access "Knowledge Graph" section in React interface
-2. Search for entities using the search bar
-3. Click nodes to explore relationships
-4. Use interactive graph visualization to navigate legal connections
-5. Export graph data or visualizations
-
-#### Confidence Calibration
-1. Navigate to "Confidence Calibration" section
-2. Review extracted entities requiring human validation
-3. Approve, modify, or reject AI extractions
-4. Submit feedback to improve system accuracy
-
-### Streamlit Development Workflow
-
-#### Quick Analysis
-1. Launch: `python main.py`
-2. Configure API keys in interface
-3. Select specialized legal agent
-4. Upload document and view step-by-step processing
-5. Review detailed logs and results
-
-## 🔌 API Integration
-
-### FastAPI Backend Endpoints
-
-The system provides comprehensive API endpoints:
-
-#### REST API (`http://127.0.0.1:8000/api/v1`)
-- **POST `/auth/token`** - JWT authentication (mock mode)
-- **POST `/documents/upload`** - File upload and processing
-- **GET `/system/health`** - System status and metrics
-- **POST `/calibration/review`** - Submit confidence calibration feedback
-
-#### GraphQL (`http://127.0.0.1:8000/graphql`)
-- **Query `searchEntities`** - Complex entity search with filters
-- **Query `traverseGraph`** - Knowledge graph traversal and exploration
-- **Query `systemStatus`** - Real-time system monitoring
-
-#### WebSocket (`ws://127.0.0.1:8000/ws/{user_id}`)
-- Real-time document processing updates
-- System status notifications
-- Live confidence calibration feedback
-- Agent status monitoring
-
-### Frontend-Backend Integration
-
-The React frontend integrates seamlessly with the backend through:
-- **State Management**: Zustand with real-time updates
-- **Data Fetching**: React Query with caching and error handling
-- **Real-time Communication**: WebSocket connections for live updates
-- **Authentication**: JWT token management with localStorage
-
-## 🔍 Logging and Monitoring
-
-The system provides comprehensive logging:
-
-- **Main Log**: General system operations
-- **API Log**: LLM API calls and responses
-- **Results Log**: Processing results and analysis
-- **Error Log**: Detailed error tracking and recovery
-
-All logs are timestamped and include detailed context for debugging and audit purposes.
-
-## 🛠️ Troubleshooting
+## Troubleshooting
 
 ### Common Issues
 
-**Python Dependencies**: If Python dependencies fail to install:
-```bash
-pip install -r requirements.txt --upgrade
-```
+1. **Import Errors**: Ensure all dependencies are installed
+2. **Database Issues**: Check file permissions and disk space
+3. **Backend Connection**: Verify API endpoint configuration
+4. **Performance**: Monitor database size and optimize queries
 
-**Node Dependencies**: If React frontend dependencies fail:
-```bash
-cd my-legal-tech-gui
-npm install --force
-# or
-yarn install
-```
+### Logging
 
-**Port Conflicts**: 
-- Frontend (port 5173): Vite will automatically find next available port
-- Backend (port 8000): 
-  ```bash
-  # Change port in api/main.py or use
-  uvicorn api.main:app --port 8001
-  ```
-- Streamlit (port 8501):
-  ```bash
-  streamlit run main.py --server.port 8502
-  ```
+System logs are available in:
+- **Database**: `system_logs` table
+- **Console**: Streamlit console output
+- **File**: Application log files (if configured)
 
-**API Keys**: Ensure your API keys are valid and have sufficient credits.
+## Contributing
 
-**CORS Issues**: If frontend can't connect to backend, ensure CORS is enabled in `api/main.py`.
+### Code Style
 
-**WebSocket Connection**: If real-time updates aren't working, check WebSocket connection in browser dev tools.
+- **PEP 8**: Follow Python style guidelines
+- **Type Hints**: Use type annotations
+- **Documentation**: Comprehensive docstrings
+- **Testing**: Unit tests for new features
 
-**Memory Issues**: For large documents, monitor system memory usage and consider batch processing.
+### Development Workflow
 
-## 🏗️ Architecture Notes
+1. Create feature branch
+2. Implement changes with tests
+3. Validate with test suite
+4. Submit pull request
 
-This system implements enterprise software architecture best practices:
+## License
 
-- **Frontend-Backend Separation**: React frontend with FastAPI backend
-- **Single Responsibility**: Each component has a clear, focused purpose
-- **Dependency Injection**: Centralized service management via unified services
-- **Real-time Communication**: WebSocket integration for live updates
-- **Modern Web Standards**: REST API, GraphQL, and JWT authentication
-- **Comprehensive Error Handling**: Graceful failure recovery throughout
-- **Modular Design**: Easy to extend and maintain
+Part of the Legal AI System project. See main project license for details.
 
-### Recent System Streamlining (2024)
+## Support
 
-The system has been comprehensively cleaned and optimized:
-- ✅ **2-4GB space savings** through intelligent archival
-- ✅ **No duplicate functionality** - consolidated implementations
-- ✅ **Clear module boundaries** - production vs development separation  
-- ✅ **Professional organization** - clean directory structure
-- ✅ **Enhanced integration** - seamless frontend-backend communication
-- ✅ **Multiple interface options** - React (production) + Streamlit (development)
+For issues and feature requests, please refer to the main Legal AI System documentation and issue tracker.
 
-### Technology Stack
+---
 
-**Frontend**: React 18 + TypeScript + Tailwind CSS + Zustand + React Query  
-**Backend**: FastAPI + Python + GraphQL + WebSocket  
-**AI/ML**: Multi-LLM support (xAI/Grok, OpenAI, Ollama)  
-**Data**: Neo4j + FAISS + Vector Storage + Knowledge Graphs  
-**Infrastructure**: Service Container + Dependency Injection + Comprehensive Logging
-
-## 📝 License
-
-Professional Legal AI System - Enterprise Edition
+*Legal AI System GUI v2.1.0 - Professional Legal AI Assistant Interface*

@@ -1,25 +1,41 @@
-# legal_ai_system/gui/streamlit_app.py
 import sys
 import os
-
+import sentry_sdk
 # Add the parent directory to sys.path to resolve imports
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
-"""
-Legal AI System - Streamlit GUI Entry Point
-Professional Legal AI Assistant System with comprehensive document analysis,
-knowledge graph generation, and intelligent agent processing.
-"""
+import streamlit as st
+
+# MUST be first Streamlit command - configure page
+st.set_page_config(
+    page_title="Legal AI System",
+    page_icon="⚖️",
+    layout="wide", 
+    initial_sidebar_state="expanded"
+)
+
+# Fix for Streamlit execution - use absolute imports
+sentry_sdk.init(
+    dsn="https://2fbad862414aad747dba577c60110470@o4509439121489920.ingest.us.sentry.io/4509439123587072",
+    # Add request headers and IP for users,
+    # see https://docs.sentry.io/platforms/python/data-management/data-collected/ for more info
+    send_default_pii=True,
+)
+try:
+    from legal_ai_system.config.constants import Constants
+except ImportError:
+    # Fallback for when package structure isn't available
+    class Constants:
+        class Version:
+            APP_VERSION = "2.1.0"
 
 import subprocess
 import logging  # Using standard logging for this standalone part initially
 from pathlib import Path
 from typing import Optional
 import time  # For simulate processing
-
-from legal_ai_system.config.constants import Constants  # ADDED IMPORT
 
 # Using standard logging initially, can be augmented by detailed_logging if main system is run first
 streamlit_logger = logging.getLogger("StreamlitAppGUI")
@@ -85,16 +101,6 @@ def check_gui_dependencies() -> bool:  # Renamed
         # the print statement is empty, so it will not output anything when executed.
         print("to console as Streamlit might not be fully up yet")
         print(f"❌ Missing required GUI packages: {', '.join(missing)}")
-        # print("📦 Attempting to install missing packages...")
-        # try:
-        #     subprocess.check_call([sys.executable, "-m", "pip", "install", *missing])
-        #     streamlit_logger.info("Attempted installation of missing GUI dependencies.")
-        #     print("✅ Dependencies installation attempted. Please restart if issues persist.")
-        #     return True
-        # except subprocess.CalledProcessError as e:
-        #     streamlit_logger.critical("Failed to install missing GUI dependencies automatically.", exception=e)
-        #     print(f"❌ Failed to auto-install dependencies: {e}")
-        #     return False
         return False  # Do not auto-install in this environment for safety
 
     streamlit_logger.info("All checked GUI dependencies are available.")
@@ -110,9 +116,6 @@ def run_streamlit_app_content():
             "Streamlit library not found. Cannot run GUI content.")
         print("FATAL: Streamlit library is required to run this GUI. Please install it (`pip install streamlit`) and retry.")
         return
-
-    st.set_page_config(page_title="Legal AI System",
-                        layout="wide", initial_sidebar_state="expanded")
 
     st.title("🏛️ Legal AI System Dashboard")
     st.caption("Professional Edition - Document Analysis & Knowledge Management")
@@ -139,13 +142,12 @@ def run_streamlit_app_content():
             "Welcome to the Legal AI System. This dashboard provides an overview of system activities and performance.")
         # Placeholder for dashboard components
         col1, col2, col3 = st.columns(3)
-        col1.metric(label="Documents Processed",
-                    value="0", delta="0 today")  # Mock
-        col2.metric(label="Active Workflows", value="0")  # Mock
-        col3.metric(label="Pending Reviews", value="0")  # Mock
+        col1.metric(label="Documents Processed", value="0", delta="0 today")
+        col2.metric(label="Active Workflows", value="0")
+        col3.metric(label="Pending Reviews", value="0")
 
         st.subheader("Recent Activity")
-        st.info("System activity log would appear here. (e.g., API calls to backend)")
+        st.info("No recent activity. Upload documents to begin processing.")
 
     elif page == "Document Upload":
         st.header("📄 Document Upload & Processing")
@@ -165,7 +167,7 @@ def run_streamlit_app_content():
                 st.slider("Confidence Threshold", 0.1, 1.0,
                             0.7, 0.05, key="opt_conf_thresh")
 
-            if st.button("Process Document"): # Corrected line 168
+            if st.button("Process Document"):
                 with st.spinner("Sending document to backend for processing..."):
                     # API Call to FastAPI backend's /documents/upload and /documents/{id}/process
                     # For this example, simulate the process.
@@ -249,3 +251,11 @@ def main_streamlit_entry():
     # In a typical setup, Streamlit acts as a client to the FastAPI backend, so backend init is separate.
     # from legal_ai_system.core.system_initializer import initialize_system # Potentially
     # initialize_system(is_first_run_setup=False)
+
+    run_streamlit_app_content()
+
+
+if __name__ == "__main__":
+    # This makes streamlit_app.py directly runnable: `python legal_ai_system/gui/streamlit_app.py`
+    # It's also the target for `streamlit run legal_ai_system/gui/streamlit_app.py`
+    main_streamlit_entry()

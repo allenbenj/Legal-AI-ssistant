@@ -1,0 +1,30 @@
+# Regex patterns for identifying candidate sentences/phrases for relationships.
+# These are more heuristic than entity patterns.
+# 'pattern': Regex to find text span. Named groups like 'source_text', 'target_text', 'prop_text' can be used.
+# 'properties_map': (Optional) Maps named capture groups to relationship property names.
+
+Filed_By:
+  - pattern: '(?i)(?P<target_text>Motion\s+to\s+\w+|Complaint|Petition|Brief)\s+(?:was\s+)?filed\s+by\s+(?P<source_text>[A-Z][a-z]+ [A-Z][a-z]+(?:(?:\s|-)[A-Z][a-z]+){0,2}|[A-Z][A-Za-z\s,]+(?:Inc\.|Corp\.|LLC))(?:\s+on\s+(?P<date_prop>(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2},?\s+\d{4}|\d{1,2}/\d{1,2}/\d{2,4}))?'
+    # This pattern attempts to capture source, target, and a date property.
+    # The agent's logic will need to:
+    # 1. Find ExtractedEntity instances matching 'source_text' and 'target_text'.
+    # 2. If a date is captured, assign it to 'filed_date_iso' property (after normalization).
+    properties_map:
+        date_prop: "filed_date_iso" # Will need normalization
+
+Represents:
+  - pattern: '(?i)(?P<source_text>[A-Z][a-z]+ [A-Z][a-z]+(?:(?:\s|-)[A-Z][a-z]+){0,2}),\s*(?:Esq\.?,?\s*)?(?:attorney|counsel)\s+for\s+(?P<target_text>[A-Z][a-z]+ [A-Z][a-z]+(?:(?:\s|-)[A-Z][a-z]+){0,2}|[A-Z][A-Za-z\s,]+(?:Inc\.|Corp\.|LLC))'
+    properties_map: {}
+
+Presided_By: # Judge (source) presiding over Case/Hearing (target)
+  - pattern: '(?i)(?:Judge|Justice)\s+(?P<source_text>[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\s+presided\s+over\s+(?:the\s+)?(?P<target_text>Case\s+No\.\s*[A-Z0-9:\-_]+|hearing\s+regarding\s*.+?|trial\s+of\s*.+?)(?:\s+on\s+(?P<date_prop>(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2},?\s+\d{4}|\d{1,2}/\d{1,2}/\d{2,4}))?'
+    properties_map:
+        date_prop: "session_date_iso"
+
+Charged_With: # Person/Party (source) charged with Offense (target)
+  - pattern: '(?i)(?P<source_text>[A-Z][a-z]+ [A-Z][a-z]+(?:(?:\s|-)[A-Z][a-z]+){0,2})\s+was\s+(?:charged|indicted)\s+(?:with|for)\s+(?P<target_text>[\w\s]+violation\s+of\s+[\w\s\d§.-]+|count\s+\d+\s+of\s+[\w\s]+|\w+felony|\w+misdemeanor)'
+    properties_map: {}
+
+# Note: Pure regex for relationships is limited. It mainly helps pinpoint potential relationship mentions.
+# The LLM is generally much better at extracting structured relationships, especially connecting specific entity IDs.
+# The `_extract_relationships_by_patterns` method will need to be sophisticated to utilize these.

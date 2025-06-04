@@ -1,12 +1,11 @@
-"""
-Legal AI System Constants - Centralized Configuration Values
-==========================================================
-This module contains all configuration constants used throughout the Legal AI System.
-All values include proper units and documentation to eliminate magic numbers.
+# legal_ai_system/config/constants.py
+#Legal AI System Constants - Centralized Configuration Values
+#==========================================================
+#This module contains all configuration constants used throughout the Legal AI System.
+#All values include proper units and documentation to eliminate magic numbers.
 
-Following the DRY principle and 12-factor app methodology for maintainable,
-scalable, and self-documenting code.
-"""
+#Following the DRY principle and 12-factor app methodology for maintainable,
+#scalable, and self-documenting code.
 
 from typing import Final
 from enum import Enum

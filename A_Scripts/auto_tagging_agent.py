@@ -7,33 +7,43 @@ This agent automatically tags and classifies legal documents.
 import re
 import uuid
 import asyncio
-import time # <--- IMPORTED TIME MODULE
+import time
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any, Set, Tuple
-from collections import Counter, defaultdict # Added defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field, asdict
 
-from ....core.base_agent import BaseAgent, ProcessingResult
-from ....core.llm_providers import LLMManager, LLMProviderError, LLMProviderEnum
-from ....core.unified_exceptions import AgentProcessingError, AgentInitializationError
-from ....core.detailed_logging import LogCategory, get_detailed_logger
-from ....memory.unified_memory_manager import UnifiedMemoryManager # For UMM access (if available)
+from ...core.base_agent import BaseAgent
+from ...core.detailed_logging import LogCategory
 
-# Logger for this agent
-auto_tag_logger = get_detailed_logger("AutoTaggingAgent", LogCategory.AGENT_LIFECYCLE)
+from ...config.agent_unified_config import create_agent_memory_mixin
+from ...memory.unified_memory_manager import MemoryType
 
+# Create memory mixin for agents
+MemoryMixin = create_agent_memory_mixin()
+
+from ...core.llm_providers import LLMManager, LLMProviderError, LLMProviderEnum
+from ...core.models import LegalDocument, ProcessingResult
+from ...core.unified_exceptions import AgentError, ConfigurationError
+from ...memory.unified_memory_manager import UnifiedMemoryManager # For UMM access (if available)
+from ...utils.ontology import ( # ADD this block
+    LegalEntityType, LegalRelationshipType,
+    get_entity_types_for_prompt, get_relationship_types_for_prompt,
+    get_extraction_prompt,
+    get_entity_type_by_label, get_relationship_type_by_label
+)
 
 @dataclass
 class AutoTaggingOutput:
     document_id: str
     document_type_classification: Optional[Dict[str, Any]] = None
-    legal_domain_tags: List[str] = field(default_factory=list) # Raw domains, not formatted tags
+    legal_domain_tags: List[str] = field(default_factory=list)
     procedural_stage_tag: Optional[Dict[str, Any]] = None
     importance_level_tag: Optional[Dict[str, Any]] = None
-    extracted_entity_tags: Dict[str, List[Dict[str, Any]]] = field(default_factory=dict)
-    generated_subject_tags: List[str] = field(default_factory=list) # Formatted like "subject:term"
-    all_generated_tags: List[str] = field(default_factory=list) # Final combined, formatted tags
-    suggested_new_tags: List[str] = field(default_factory=list)
+    extracted_entity_tags: Dict[str, List[Dict[str, Any]]] = field(default_factory=dict) # e.g. {"court": [{"name": "Supreme Court", "confidence": 0.8}]}
+    generated_subject_tags: List[str] = field(default_factory=list) # e.g. ["subject:due_process"]
+    all_generated_tags: List[str] = field(default_factory=list) # Combined, formatted tags
+    suggested_new_tags: List[str] = field(default_factory=list) # Tags not in existing_tags metadata
     overall_confidence: float = 0.0
     processing_time_sec: float = 0.0
     errors: List[str] = field(default_factory=list)
@@ -41,9 +51,7 @@ class AutoTaggingOutput:
     model_used_for_llm: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
-        data = asdict(self)
-        # Ensure extracted_entity_tags is correctly serialized if it contains complex objects (though dicts are fine)
-        return data
+        return asdict(self)
 
 class AutoTaggingAgent(BaseAgent):
     """
@@ -54,94 +62,61 @@ class AutoTaggingAgent(BaseAgent):
     def __init__(self, service_container: Any, **config: Any):
         super().__init__(service_container, name="AutoTaggingAgent", agent_type="classification")
         
+        
+        # Get optimized Grok-Mini configuration for this agent
+        self.llm_config = self.get_optimized_llm_config()
+        self.logger.info(f"AutoTaggingAgentAgent configured with model: {self.llm_config.get('llm_model', 'default')}")
         self.llm_manager: Optional[LLMManager] = self._get_service("llm_manager")
         self.unified_memory_manager: Optional[UnifiedMemoryManager] = self._get_service("unified_memory_manager")
 
         self.config = config
-        self.min_pattern_confidence = float(config.get('min_pattern_confidence_autotag', 0.45))
-        self.min_llm_tag_confidence = float(config.get('min_llm_tag_confidence_autotag', 0.6)) # LLM suggestions should be higher confidence
+        self.min_pattern_confidence = float(config.get('min_pattern_confidence', 0.45))
+        self.min_llm_tag_confidence = float(config.get('min_llm_tag_confidence', 0.6))
         self.enable_llm_tag_generation = bool(config.get('enable_llm_tag_generation', True))
-        self.max_text_for_llm = int(config.get('max_text_for_llm_autotag', 3000))
+        self.max_text_for_llm = int(config.get('max_text_for_llm_autotag', 3000)) # Chars
 
-        self._init_tagging_frameworks_from_config()
-        
-        # In-memory cache for tag learning statistics. UMM is the source of truth if available.
-        self.tag_accuracy_scores_cache: Dict[str, Dict[str, float]] = defaultdict(
-            lambda: {"correct": 0.0, "incorrect": 0.0, "suggested": 0.0, "last_updated_ts": 0.0}
-        )
-        self.feedback_session_log: List[Dict[str,Any]] = [] # Log of feedback received in this agent's instance lifetime
+        self._init_tagging_frameworks_from_config() # Load patterns from config or use defaults
+        self.tag_accuracy_scores_cache: Dict[str, Dict[str, float]] = defaultdict(lambda: {"correct": 0.0, "incorrect": 0.0, "suggested": 0.0, "last_updated_ts": 0.0})
+        self.feedback_session_log: List[Dict[str,Any]] = [] # In-memory log for current agent instance
 
         self.logger.info(f"{self.name} initialized.", 
-                        parameters={'llm_tag_gen_enabled': self.enable_llm_tag_generation, 
-                                    'llm_available': bool(self.llm_manager),
-                                    'umm_available': bool(self.unified_memory_manager)})
+                        parameters={'llm_tag_gen': self.enable_llm_tag_generation, 
+                                    'llm_available': self.llm_manager is not None,
+                                    'umm_available': self.unified_memory_manager is not None})
 
     async def initialize_agent_async(self): # Optional: called by a system if agent needs async setup
-        """Asynchronously initializes components, e.g., loading learning data from UMM."""
+        """Asynchronously initializes components, e.g., loading learning data."""
         await self._load_learning_data_from_umm_async()
 
     def _init_tagging_frameworks_from_config(self):
         """Initialize tagging patterns from agent configuration or use defaults."""
-        # Default pattern definitions (can be quite extensive)
         default_doc_type_patterns = {
             'motion': [r'motion\s+to\s+\w+', r'motion\s+for\s+(?:summary\s+)?judgment', r'notice\s+of\s+motion'],
             'brief': [r'brief\s+in\s+(?:support|opposition)', r'memorandum\s+of\s+law', r'amicus\s+curiae\s+brief'],
             'order': [r'court\s+order', r'it\s+is\s+(?:hereby\s+)?ordered', r'judgment\s+and\s+order', r'minute\s+order'],
-            'complaint': [r'complaint\s+for\s+\w+', r'plaintiff\s+\w+\s+alleges', r'first\s+amended\s+complaint', r'class\s+action\s+complaint'],
-            'answer': [r'answer\s+to\s+complaint', r'defendant\s+\w+\s+answers'],
-            'affidavit': [r'affidavit\s+of\s+\w+', r'declaration\s+of\s+\w+\s+in\s+support'],
-            'discovery_request': [r'interrogatories', r'request\s+for\s+production', r'notice\s+of\s+deposition', r'request\s+for\s+admission'],
-            'discovery_response': [r'responses\s+to\s+interrogatories', r'objections\s+and\s+responses'],
-            'agreement': [r'settlement\s+agreement', r'contract', r'stipulation\s+and\s+order', r'non-disclosure\s+agreement'],
-            'transcript': [r'hearing\s+transcript', r'deposition\s+transcript', r'(?:official\s+)?reporter\'s\s+transcript', r'trial\s+transcript'],
-            'exhibit_list': [r'exhibit\s+list', r'index\s+of\s+exhibits'],
-            'appeal_document': [r'notice\s+of\s+appeal', r'appellate\s+brief', r'petition\s+for\s+writ'],
-            'opinion': [r'opinion\s+of\s+the\s+court', r'memorandum\s+opinion', r'dissenting\s+opinion', r'concurring\s+opinion']
+            'complaint': [r'complaint\s+for\s+\w+', r'plaintiff\s+\w+\s+alleges', r'first\s+amended\s+complaint'],
+            'affidavit': [r'affidavit\s+of\s+\w+', r'declaration\s+of\s+\w+'],
+            'discovery': [r'interrogatories', r'request\s+for\s+production', r'notice\s+of\s+deposition'],
+            'agreement': [r'settlement\s+agreement', r'contract', r'stipulation'],
+            'transcript': [r'hearing\s+transcript', r'deposition\s+transcript', r'(?:official\s+)?reporter\'s\s+transcript']
         }
         default_legal_domain_patterns = {
-            'criminal_law': [r'defendant\s+charged', r'criminal\s+case', r'prosecution', r'indictment', r'sentencing', r'plea\s+agreement', r'arraignment'],
-            'civil_litigation': [r'civil\s+action', r'damages', r'liability', r'plaintiff', r'summons', r'negligence', r'tort'],
-            'corporate_law': [r'merger', r'acquisition', r'shareholder', r'sec\s+filing', r'corporate\s+governance', r'articles\s+of\s+incorporation'],
-            'intellectual_property': [r'patent', r'trademark', r'copyright', r'infringement', r'intellectual\s+property', r'trade\s+secret'],
-            'family_law': [r'divorce', r'custody', r'child\s+support', r'marital\s+agreement', r'alimony', r'prenuptial'],
-            'bankruptcy_law': [r'chapter\s+(?:7|11|13)', r'bankruptcy', r'creditor', r'debtor', r'discharge\s+of\s+debt', r'proof\s+of\s+claim'],
-            'real_estate_law': [r'property\s+law', r'lease\s+agreement', r'mortgage', r'landlord\s+tenant', r'zoning', r'deed'],
-            'employment_law': [r'employment\s+agreement', r'discrimination', r'wrongful\s+termination', r'harassment', r'flsa', r'ada']
+            'criminal_law': [r'defendant\s+charged', r'criminal\s+case', r'prosecution', r'indictment', r'sentencing'],
+            'civil_litigation': [r'civil\s+action', r'damages', r'liability', r'plaintiff', r'summons'],
+            'corporate_law': [r'merger', r'acquisition', r'shareholder', r'sec\s+filing', r'corporate\s+governance'],
+            'ip_law': [r'patent', r'trademark', r'copyright', r'infringement', r'intellectual\s+property'],
+            'family_law': [r'divorce', r'custody', r'child\s+support', r'marital\s+agreement'],
+            'bankruptcy': [r'chapter\s+\d+', r'bankruptcy', r'creditor', r'debtor', r'discharge']
         }
-        default_procedural_stage_patterns = {
-            'pre_trial': [r'initial\s+appearance', r'preliminary\s+hearing', r'arraignment', r'bail\s+hearing'],
-            'pleading': [r'complaint', r'answer', r'counterclaim', r'motion\s+to\s+dismiss'],
-            'discovery': [r'interrogatories', r'deposition', r'request\s+for\s+production', r'expert\s+disclosure', r'subpoena\s+duces\s+tecum'],
-            'trial': [r'jury\s+selection', r'opening\s+statement', r'direct\s+examination', r'cross-examination', r'closing\s+argument', r'jury\s+instructions', r'verdict'],
-            'post_trial': [r'motion\s+for\s+new\s+trial', r'judgment\s+notwithstanding\s+the\s+verdict', r'sentencing\s+hearing'],
-            'appeal': [r'notice\s+of\s+appeal', r'appellate\s+brief', r'oral\s+argument\s+(?:before|in)\s+appellate\s+court', r'petition\s+for\s+writ\s+of\s+certiorari']
-        }
-        default_importance_indicators = {
-            'critical': [r'emergency\s+motion', r'temporary\s+restraining\s+order', r'order\s+to\s+show\s+cause', r'immediate\s+injunctive\s+relief'],
-            'high': [r'constitutional\s+issue', r'supreme\s+court', r'dispositive\s+motion', r'summary\s+judgment', r'statutory\s+deadline', r'urgent'],
-            'medium': [r'significant\s+development', r'material\s+fact', r'substantial\s+evidence', r'key\s+witness', r'expert\s+report'],
-            'low': [r'minor\s+procedural\s+matter', r'routine\s+filing', r'administrative\s+update', r'scheduling\s+order', r'notice\s+of\s+appearance']
-        }
-        default_entity_patterns_for_tags = { # Simplified for tagging
-            'court': [r'(?i)\b(?:supreme|district|circuit|superior|appellate)\s+court(?:\s+of\s+[\w\s]+)?\b', r'\bU\.S\. Court of Appeals for the \w+ Circuit\b'],
-            'judge': [r'(?i)\b(?:judge|justice|honorable|hon\.)\s+[A-Z][a-z]+\s*(?:[A-Z]\.?\s*)?[A-Z][a-z]+\b'],
-            'law_firm': [r'(?i)\b[A-Z][A-Za-z&]+(?:\s+[A-Z][A-Za-z&]+)*(?:,\s*LLP|,\s*LLC|,?\s*P\.C\.?|,\s*A\s*Professional\s*Corporation|\s+Group)\b'],
-            'party_individual': [r'(?i)\b(?:plaintiff|defendant|petitioner|respondent)\s+[A-Z][a-z]+\s+[A-Z][a-z]+\b'],
-            'party_organization': [r'(?i)\b(?:plaintiff|defendant|petitioner|respondent)\s+[A-Z][A-Za-z\s,&]+(?:LLC|Inc|Corp|Ltd|Co\.)\b']
-        }
-        default_subject_tags_patterns = [ # Keywords that become "subject:keyword"
-            r'breach\s+of\s+contract', r'due\s+process', r'statute\s+of\s+limitations',
-            r'summary\s+judgment', r'discovery\s+dispute', r'negligence\s+claim', r'liability',
-            r'admissibility\s+of\s+evidence', r'expert\s+testimony', r'jurisdictional\s+challenge',
-            r'class\s+certification', r'attorney-client\s+privilege', r'work\s+product\s+doctrine'
-        ]
+        # ... (add defaults for procedural_stage_patterns, importance_indicators, entity_patterns_for_tags, subject_tags_patterns)
         
         self.document_type_patterns = self.config.get('document_type_patterns', default_doc_type_patterns)
         self.legal_domain_patterns = self.config.get('legal_domain_patterns', default_legal_domain_patterns)
-        self.procedural_stage_patterns = self.config.get('procedural_stage_patterns', default_procedural_stage_patterns)
-        self.importance_indicators = self.config.get('importance_indicators', default_importance_indicators)
-        self.entity_patterns_for_tags = self.config.get('entity_patterns_for_tags', default_entity_patterns_for_tags)
-        self.subject_tags_patterns = self.config.get('subject_tags_patterns', default_subject_tags_patterns)
+        # For brevity, assuming other pattern sets are similarly loaded or default.
+        self.procedural_stage_patterns = self.config.get('procedural_stage_patterns', {'pleading': [r'complaint', r'answer'], 'discovery': [r'interrogatories', r'deposition']})
+        self.importance_indicators = self.config.get('importance_indicators', {'high': [r'constitutional', r'supreme\s+court'], 'medium': [r'significant'], 'low': [r'minor']})
+        self.entity_patterns_for_tags = self.config.get('entity_patterns_for_tags', {'court': [r'supreme\s+court'], 'judge': [r'judge\s+\w+']})
+        self.subject_tags_patterns = self.config.get('subject_tags_patterns', [r'breach\s+of\s+contract', r'due\s+process'])
         
         self.logger.debug("Tagging frameworks initialized (patterns loaded from config/defaults).")
 
@@ -151,267 +126,386 @@ class AutoTaggingAgent(BaseAgent):
             self.logger.info("UMM not available, skipping load of learning data for auto-tagging.")
             return
         try:
-            # Example: Load stats for a predefined set of common tags or tags seen recently
-            # This is conceptual. A real implementation needs a UMM method like:
-            # common_tags_data = await self.unified_memory_manager.get_batch_tag_learning_stats_async(limit=100, min_suggestion_count=5)
-            # if common_tags_data:
-            #     for tag_name, stats_dict in common_tags_data.items():
-            #         self.tag_accuracy_scores_cache[self._normalize_tag(tag_name)] = {
-            #             "correct": float(stats_dict.get("correct_count", 0.0)),
-            #             "incorrect": float(stats_dict.get("incorrect_count", 0.0)),
-            #             "suggested": float(stats_dict.get("suggested_count", 0.0)),
-            #             "last_updated_ts": float(stats_dict.get("last_updated_timestamp", 0.0))
-            #         }
-            #     self.logger.info(f"Loaded learning data for {len(common_tags_data)} tags from UMM for auto-tagging.")
-            # else:
-            self.logger.info("No specific learning data pre-loaded from UMM for auto-tagging (or UMM method not implemented). Cache will build.")
+            # Example: Load stats for top N most frequently suggested tags or a predefined list
+            # This is a conceptual placeholder. A real implementation would query UMM.
+            # common_tags_stats = await self.unified_memory_manager.get_batch_tag_learning_stats_async(tags_to_load)
+            # self.tag_accuracy_scores_cache.update(common_tags_stats)
+            self.logger.info("Successfully loaded (placeholder) learning data from UMM for auto-tagging.")
         except Exception as e:
             self.logger.error("Failed to load learning data from UMM for auto-tagging.", exception=e)
     
-    @detailed_log_function(LogCategory.AGENT_PROCESSING)
     async def _process_task(self, task_data: Dict[str, Any], metadata: Dict[str, Any]) -> Dict[str, Any]:
         document_id = metadata.get('document_id', f"autotag_doc_{uuid.uuid4().hex[:8]}")
-        text_content = task_data.get('text', task_data.get('text_content', '')) # More robust text extraction
-        existing_tags_list = [self._normalize_tag(t) for t in metadata.get('existing_tags', []) if t] # Normalize existing tags
-        user_feedback_data = metadata.get('user_feedback', {})
+        text_content = task_data.get('text', '')
+        existing_tags_list = metadata.get('existing_tags', []) # Tags already on the document
+        user_feedback_data = metadata.get('user_feedback', {}) # e.g., {'doc_id': ..., 'correct_tags': [], 'incorrect_tags': []}
 
         self.logger.info(f"Starting auto-tagging for doc '{document_id}'.", 
-                         parameters={'text_len': len(text_content), 
-                                     'has_feedback': bool(user_feedback_data),
-                                     'num_existing_tags': len(existing_tags_list)})
-        start_time = datetime.now(timezone.utc)
+                         parameters={'text_len': len(text_content), 'has_feedback': bool(user_feedback_data)})
+        start_time_obj = datetime.now(timezone.utc)
         output = AutoTaggingOutput(document_id=document_id)
 
-        if not text_content or len(text_content.strip()) < 20: # Min length for any meaningful tagging
+        if not text_content or len(text_content.strip()) < 20:
             output.errors.append("Insufficient text content for auto-tagging.")
-            output.processing_time_sec = round((datetime.now(timezone.utc) - start_time).total_seconds(), 3)
-            self.logger.warning(f"Auto-tagging skipped for doc '{document_id}' due to insufficient text.", 
-                               parameters={'text_len': len(text_content)})
+            # ... (set processing_time_sec and return as in ViolationDetector)
+            output.processing_time_sec = round((datetime.now(timezone.utc) - start_time_obj).total_seconds(), 3)
             return output.to_dict()
 
         try:
             if user_feedback_data and user_feedback_data.get('document_id') == document_id:
-                await self._apply_user_feedback(document_id, user_feedback_data) # Awaits UMM potentially
+                await self._apply_user_feedback(document_id, user_feedback_data)
             
-            tagging_result_dict = await self._perform_comprehensive_tagging_async(text_content, document_id, existing_tags_list)
+            tagging_result = await self._perform_comprehensive_tagging_async(text_content, document_id, existing_tags_list)
             
-            output.document_type_classification = tagging_result_dict.get('document_type_classification')
-            output.legal_domain_tags = tagging_result_dict.get('legal_domain_tags', [])
-            output.procedural_stage_tag = tagging_result_dict.get('procedural_stage_tag')
-            output.importance_level_tag = tagging_result_dict.get('importance_level_tag')
-            output.extracted_entity_tags = tagging_result_dict.get('extracted_entity_tags', {})
-            output.generated_subject_tags = tagging_result_dict.get('generated_subject_tags', [])
-            output.all_generated_tags = sorted(list(set(tagging_result_dict.get('all_generated_tags', [])))) # Ensure unique and sorted
-            output.suggested_new_tags = sorted([tag for tag in output.all_generated_tags if tag not in existing_tags_list])
-            output.model_used_for_llm = tagging_result_dict.get('model_used_for_llm')
-            output.overall_confidence = self._calculate_overall_tagging_confidence(tagging_result_dict)
+            output.document_type_classification = tagging_result.get('document_type_classification')
+            output.legal_domain_tags = tagging_result.get('legal_domain_tags', [])
+            output.procedural_stage_tag = tagging_result.get('procedural_stage_tag')
+            output.importance_level_tag = tagging_result.get('importance_level_tag')
+            output.extracted_entity_tags = tagging_result.get('extracted_entity_tags', {})
+            output.generated_subject_tags = tagging_result.get('generated_subject_tags', [])
+            output.all_generated_tags = tagging_result.get('all_generated_tags', [])
+            # Ensure suggested_new_tags only contains tags not in the original existing_tags_list
+            output.suggested_new_tags = [tag for tag in output.all_generated_tags if tag not in existing_tags_list]
+            output.model_used_for_llm = tagging_result.get('model_used_for_llm')
+            output.overall_confidence = self._calculate_overall_tagging_confidence(tagging_result)
 
             await self._update_learning_from_session_async(document_id, output.all_generated_tags)
 
             self.logger.info(f"Auto-tagging completed for doc '{document_id}'.", 
-                            parameters={'tags_generated_count': len(output.all_generated_tags), 
-                                        'new_tags_suggested_count': len(output.suggested_new_tags),
-                                        'overall_conf': output.overall_confidence})
+                            parameters={'tags_generated': len(output.all_generated_tags), 'overall_conf': output.overall_confidence})
         
-        except AgentProcessingError as ape: # Catch specific errors from this agent's logic
-            self.logger.error(f"AgentProcessingError during auto-tagging for doc '{document_id}'.", exception=ape)
+        except AgentProcessingError as ape:
+            self.logger.error(f"AgentProcessingError during auto-tagging for doc '{document_id}'.", exception=ape, exc_info=True)
             output.errors.append(f"Agent processing error: {str(ape)}")
-        except Exception as e: # Catch unexpected errors
+        except Exception as e:
             self.logger.error(f"Unexpected error during auto-tagging for doc '{document_id}'.", exception=e, exc_info=True)
-            output.errors.append(f"Unexpected critical error: {type(e).__name__} - {str(e)}")
+            output.errors.append(f"Unexpected error: {str(e)}")
         
         finally:
-            output.processing_time_sec = round((datetime.now(timezone.utc) - start_time).total_seconds(), 3)
+            output.processing_time_sec = round((datetime.now(timezone.utc) - start_time_obj).total_seconds(), 3)
         
         return output.to_dict()
     
-    # ... (Rest of the methods: _perform_comprehensive_tagging_async, _classify_document_type_sync, 
-    #      _classify_legal_domain_sync, _identify_procedural_stage_sync, _assess_importance_level_sync,
-    #      _extract_entity_tags_sync, _generate_subject_tags_sync, _llm_generate_additional_tags,
-    #      _apply_user_feedback (corrected), _normalize_tag, _update_learning_from_session_async (corrected),
-    #      _calculate_overall_tagging_confidence, get_learning_statistics_async, health_check
-    #      would be filled in as per the complete version in the previous responses, ensuring `time.time()` uses imported `time`
-    #      and UMM interactions are robust.)
-
-    # For brevity, I'll only re-paste a few key changed/important methods here.
-    # Assume the pattern-based classification sync methods are as per the previous detailed agent script.
-
     async def _perform_comprehensive_tagging_async(self, text: str, doc_id: str, 
                                                  existing_tags: List[str]) -> Dict[str, Any]:
         # Synchronous pattern-based parts
-        doc_type_class_result = self._classify_document_type_sync(text)
-        legal_domain_results = self._classify_legal_domain_sync(text) # List of domain strings
-        proc_stage_result = self._identify_procedural_stage_sync(text)
-        importance_result = self._assess_importance_level_sync(text)
-        entity_tags_map_result = self._extract_entity_tags_sync(text) # Dict of type -> list of entity dicts
-        subject_tags_list_result = self._generate_subject_tags_sync(text) # List of "subject:term"
+        doc_type = self._classify_document_type_sync(text)
+        legal_domains = self._classify_legal_domain_sync(text)
+        proc_stage = self._identify_procedural_stage_sync(text)
+        importance = self._assess_importance_level_sync(text)
+        entity_tags = self._extract_entity_tags_sync(text)
+        subject_tags = self._generate_subject_tags_sync(text) # Already formatted list
         
-        pattern_tags_set: Set[str] = set()
-        if doc_type_class_result and doc_type_class_result.get('type') != 'unknown':
-            pattern_tags_set.add(self._normalize_tag(f"doc_type:{doc_type_class_result['type']}"))
-        pattern_tags_set.update(self._normalize_tag(f"domain:{domain}") for domain in legal_domain_results)
-        if proc_stage_result and proc_stage_result.get('stage'):
-            pattern_tags_set.add(self._normalize_tag(f"stage:{proc_stage_result['stage']}"))
-        if importance_result and importance_result.get('level'):
-            pattern_tags_set.add(self._normalize_tag(f"importance:{importance_result['level']}"))
+        pattern_based_tags: Set[str] = set()
+        if doc_type and doc_type.get('type') != 'unknown': pattern_based_tags.add(f"doc_type:{doc_type['type']}")
+        pattern_based_tags.update(f"domain:{domain}" for domain in legal_domains)
+        if proc_stage and proc_stage.get('stage'): pattern_based_tags.add(f"stage:{proc_stage['stage']}")
+        if importance and importance.get('level'): pattern_based_tags.add(f"importance:{importance['level']}")
         
-        for entity_type, entities_list in entity_tags_map_result.items():
-            for entity_info in entities_list[:3]: # Limit tags per entity type
-                norm_name = self._normalize_tag(entity_info['name']) # Normalize name for tag
-                pattern_tags_set.add(self._normalize_tag(f"entity:{entity_type}:{norm_name}"))
-        pattern_tags_set.update(self._normalize_tag(tag) for tag in subject_tags_list_result) # Subject tags are already formatted
+        for entity_type, entities_info_list in entity_tags.items():
+            for entity_info in entities_info_list[:3]: # Limit number of entity tags per type
+                norm_name = re.sub(r'\s+', '_', entity_info['name'].lower().strip())
+                pattern_based_tags.add(f"entity:{entity_type}:{norm_name}")
+        pattern_based_tags.update(subject_tags)
 
-        # LLM for additional tagging (async)
-        llm_generated_tags_list: List[str] = []
-        model_used_llm_str = None
+        # LLM-based additional tagging (async)
+        llm_generated_formatted_tags: List[str] = []
+        model_used_llm = None
         if self.enable_llm_tag_generation and self.llm_manager:
             try:
                 text_for_llm = text if len(text) <= self.max_text_for_llm else text[:self.max_text_for_llm]
-                if len(text) > self.max_text_for_llm:
-                    self.logger.warning(f"Text for doc '{doc_id}' truncated to {self.max_text_for_llm} chars for LLM tag generation.")
-                
-                llm_generated_tags_list, model_used_llm_str = await self._llm_generate_additional_tags(text_for_llm, list(pattern_tags_set), doc_id)
-            except Exception as llm_e: # Catch errors from LLM call specifically
+                llm_generated_formatted_tags, model_used_llm = await self._llm_generate_additional_tags(text_for_llm, list(pattern_based_tags), doc_id)
+            except Exception as llm_e:
                 self.logger.error(f"LLM tag generation failed for doc '{doc_id}'.", exception=llm_e)
-                # Continue with pattern-based tags
         
-        all_tags_combined_set = pattern_tags_set.union(set(llm_generated_tags_list))
+        all_tags_set = pattern_based_tags.union(set(llm_generated_formatted_tags))
         
-        # Apply learning filters / rules if any (placeholder for more advanced learning)
-        # Example: Remove tags that have a high incorrect_count / correct_count ratio from cache
-        final_tags_list: List[str] = []
-        for tag_candidate in all_tags_combined_set:
-            stats = self.tag_accuracy_scores_cache.get(self._normalize_tag(tag_candidate), {})
-            correct = stats.get("correct", 0.0)
-            incorrect = stats.get("incorrect", 0.0)
-            # Heuristic: if a tag is marked incorrect more often than correct, and has enough feedback, maybe don't suggest it.
-            if incorrect > correct + 2 and (correct + incorrect) > 5: # Needs at least 5 data points, and 2 more incorrect
-                self.logger.debug(f"Filtering out tag '{tag_candidate}' based on negative feedback history for doc '{doc_id}'.")
-                continue
-            final_tags_list.append(tag_candidate)
+        # Simple learning: if a tag was often marked incorrect, lower its chance of being included or remove.
+        # This requires tag_accuracy_scores_cache to be populated.
+        final_tags_after_learning_filter: List[str] = []
+        for tag in all_tags_set:
+            stats = self.tag_accuracy_scores_cache.get(tag, {})
+            correct_count = stats.get("correct", 0)
+            incorrect_count = stats.get("incorrect", 0)
+            # Simple heuristic: if incorrect > correct significantly, maybe don't suggest it as strongly.
+            # For now, we'll include all and let feedback refine.
+            # A more advanced filter could use these scores to adjust confidence or prune.
+            final_tags_after_learning_filter.append(tag)
 
         return {
-            'document_type_classification': doc_type_class_result,
-            'legal_domain_tags': legal_domain_results, # Keep raw domain list
-            'procedural_stage_tag': proc_stage_result,
-            'importance_level_tag': importance_result,
-            'extracted_entity_tags': entity_tags_map_result, # Keep raw entity map
-            'generated_subject_tags': subject_tags_list_result, # Already formatted
-            'all_generated_tags': sorted(list(final_tags_list)), # Final combined, sorted
-            'model_used_for_llm': model_used_llm_str
+            'document_type_classification': doc_type,
+            'legal_domain_tags': legal_domains, # These are raw domains, not formatted tags
+            'procedural_stage_tag': proc_stage,
+            'importance_level_tag': importance,
+            'extracted_entity_tags': entity_tags, # Raw extracted entities info
+            'generated_subject_tags': subject_tags, # Formatted subject tags
+            'all_generated_tags': sorted(list(final_tags_after_learning_filter)),
+            'model_used_for_llm': model_used_llm
         }
 
-    # The rest of the sync classification methods (_classify_document_type_sync, etc.)
-    # are assumed to be complete as per the previous detailed file.
-    # _llm_generate_additional_tags is also assumed complete.
-    # The corrected _apply_user_feedback and _update_learning_from_session_async are above.
-    # _normalize_tag, _calculate_overall_tagging_confidence, get_learning_statistics_async, health_check
-    # also need to be fully present. I'll ensure they are in the final combined script if one is requested again.
+    # --- Synchronous Pattern-Based Methods ---
+    def _classify_document_type_sync(self, text: str) -> Optional[Dict[str, Any]]:
+        type_scores: Dict[str, float] = defaultdict(float)
+        text_lower_snippet = text.lower()[:3000] # Analyze start of text
+
+        for doc_type, patterns in self.document_type_patterns.items():
+            match_count = 0
+            for p_str in patterns:
+                if re.search(p_str, text_lower_snippet, re.IGNORECASE):
+                    match_count += 1
+            if match_count > 0:
+                # Score based on proportion of type's patterns matched, plus a boost for multiple matches
+                type_scores[doc_type] = (match_count / len(patterns)) + (0.1 * (match_count -1))
+        
+        if not type_scores: return {'type': 'unknown', 'confidence': 0.3}
+        best_type, best_raw_score = max(type_scores.items(), key=lambda x: x[1])
+        # Normalize confidence to be between 0 and 1 roughly
+        confidence = min(1.0, self.min_pattern_confidence + best_raw_score * 0.5) # Adjust scaling factor
+        return {'type': best_type, 'confidence': round(confidence, 3)} if confidence > self.min_pattern_confidence else {'type': 'unknown', 'confidence': 0.3}
+
+    def _classify_legal_domain_sync(self, text: str) -> List[str]:
+        domain_scores: Dict[str, float] = defaultdict(float)
+        text_lower = text.lower() # Analyze full text for domains
+        for domain, patterns in self.legal_domain_patterns.items():
+            match_count = sum(1 for p_str in patterns if re.search(p_str, text_lower, re.IGNORECASE))
+            if match_count > 0:
+                domain_scores[domain] = (match_count / len(patterns)) + (0.05 * match_count) # Small boost for more matches
+        
+        # Return top N domains or those above a threshold
+        sorted_domains = sorted(domain_scores.items(), key=lambda x: x[1], reverse=True)
+        return [d for d, s_val in sorted_domains if s_val > 0.3][:3] # Top 3 domains with min score
+
+    def _identify_procedural_stage_sync(self, text: str) -> Optional[Dict[str, Any]]:
+        # Similar logic to document_type classification
+        stage_scores: Dict[str, float] = defaultdict(float)
+        text_lower_snippet = text.lower()[:4000]
+        for stage, patterns in self.procedural_stage_patterns.items():
+            match_count = sum(1 for p_str in patterns if re.search(p_str, text_lower_snippet, re.IGNORECASE))
+            if match_count > 0:
+                stage_scores[stage] = (match_count / len(patterns)) + (0.1 * (match_count -1))
+        
+        if not stage_scores: return None
+        best_stage, best_raw_score = max(stage_scores.items(), key=lambda x: x[1])
+        confidence = min(1.0, self.min_pattern_confidence + best_raw_score * 0.4)
+        return {'stage': best_stage, 'confidence': round(confidence, 3)} if confidence > self.min_pattern_confidence else None
+
+    def _assess_importance_level_sync(self, text: str) -> Optional[Dict[str, Any]]:
+        text_lower = text.lower()
+        # Iterate from high to low, return first match
+        for level in ['high', 'medium', 'low']:
+            if level in self.importance_indicators:
+                if any(re.search(ind_pat, text_lower, re.IGNORECASE) for ind_pat in self.importance_indicators[level]):
+                    confidence_map = {'high': 0.8, 'medium': 0.65, 'low': 0.5}
+                    return {'level': level, 'confidence': confidence_map.get(level, 0.5)}
+        return {'level': 'medium', 'confidence': 0.4} # Default if no specific indicators
+
+    def _extract_entity_tags_sync(self, text: str) -> Dict[str, List[Dict[str, Any]]]:
+        entity_tags_map: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+        text_snippet_for_entities = text[:7000] 
+
+        for entity_type_label, patterns in self.entity_patterns_for_tags.items():
+            seen_for_type: Set[str] = set()
+            current_type_tags = []
+            for p_str in patterns:
+                try:
+                    for match in re.finditer(p_str, text_snippet_for_entities, re.IGNORECASE | re.DOTALL):
+                        entity_name = match.group(0).strip()
+                        # Normalize name slightly for deduplication within this type
+                        norm_name_key = re.sub(r'\s+', ' ', entity_name.lower()) 
+                        if norm_name_key not in seen_for_type:
+                            current_type_tags.append({'name': entity_name, 'confidence': round(self.min_pattern_confidence + 0.2, 3)}) # Base confidence for entity tag
+                            seen_for_type.add(norm_name_key)
+                except re.error as re_err:
+                    self.logger.warning(f"Regex error during entity tag pattern matching for type '{entity_type_label}'.",
+                                       parameters={'pattern': p_str, 'error': str(re_err)})
+            # Sort by length (longer names often more specific) then add to map
+            current_type_tags.sort(key=lambda x: -len(x['name']))
+            entity_tags_map[entity_type_label] = current_type_tags[:5] # Limit to top 5 distinct entities per type
+        return dict(entity_tags_map)
+
+    def _generate_subject_tags_sync(self, text: str) -> List[str]:
+        subject_tags: Set[str] = set()
+        text_lower = text.lower()
+        # Use pre-defined subject tag patterns (could be loaded from config)
+        for p_str in self.subject_tags_patterns: 
+            try:
+                if re.search(p_str, text_lower, re.IGNORECASE):
+                    # Normalize pattern to create tag: replace spaces and regex chars
+                    tag_key = re.sub(r'[^a-z0-9_]+', '_', p_str.lower().strip())
+                    tag = f"subject:{tag_key.strip('_')}"
+                    subject_tags.add(tag)
+            except re.error:
+                self.logger.warning(f"Invalid regex pattern for subject tag: {p_str}")
+        return sorted(list(subject_tags))[:15] # Limit number of subject tags
+
+    # --- LLM-Based Tag Generation ---
+    async def _llm_generate_additional_tags(self, text_for_llm: str, existing_tags: List[str], doc_id: str) -> Tuple[List[str], Optional[str]]:
+        if not self.llm_manager: return [], None
+        self.logger.debug(f"Using LLM for additional tag generation on doc '{doc_id}'.")
+
+        existing_tags_str = ', '.join(sorted(list(set(existing_tags)))[:20]) # Unique, sorted, limited
+        prompt = f"""
+        You are a legal document tagging expert. Analyze the following DOCUMENT TEXT EXCERPT and suggest 5 to 7 highly relevant keyword tags.
+        These tags should capture specific legal concepts, procedures, key topics, or named entities not already covered by the EXISTING TAGS.
+        Tags should be concise, in lowercase, with spaces replaced by underscores (e.g., "breach_of_contract", "fourth_amendment_issue").
+
+        EXISTING TAGS (for context, avoid suggesting conceptually identical tags):
+        {existing_tags_str if existing_tags else "None"}
+        
+        DOCUMENT TEXT EXCERPT:
+        ---
+        {text_for_llm}
+        ---
+        
+        Output ONLY a comma-separated list of your new suggested tags. Do not add prefixes like "llm:".
+        Example: specific_statute_123, key_procedural_event, important_legal_doctrine
+        """
+        model_to_use = self.config.get('llm_model_for_autotag', self.llm_manager.primary_config.model)
+        provider_to_use = self.config.get('llm_provider_for_autotag', self.llm_manager.primary_config.provider.value)
+        
+        try:
+            llm_response = await self.llm_manager.complete(
+                prompt, model=model_to_use, provider=LLMProviderEnum(provider_to_use),
+                model_params={'temperature': 0.4, 'max_tokens': 150} # Temperature slightly higher for creativity
+            )
+            response_text = llm_response.content.strip()
+            model_used_str = f"{provider_to_use}/{model_to_use}"
+            
+            llm_formatted_tags = []
+            if response_text:
+                potential_tags = [t.strip().lower() for t in response_text.split(',')]
+                for tag_candidate in potential_tags:
+                    # Basic validation and normalization
+                    tag_candidate = re.sub(r'\s+', '_', tag_candidate)
+                    tag_candidate = re.sub(r'[^a-z0-9_:]', '', tag_candidate) # Allow colons for existing prefixes
+                    if tag_candidate and len(tag_candidate) > 2 and tag_candidate not in existing_tags:
+                         # Check if tag is already effectively covered by an existing prefixed tag
+                        is_covered = any(ex_tag.endswith(f":{tag_candidate}") or tag_candidate.endswith(f":{ex_tag.split(':')[-1]}") for ex_tag in existing_tags)
+                        if not is_covered:
+                            llm_formatted_tags.append(f"llm:{tag_candidate}") # Prefix LLM-generated tags
+            
+            self.logger.debug(f"LLM ({model_used_str}) generated {len(llm_formatted_tags)} additional tags for doc '{doc_id}'.")
+            return llm_formatted_tags[:7], model_used_str # Limit number of LLM tags
+        except LLMProviderError as e:
+            self.logger.error(f"LLM API call for tag generation failed for doc '{doc_id}'.", exception=e)
+            raise AgentProcessingError("LLM tag generation failed.", underlying_exception=e) from e
+        except Exception as e:
+            self.logger.error(f"Unexpected error in LLM tag generation for doc '{doc_id}'.", exception=e)
+            raise AgentProcessingError("Unexpected error during LLM tag generation.", underlying_exception=e) from e
+
+    # --- Learning System Methods ---
+    async def _apply_user_feedback(self, doc_id: str, feedback: Dict[str, Any]):
+        self.logger.info(f"Applying user feedback to learning model (UMM) for doc '{doc_id}'.")
+        self.feedback_session_log.append({'doc_id': doc_id, 'feedback': feedback, 'timestamp': datetime.now(timezone.utc).isoformat()})
+
+        # feedback structure: {'correct_tags': ['tag1', 'tag2'], 'incorrect_tags': ['tag3'], 'added_by_user': ['new_tag']}
+        correct_tags = [self._normalize_tag(t) for t in feedback.get('correct_tags', [])]
+        incorrect_tags = [self._normalize_tag(t) for t in feedback.get('incorrect_tags', [])]
+        added_by_user = [self._normalize_tag(t) for t in feedback.get('added_by_user', [])]
+
+        if self.unified_memory_manager:
+            tasks = []
+            ts = time.time()
+            for tag in correct_tags:
+                tasks.append(self.unified_memory_manager.update_tag_learning_stats_async(tag, correct_increment=1.0, last_updated_ts=ts))
+                self.tag_accuracy_scores_cache[tag]["correct"] += 1.0
+                self.tag_accuracy_scores_cache[tag]["last_updated_ts"] = ts
+            for tag in incorrect_tags:
+                tasks.append(self.unified_memory_manager.update_tag_learning_stats_async(tag, incorrect_increment=1.0, last_updated_ts=ts))
+                self.tag_accuracy_scores_cache[tag]["incorrect"] += 1.0
+                self.tag_accuracy_scores_cache[tag]["last_updated_ts"] = ts
+            for tag in added_by_user: # Tags user added are considered "correct" and "suggested" if new
+                tasks.append(self.unified_memory_manager.update_tag_learning_stats_async(tag, correct_increment=1.0, suggested_increment=1.0, last_updated_ts=ts))
+                self.tag_accuracy_scores_cache[tag]["correct"] += 1.0
+                self.tag_accuracy_scores_cache[tag]["suggested"] += 1.0
+                self.tag_accuracy_scores_cache[tag]["last_updated_ts"] = ts
+            
+            if tasks: await asyncio.gather(*tasks)
+            self.logger.debug(f"User feedback for doc '{doc_id}' persisted to UMM and local cache updated.")
+        else: # Fallback to in-memory only if UMM is not available
+            ts = time.time()
+            for tag in correct_tags: self.tag_accuracy_scores_cache[tag]["correct"] += 1.0; self.tag_accuracy_scores_cache[tag]["last_updated_ts"] = ts
+            for tag in incorrect_tags: self.tag_accuracy_scores_cache[tag]["incorrect"] += 1.0; self.tag_accuracy_scores_cache[tag]["last_updated_ts"] = ts
+            for tag in added_by_user: self.tag_accuracy_scores_cache[tag]["correct"] += 1.0; self.tag_accuracy_scores_cache[tag]["suggested"] += 1.0; self.tag_accuracy_scores_cache[tag]["last_updated_ts"] = ts
+            self.logger.warning("UMM not available. Feedback for auto-tagging applied to in-memory cache only.")
 
     def _normalize_tag(self, tag: str) -> str:
+        """Normalizes a tag string to a consistent format."""
         if not isinstance(tag, str): return ""
-        # Convert to lowercase, replace spaces and common separators with underscore, remove special chars except colon
-        normalized = tag.lower().strip()
-        normalized = re.sub(r'[\s\-(),./]+', '_', normalized) # Replace common separators
-        normalized = re.sub(r'[^a-z0-9_:]', '', normalized)   # Allow alphanumeric, underscore, colon
-        normalized = re.sub(r'_+', '_', normalized)          # Reduce multiple underscores
-        normalized = normalized.strip('_')                   # Strip leading/trailing underscores
-        return normalized
+        return tag.lower().strip().replace(" ", "_")
 
-    def _calculate_overall_tagging_confidence(self, tagging_result_data: Dict[str, Any]) -> float:
+    async def _update_learning_from_session_async(self, doc_id: str, generated_tags: List[str]):
+        normalized_tags = [self._normalize_tag(t) for t in generated_tags]
+        if not normalized_tags: return
+
+        if self.unified_memory_manager:
+            tasks = []
+            ts = time.time()
+            for tag in normalized_tags:
+                tasks.append(self.unified_memory_manager.update_tag_learning_stats_async(tag, suggested_increment=1.0, last_updated_ts=ts))
+                self.tag_accuracy_scores_cache[tag]["suggested"] += 1.0
+                self.tag_accuracy_scores_cache[tag]["last_updated_ts"] = ts
+            if tasks: await asyncio.gather(*tasks)
+            self.logger.trace(f"Learning from current auto-tagging session (suggestion counts) persisted to UMM for doc '{doc_id}'.")
+        else: # Fallback to in-memory
+            ts = time.time()
+            for tag in normalized_tags: self.tag_accuracy_scores_cache[tag]["suggested"] += 1.0; self.tag_accuracy_scores_cache[tag]["last_updated_ts"] = ts
+            self.logger.warning("UMM not available. Learning from auto-tagging session applied to in-memory cache only.")
+
+    def _calculate_overall_tagging_confidence(self, tagging_result: Dict[str, Any]) -> float:
         confidences = []
-        # Document Type
-        doc_type_res = tagging_result_data.get('document_type_classification')
-        if doc_type_res and isinstance(doc_type_res, dict) and doc_type_res.get('type') != 'unknown':
-            confidences.append(float(doc_type_res.get('confidence', 0.0)))
-        # Procedural Stage
-        proc_stage_res = tagging_result_data.get('procedural_stage_tag')
-        if proc_stage_res and isinstance(proc_stage_res, dict) and proc_stage_res.get('stage'):
-            confidences.append(float(proc_stage_res.get('confidence', 0.0)))
-        # Importance Level
-        importance_res = tagging_result_data.get('importance_level_tag')
-        if importance_res and isinstance(importance_res, dict) and importance_res.get('level'):
-            confidences.append(float(importance_res.get('confidence', 0.0)))
+        if tagging_result.get('document_type_classification') and isinstance(tagging_result['document_type_classification'], dict):
+            confidences.append(tagging_result['document_type_classification'].get('confidence', 0.0))
+        if tagging_result.get('procedural_stage_tag') and isinstance(tagging_result['procedural_stage_tag'], dict):
+            confidences.append(tagging_result['procedural_stage_tag'].get('confidence', 0.0))
+        if tagging_result.get('importance_level_tag') and isinstance(tagging_result['importance_level_tag'], dict):
+            confidences.append(tagging_result['importance_level_tag'].get('confidence', 0.0))
         
-        # Base confidence for other categories if tags were found
-        if tagging_result_data.get('legal_domain_tags'): confidences.append(0.65) 
-        if tagging_result_data.get('extracted_entity_tags'): confidences.append(0.70) # Entity tags from patterns are usually decent
-        if tagging_result_data.get('generated_subject_tags'): confidences.append(0.60)
+        # Add base confidence for presence of other tag types
+        if tagging_result.get('legal_domain_tags'): confidences.append(0.6) 
+        if tagging_result.get('extracted_entity_tags'): confidences.append(0.65)
+        if tagging_result.get('generated_subject_tags'): confidences.append(0.55)
+        if any(tag.startswith("llm:") for tag in tagging_result.get('all_generated_tags',[])): confidences.append(self.min_llm_tag_confidence)
+
+        if not confidences: return 0.25 # Low base if nothing classified
+        return round(sum(confidences) / len(confidences), 3)
+
+    async def get_learning_statistics_async(self) -> Dict[str, Any]: # Public method
+        """Retrieves learning statistics, potentially combining cache and UMM."""
+        # For simplicity, this example returns cached stats. A real version would query UMM.
+        if self.unified_memory_manager:
+            # Example: fetch global stats or stats for top N tags from UMM
+            # global_stats = await self.unified_memory_manager.get_overall_tag_learning_summary_async()
+            # For now, combine with cache:
+            # This is complex. Simplest is to return cache, assuming UMM is the source of truth updated by this agent.
+            pass
+
+        cached_stats = self.tag_accuracy_scores_cache.copy() # Operate on a copy
+        total_feedback_events = sum(stats.get('correct',0) + stats.get('incorrect',0) for stats in cached_stats.values())
+        total_correct_feedback = sum(stats.get('correct',0) for stats in cached_stats.values())
         
-        # If LLM contributed tags, factor in its minimum confidence threshold
-        if any(tag.startswith("llm:") for tag in tagging_result_data.get('all_generated_tags',[])):
-            confidences.append(self.min_llm_tag_confidence)
-
-        if not confidences: return 0.20 # Low base if absolutely nothing specific found
-        
-        # Weighted average could be considered if some tag types are more reliable
-        # For now, simple average.
-        avg_conf = sum(confidences) / len(confidences)
-        return round(avg_conf, 3)
-
-    async def get_learning_statistics_async(self) -> Dict[str, Any]:
-        # This method primarily returns data from the local cache.
-        # A full system might query UMM for global/aggregated stats.
-        cached_stats_copy = self.tag_accuracy_scores_cache.copy() # Work on a copy
-
-        total_feedback_instances = 0
-        total_correct_assignments = 0.0
-        total_incorrect_assignments = 0.0
-
-        for tag_data in cached_stats_copy.values():
-            total_correct_assignments += tag_data.get("correct", 0.0)
-            total_incorrect_assignments += tag_data.get("incorrect", 0.0)
-        total_feedback_instances = total_correct_assignments + total_incorrect_assignments
-
-        overall_cached_accuracy = 0.0
-        if total_feedback_instances > 0:
-            overall_cached_accuracy = total_correct_assignments / total_feedback_instances
-        
-        # Get top N tags based on different criteria
-        def get_top_tags(criteria_key: str, data_dict: Dict, n: int = 10) -> List[Tuple[str, float]]:
-            return sorted(
-                [(tag, tag_stats.get(criteria_key, 0.0)) for tag, tag_stats in data_dict.items() if tag_stats.get(criteria_key, 0.0) > 0],
-                key=lambda x: x[1], 
-                reverse=True
-            )[:n]
-
         return {
             'feedback_sessions_logged_this_instance': len(self.feedback_session_log),
-            'distinct_tags_in_session_cache': len(cached_stats_copy),
-            'overall_cached_tag_accuracy': round(overall_cached_accuracy, 3),
-            'top_correct_tags_in_cache': get_top_tags("correct", cached_stats_copy),
-            'top_incorrect_tags_in_cache': get_top_tags("incorrect", cached_stats_copy),
-            'top_suggested_tags_in_cache': get_top_tags("suggested", cached_stats_copy),
-            'umm_status': 'available_and_used' if self.unified_memory_manager else 'unavailable_cache_only',
-            'cache_last_updated_example_ts': max([d.get("last_updated_ts", 0.0) for d in cached_stats_copy.values()]) if cached_stats_copy else 0.0
+            'distinct_tags_in_cache': len(cached_stats),
+            'overall_cached_tag_accuracy': (total_correct_feedback / total_feedback_events) if total_feedback_events > 0 else 0.0,
+            'top_correct_tags_cache': sorted([ (tag, data) for tag, data in cached_stats.items() if data.get('correct',0) > 0], key=lambda x: x[1].get('correct',0), reverse=True)[:10],
+            'top_incorrect_tags_cache': sorted([ (tag, data) for tag, data in cached_stats.items() if data.get('incorrect',0) > 0], key=lambda x: x[1].get('incorrect',0), reverse=True)[:10],
+            'umm_status': 'available' if self.unified_memory_manager else 'unavailable'
         }
-        
+
     async def health_check(self) -> Dict[str, Any]:
-        base_health = await super().health_check() if hasattr(super(), 'health_check') else {"status": "healthy", "checks": []}
-        base_health['agent_name'] = self.name
-        base_health['dependencies_status'] = {
+        status = await super().health_check() if hasattr(super(), 'health_check') else {"status": "healthy", "checks": []}
+        status['agent_name'] = self.name
+        status['dependencies_status'] = {
             'llm_manager': 'available' if self.llm_manager else 'unavailable',
             'unified_memory_manager': 'available' if self.unified_memory_manager else 'unavailable'
         }
-        base_health['configuration_summary'] = {
+        status['config_summary'] = {
             'enable_llm_tag_generation': self.enable_llm_tag_generation,
             'min_pattern_confidence': self.min_pattern_confidence,
-            'min_llm_tag_confidence': self.min_llm_tag_confidence,
-            'max_text_for_llm': self.max_text_for_llm
+            'min_llm_tag_confidence': self.min_llm_tag_confidence
         }
-        patterns_summary = {
-            "doc_types": len(self.document_type_patterns),
-            "legal_domains": len(self.legal_domain_patterns),
-            "proc_stages": len(self.procedural_stage_patterns),
-            "importance_levels": len(self.importance_indicators),
-            "entity_tag_types": len(self.entity_patterns_for_tags),
-            "subject_patterns": len(self.subject_tags_patterns)
-        }
-        base_health['patterns_loaded_counts'] = patterns_summary
-
-        if self.enable_llm_tag_generation and not self.llm_manager:
-            base_health['status'] = 'degraded'
-            base_health['reason'] = 'LLM tag generation enabled but LLMManager is unavailable.'
-        
-        self.logger.info(f"{self.name} health check performed.", parameters={'current_status': base_health.get('status')})
-        return base_health
+        if (self.enable_llm_tag_generation and not self.llm_manager):
+            status['status'] = 'degraded'
+            status['reason'] = 'LLM tag generation enabled but LLMManager is unavailable.'
+        return status
