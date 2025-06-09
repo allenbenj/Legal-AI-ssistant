@@ -4,9 +4,8 @@ Project Documentation Generator
 Example script showing how to use PyToMdConverter to document the entire legal_ai_system
 """
 
-import sys
 from pathlib import Path
-from py_to_md_converter import PyToMdConverter
+from legal_ai_system.legacy_extras.py_to_md_converter import PyToMdConverter
 import logging
 
 def main():
