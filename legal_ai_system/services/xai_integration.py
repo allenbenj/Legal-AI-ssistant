@@ -27,12 +27,17 @@ try:
     if str(parent_dir) not in sys.path:
         sys.path.insert(0, str(parent_dir))
     
-    from config.grok_config import (
-        GROK_MODELS_CONFIG, DEFAULT_GROK_MODEL, LEGAL_ANALYSIS_PARAMS,
-        RATE_LIMITS, create_grok_config, get_optimized_prompt,
-        get_available_grok_models, is_reasoning_model
+    from legal_ai_system.core.grok_config import (
+        GROK_MODELS_CONFIG,
+        DEFAULT_GROK_MODEL,
+        LEGAL_ANALYSIS_PARAMS,
+        RATE_LIMITS,
+        create_grok_config,
+        get_optimized_prompt,
+        get_available_grok_models,
+        is_reasoning_model,
     )
-    from core.llm_providers import LLMConfig, LLMProvider
+    from legal_ai_system.core.llm_providers import LLMConfig, LLMProvider
 except ImportError as e:
     logging.warning(f"Could not import Grok configuration: {e}")
     # Fallback configurations
