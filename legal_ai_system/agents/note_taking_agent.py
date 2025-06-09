@@ -4,7 +4,7 @@ NoteTakingAgent - Intelligent note-taking with legal context awareness.
 """
 
 # import logging # Replaced by detailed_logging
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional, Any
 import asyncio
 import re
 from datetime import datetime, timezone  # Added timezone
@@ -13,13 +13,11 @@ from uuid import uuid4
 from dataclasses import dataclass, field, asdict  # Added
 
 # Core imports from the new structure
-from ..core.base_agent import BaseAgent, AgentResult # AgentResult is already generic
+from ..core.base_agent import BaseAgent
 from ..core.llm_providers import LLMManager, LLMProviderError
-from ..core.unified_exceptions import AgentExecutionError, MemoryManagerError
-from ..core.detailed_logging import LogCategory
+from ..core.unified_exceptions import MemoryManagerError
 
 from ..core.agent_unified_config import create_agent_memory_mixin
-from ..core.unified_memory_manager import MemoryType
 
 # Create memory mixin for agents
 MemoryMixin = create_agent_memory_mixin()
@@ -114,9 +112,7 @@ class NoteTakingAgent(BaseAgent, MemoryMixin):
         document_id = metadata.get('document_id', f"unknown_doc_{uuid4().hex[:8]}")
         text_content = task_data.get('text_content', task_data.get('text', task_data.get('content', ''))) # Flexible text input
         note_action = task_data.get('action', 'suggest').lower()
-        # existing_notes_data should be List[Dict] that can be converted to List[Note]
-        existing_notes_data = task_data.get('existing_notes_data', []) 
-        context_info = task_data.get('context_info', {}) # For create/update actions
+        context_info = task_data.get('context_info', {})  # For create/update actions
 
         self.logger.info(f"Processing note-taking action '{note_action}'.", 
                         parameters={'doc_id': document_id, 'text_len': len(text_content)})
@@ -130,7 +126,7 @@ class NoteTakingAgent(BaseAgent, MemoryMixin):
             
         try:
             if note_action == 'suggest':
-                suggest_output_data = await self._suggest_notes_async(text_content, document_id, context_info) # Renamed
+                suggest_output_data = await self._suggest_notes_async(text_content, document_id)
                 output.notes = suggest_output_data.get('suggested_notes_obj', []) # Expect List[Note]
                 output.note_opportunities_found = suggest_output_data.get('note_opportunities_count', 0)
                 # Populate other fields of output from suggest_output_data if needed
@@ -164,8 +160,7 @@ class NoteTakingAgent(BaseAgent, MemoryMixin):
         
         return output.to_dict()
 
-    async def _suggest_notes_async(self, text: str, doc_id: str, 
-                                 context_info: Dict[str, Any]) -> Dict[str, Any]: # Renamed
+    async def _suggest_notes_async(self, text: str, doc_id: str) -> Dict[str, Any]:
         """Suggest contextually relevant notes based on document content (async wrapper)."""
         # Pattern-based suggestions are CPU-bound, LLM is IO-bound
         self.logger.debug("Generating note suggestions.", parameters={'doc_id': doc_id})
@@ -176,7 +171,7 @@ class NoteTakingAgent(BaseAgent, MemoryMixin):
         
         suggested_notes_list: List[Note] = []
         for opp_data in pattern_opportunities:
-            note_obj = self._generate_note_from_opportunity_sync(opp_data, text, doc_id) # Renamed
+            note_obj = self._generate_note_from_opportunity_sync(opp_data, doc_id)
             if note_obj: suggested_notes_list.append(note_obj)
         
         # LLM for enhanced suggestions (async)
@@ -218,8 +213,9 @@ class NoteTakingAgent(BaseAgent, MemoryMixin):
         opportunities.sort(key=lambda x: (x['importance'] != 'critical', x['importance'] != 'high', -x['confidence']))
         return opportunities[:15] # Limit opportunities
 
-    def _generate_note_from_opportunity_sync(self, opportunity_data: Dict[str, Any], 
-                                           text: str, doc_id: str) -> Optional[Note]: # Renamed
+    def _generate_note_from_opportunity_sync(
+        self, opportunity_data: Dict[str, Any], doc_id: str
+    ) -> Optional[Note]:
         """Generate a Note object from an opportunity (synchronous)."""
         # ... (logic from original _generate_note_suggestion, but creates Note object)
         note_type = opportunity_data['type']
