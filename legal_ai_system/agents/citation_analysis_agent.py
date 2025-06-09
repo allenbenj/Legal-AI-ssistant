@@ -13,7 +13,6 @@ from datetime import datetime, timezone
 from collections import defaultdict
 
 from ..core.base_agent import BaseAgent
-from ..core.models import ProcessingResult
 from ..core.llm_providers import LLMManager, LLMProviderError, LLMProviderEnum
 from ..core.model_switcher import ModelSwitcher, TaskComplexity # Assuming ModelSwitcher service
 from ..core.unified_exceptions import AgentProcessingError

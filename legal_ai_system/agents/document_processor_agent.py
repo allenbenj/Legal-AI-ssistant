@@ -8,6 +8,32 @@ Integrates optional dependencies gracefully and uses shared components.
 
 
 
+from __future__ import annotations
+
+import hashlib
+import io
+import mimetypes
+import re
+from dataclasses import dataclass, field, asdict
+from datetime import datetime, timezone
+from enum import Enum
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
+
+from ..core.base_agent import BaseAgent
+from ..core.detailed_logging import (
+    LogCategory,
+    detailed_log_function,
+    get_detailed_logger,
+)
+from ..core.agent_unified_config import create_agent_memory_mixin
+from ..core.unified_exceptions import AgentExecutionError, DocumentProcessingError
+from ..core.constants import Constants
+from ..utils.dependency_manager import DependencyManager
+from ..utils.document_utils import DocumentChunker, LegalDocumentClassifier
+
+MemoryMixin = create_agent_memory_mixin()
+file_logger = get_detailed_logger("File_Processing", LogCategory.DOCUMENT)
 # Attempt to import optional dependencies via DependencyManager
 dep_manager = DependencyManager()
 dep_manager.check_dependencies()
@@ -1182,13 +1208,13 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
             "processing_notes": notes,
         }
 
-    async def health_check(self) -> Dict[str, Any]:  # Public method
+async def health_check(self) -> Dict[str, Any]:  # Public method
         base_status = await super().health_check()
         base_status["agent_name"] = self.name
         base_status["config_summary"] = self.get_config_summary_params()
 
-        supported_formats_with_deps = []
-        unsupported_due_to_deps = []
+        supported_formats_with_deps: List[str] = []
+        unsupported_due_to_deps: List[str] = []
         for content_type, config_details in self.file_type_configs.items():
             deps_ok = all(
                 dep_manager.is_available(dep) for dep in config_details.get("deps", [])
@@ -1196,3 +1222,10 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
             if deps_ok:
                 supported_formats_with_deps.append(content_type.name)
             else:
+                unsupported_due_to_deps.append(content_type.name)
+
+        base_status["supported_formats"] = supported_formats_with_deps
+        if unsupported_due_to_deps:
+            base_status["unsupported_formats_missing_deps"] = unsupported_due_to_deps
+
+        return base_status

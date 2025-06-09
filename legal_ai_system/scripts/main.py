@@ -644,26 +644,7 @@ class Query:
 
 
 @strawberry.type
-class Mutation:
-    @strawberry.field
-    async def submit_review_decision_gql(
-        self,
-        info: Info,
-        item_id: str,
-        decision: str,  # Renamed
-        modified_data: Optional[strawberry.scalars.JSON] = None,  # type: ignore
-    ) -> bool:
-        main_api_logger.info(
-            "GraphQL: submit_review_decision called",
-            parameters={"item_id": item_id, "decision": decision},
-        )
-        if not service_container_instance:
-            return False
-        review_service = service_container_instance.get_service(
-            "reviewable_memory"
-        )  # Or calibration_manager
-        if not review_service:
-            return False
+
         # success = await review_service.submit_review_decision(item_id, decision, modified_content=modified_data)
         # await websocket_manager_instance.broadcast_to_topic(...)
         return True  # Mock
