@@ -21,19 +21,13 @@ from datetime import datetime, timezone
 from enum import Enum # Added Enum back for DocumentContentType
 
 # Core imports
-from ..core.base_agent import BaseAgent, ProcessingResult
-from ..core.detailed_logging import LogCategory, detailed_log_function, get_detailed_logger
-
-from ..config.agent_unified_config import create_agent_memory_mixin
-from ..memory.unified_memory_manager import MemoryType
 
 # Create memory mixin for agents
 MemoryMixin = create_agent_memory_mixin()
 
 from ..core.unified_exceptions import AgentExecutionError, DocumentProcessingError
 from ..core.shared_components import DependencyManager, DocumentChunker, LegalDocumentClassifier
-# Constants for default values
-from ..config.constants import Constants
+
 
 # Logger specifically for this file, can be aliased from self.logger in methods
 file_logger = get_detailed_logger("DocumentProcessorAgentFileOps", LogCategory.FILE_IO)
