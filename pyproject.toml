@@ -225,6 +225,7 @@ addopts = [
     "--cov-report=html",
     "--cov-report=xml",
 ]
+
 testpaths = ["legal_ai_system/tests"]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
@@ -240,6 +241,7 @@ omit = [
     "*/tests/*",
     "*/test_*",
     "*/archive_*/*",
+    "*/extraneous_files/*",
     "*/legacy_*/*",
     "*/__pycache__/*",
 ]

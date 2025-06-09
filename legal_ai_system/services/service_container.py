@@ -328,7 +328,7 @@ async def create_service_container(app_settings: Optional[Any] = None) -> Servic
     container = ServiceContainer()
 
     # 1. Configuration Manager (must be first)
-    from .configuration_manager import create_configuration_manager # Assuming in core
+    from ..core.configuration_manager import create_configuration_manager
     # If app_settings (e.g. LegalAISettings from config.settings) is passed, use it
     await container.register_service("configuration_manager", factory=create_configuration_manager, custom_settings_instance=app_settings)
     config_manager_service = await container.get_service("configuration_manager")
