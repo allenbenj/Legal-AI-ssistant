@@ -41,3 +41,52 @@ def extract_text(path: Path, ocr: bool = True) -> str:
 
 
 __all__ = ["discover_documents", "extract_text"]
+
+
+class DocumentChunker:
+    """Simple text chunker used by agents for splitting large documents."""
+
+    def __init__(self, chunk_size: int = 4000, overlap: int = 200) -> None:
+        self.chunk_size = chunk_size
+        self.overlap = overlap
+
+    def chunk_text(self, text: str) -> List[str]:
+        if not text:
+            return []
+        step = max(1, self.chunk_size - self.overlap)
+        return [text[i : i + self.chunk_size] for i in range(0, len(text), step)]
+
+
+class LegalDocumentClassifier:
+    """Very lightweight keyword based classifier for legal documents."""
+
+    KEYWORD_SETS = {
+        "contract": ["agreement", "party", "contract"],
+        "court_filing": ["plaintiff", "defendant", "court"],
+        "statute": ["section", "subsection", "act"],
+    }
+
+    def classify(self, text: str, filename: str | None = None) -> Dict[str, Any]:
+        lowered = text.lower()
+        best_type = "unknown"
+        best_score = 0.0
+        for doc_type, keywords in self.KEYWORD_SETS.items():
+            hits = sum(1 for kw in keywords if kw in lowered)
+            score = hits / len(keywords)
+            if score > best_score:
+                best_type = doc_type
+                best_score = score
+        return {
+            "is_legal_document": best_score > 0,
+            "primary_type": best_type,
+            "primary_score": best_score,
+            "filename": filename,
+        }
+
+
+__all__ = [
+    "discover_documents",
+    "extract_text",
+    "DocumentChunker",
+    "LegalDocumentClassifier",
+]

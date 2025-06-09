@@ -18,16 +18,23 @@ import json
 import re
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
-from enum import Enum # Added Enum back for DocumentContentType
+from enum import Enum  # Added Enum back for DocumentContentType
 
 # Core imports
+from ..core.base_agent import BaseAgent
+from ..core.agent_unified_config import create_agent_memory_mixin
+from ..core.detailed_logging import (
+    get_detailed_logger,
+    LogCategory,
+    detailed_log_function,
+)
+from ..core.constants import Constants
+from ..core.unified_exceptions import AgentExecutionError, DocumentProcessingError
+from ..utils.dependency_manager import DependencyManager
+from ..utils.document_utils import DocumentChunker, LegalDocumentClassifier
 
 # Create memory mixin for agents
 MemoryMixin = create_agent_memory_mixin()
-
-from ..core.unified_exceptions import AgentExecutionError, DocumentProcessingError
-from ..core.shared_components import DependencyManager, DocumentChunker, LegalDocumentClassifier
-
 
 # Logger specifically for this file, can be aliased from self.logger in methods
 file_logger = get_detailed_logger("DocumentProcessorAgentFileOps", LogCategory.FILE_IO)
@@ -304,8 +311,13 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
                             parameters={'type': output.document_content_type.name, 'text_len': output.character_count or 0})
 
         except DocumentProcessingError as dpe:
-            self.logger.error(f"DocumentProcessingError for '{file_path.name}': {dpe.message}", 
-                             parameters={'file': str(file_path), 'error_details': dpe.details})
+            self.logger.error(
+                f"DocumentProcessingError for '{file_path.name}': {dpe.message}",
+                parameters={
+                    'file': str(file_path),
+                    'error_details': dpe.technical_details,
+                },
+            )
             output.errors.append(dpe.message)
         except AgentExecutionError as aee:
             self.logger.error(f"AgentExecutionError during processing of '{file_path.name}': {str(aee)}",
@@ -316,6 +328,7 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
                              parameters={'file': str(file_path)}, exception=e, exc_info=True) # exc_info for unexpected
             output.errors.append(f"Unexpected critical error: {type(e).__name__} - {str(e)}")
         
+
         finally:
             output.processing_time_sec = round(
                 (datetime.now(timezone.utc) - start_time).total_seconds(), 3
@@ -323,9 +336,11 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
             if output.errors:
                 self.logger.warning(
                     f"Processing for '{file_path.name}' completed with {len(output.errors)} error(s).",
-                    parameters={'first_error': output.errors[0] if output.errors else "N/A"},
+                    parameters={
+                        'first_error': output.errors[0] if output.errors else "N/A"
+                    },
                 )
-        
+
         return output.to_dict()
 
     # --- ASYNC WRAPPERS FOR HANDLERS ---
@@ -365,7 +380,10 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
 
     def _sync_process_pdf(self, file_path: Path, options: Dict[str, Any]) -> Dict[str, Any]:
         file_logger.info(f"Processing PDF (sync): {file_path.name}")
-        if not dep_manager.is_available('pymupdf'): raise DocumentProcessingError("PyMuPDF (fitz) unavailable.", file_path)
+        if not dep_manager.is_available('pymupdf'):
+            raise DocumentProcessingError(
+                "PyMuPDF (fitz) unavailable.", file_path=file_path
+            )
         
         text_content_parts: List[str] = []
         extracted_meta: Dict[str, Any] = {'source_format': 'pdf'}
@@ -427,7 +445,10 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
 
     def _sync_process_docx(self, file_path: Path, options: Dict[str, Any]) -> Dict[str, Any]:
         file_logger.info(f"Processing DOCX (sync): {file_path.name}")
-        if not dep_manager.is_available('docx'): raise DocumentProcessingError("python-docx unavailable.", file_path)
+        if not dep_manager.is_available('docx'):
+            raise DocumentProcessingError(
+                "python-docx unavailable.", file_path=file_path
+            )
         
         text_parts: List[str] = []
         extracted_meta: Dict[str, Any] = {'source_format': 'docx'}
@@ -461,7 +482,9 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
         except DocxPackageNotFoundError: # type: ignore
             notes.append("File is not a valid DOCX (Zip archive) package.")
             file_logger.error(f"Invalid DOCX package: {file_path.name}")
-            raise DocumentProcessingError(f"Invalid DOCX file: {file_path.name}", file_path)
+            raise DocumentProcessingError(
+                f"Invalid DOCX file: {file_path.name}", file_path=file_path
+            )
         except Exception as e:
             notes.append(f"Error processing DOCX: {str(e)}")
             file_logger.error(f"Error processing DOCX {file_path.name}.", exception=e)
@@ -492,7 +515,11 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
                 content = raw_bytes.decode('utf-8', errors='replace')
                 encoding_used = 'utf-8-replace'; notes.append("Read as UTF-8 replacing errors.")
             except Exception as e:
-                raise DocumentProcessingError(f"Could not read TXT file {file_path.name}: {str(e)}", file_path, cause=e)
+                raise DocumentProcessingError(
+                    f"Could not read TXT file {file_path.name}: {str(e)}",
+                    file_path=file_path,
+                    cause=e,
+                )
         
         if options.get('clean_text', True): content = self._common_text_cleaning(content) or ""
         return {"text_content": content, "extracted_metadata": {"encoding": encoding_used, 'source_format':'txt'}, "processing_notes": notes}
@@ -524,7 +551,10 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
     def _sync_process_html(self, file_path: Path, options: Dict[str, Any]) -> Dict[str, Any]:
         file_logger.info(f"Processing HTML (sync): {file_path.name}")
         notes = []; text_content = ""
-        if not dep_manager.is_available('bs4'): raise DocumentProcessingError("BeautifulSoup4 unavailable for HTML.", file_path)
+        if not dep_manager.is_available('bs4'):
+            raise DocumentProcessingError(
+                "BeautifulSoup4 unavailable for HTML.", file_path=file_path
+            )
         
         try:
             with open(file_path, 'r', encoding='utf-8', errors='ignore') as f: html_content = f.read()
@@ -578,7 +608,10 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
         tables_data: List[Dict[str, Any]] = []
         extracted_meta = {'source_format': 'excel', 'sheet_names': []}
         
-        if not dep_manager.is_available('pandas'): raise DocumentProcessingError("pandas unavailable for Excel.", file_path)
+        if not dep_manager.is_available('pandas'):
+            raise DocumentProcessingError(
+                "pandas unavailable for Excel.", file_path=file_path
+            )
         # openpyxl for .xlsx, xlrd for .xls are soft dependencies of pandas for these formats
         
         try:
@@ -637,7 +670,10 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
         tables_data: List[Dict[str, Any]] = []
         extracted_meta = {'source_format': 'csv'}
         
-        if not dep_manager.is_available('pandas'): raise DocumentProcessingError("pandas unavailable for CSV.", file_path)
+        if not dep_manager.is_available('pandas'):
+            raise DocumentProcessingError(
+                "pandas unavailable for CSV.", file_path=file_path
+            )
 
         try:
             # Try to infer encoding, common ones for CSV
@@ -660,7 +696,11 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
                     extracted_meta['encoding_detected'] = 'utf-8-replace'
                     notes.append("Read CSV as UTF-8 replacing errors.")
                 except Exception as final_e:
-                    raise DocumentProcessingError(f"Failed to parse CSV file {file_path.name}: {str(final_e)}", file_path, cause=final_e)
+                    raise DocumentProcessingError(
+                        f"Failed to parse CSV file {file_path.name}: {str(final_e)}",
+                        file_path=file_path,
+                        cause=final_e,
+                    )
 
             if df.empty:
                 notes.append("CSV file is empty or contains no data.")
@@ -698,7 +738,10 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
         slide_count = 0
         extracted_meta = {'source_format': 'pptx'}
 
-        if not dep_manager.is_available('pptx'): raise DocumentProcessingError("python-pptx unavailable.", file_path)
+        if not dep_manager.is_available('pptx'):
+            raise DocumentProcessingError(
+                "python-pptx unavailable.", file_path=file_path
+            )
 
         try:
             prs = Presentation(str(file_path)) # type: ignore
@@ -734,7 +777,9 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
         except PptxPackageNotFoundError: # type: ignore
             notes.append(f"File {file_path.name} is not a valid PowerPoint (Zip) package.")
             file_logger.error(f"Invalid PowerPoint package: {file_path.name}")
-            raise DocumentProcessingError(f"Invalid PowerPoint file: {file_path.name}", file_path)
+            raise DocumentProcessingError(
+                f"Invalid PowerPoint file: {file_path.name}", file_path=file_path
+            )
         except Exception as e:
             notes.append(f"Error processing PowerPoint: {str(e)}")
             file_logger.error(f"Error processing PowerPoint {file_path.name}.", exception=e)
@@ -753,8 +798,12 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
         notes = []; text_content = ""
         extracted_meta = {'source_format': 'image'}
 
-        if not (dep_manager.is_available('pytesseract') and dep_manager.is_available('PIL')):
-            raise DocumentProcessingError("Pytesseract/Pillow unavailable for image OCR.", file_path)
+        if not (
+            dep_manager.is_available('pytesseract') and dep_manager.is_available('PIL')
+        ):
+            raise DocumentProcessingError(
+                "Pytesseract/Pillow unavailable for image OCR.", file_path=file_path
+            )
 
         try:
             pil_img = Image.open(str(file_path)) # type: ignore
@@ -776,11 +825,15 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
         except UnidentifiedImageError: # type: ignore
             notes.append(f"Cannot identify image file: {file_path.name}")
             file_logger.error(f"Pillow UnidentifiedImageError for {file_path.name}")
-            raise DocumentProcessingError(f"Cannot identify image file: {file_path.name}", file_path)
+            raise DocumentProcessingError(
+                f"Cannot identify image file: {file_path.name}", file_path=file_path
+            )
         except pytesseract.TesseractNotFoundError: # type: ignore
             notes.append("Tesseract OCR engine not found or not in PATH.")
             file_logger.error("TesseractNotFoundError. Ensure Tesseract is installed and in PATH.")
-            raise DocumentProcessingError("Tesseract OCR not installed/configured correctly.", file_path)
+            raise DocumentProcessingError(
+                "Tesseract OCR not installed/configured correctly.", file_path=file_path
+            )
         except Exception as e:
             notes.append(f"Error during image OCR: {str(e)}")
             file_logger.error(f"Error during image OCR for {file_path.name}.", exception=e)
