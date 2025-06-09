@@ -14,3 +14,5 @@ This repository contains a modular legal analysis platform. Source files live in
 Extra reference materials are listed in `legal_ai_system/docs/legacy_files.md`.
 
 Run `python legal_ai_system/scripts/main.py` to start the demo application.
+
+See [Import Conventions](docs/import_conventions.md) for import style guidelines.
