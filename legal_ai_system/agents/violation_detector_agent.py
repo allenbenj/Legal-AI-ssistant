@@ -21,7 +21,8 @@ if str(project_root) not in sys.path:
 
 try:
     from legal_ai_system.config.agent_unified_config import create_agent_memory_mixin
-    from legal_ai_system.core.base_agent import BaseAgent, ProcessingResult
+    from legal_ai_system.core.base_agent import BaseAgent
+    from legal_ai_system.core.models import ProcessingResult
     from legal_ai_system.core.detailed_logging import LogCategory
     from legal_ai_system.core.llm_providers import (
         LLMManager,
@@ -32,12 +33,13 @@ try:
         AgentExecutionError,
         AgentProcessingError,
     )
-    from legal_ai_system.memory.unified_memory_manager import MemoryType
+    from legal_ai_system.core.unified_memory_manager import MemoryType
 except ImportError:
     # Fallback for relative imports
     try:
         from ..core.agent_unified_config import create_agent_memory_mixin
-        from ..core.base_agent import BaseAgent, ProcessingResult
+        from ..core.base_agent import BaseAgent
+        from ..core.models import ProcessingResult
         from ..core.detailed_logging import LogCategory
         from ..core.llm_providers import LLMManager, LLMProviderEnum, LLMProviderError
         from ..core.unified_exceptions import (  # Fixed class name
@@ -682,6 +684,10 @@ class ViolationDetectorAgent(BaseAgent):
             f"LLM response parsing yielded {len(llm_violations)} violations for doc '{doc_id}'."
         )
         return llm_violations
+
+    def _generate_unique_id(self, prefix: str) -> str:
+        """Generate a short unique identifier with the given prefix."""
+        return f"{prefix.upper()}_{uuid.uuid4().hex[:8]}"
 
     def _merge_llm_and_pattern_violations(
         self,
