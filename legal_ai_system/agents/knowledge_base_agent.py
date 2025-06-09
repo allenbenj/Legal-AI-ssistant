@@ -1,27 +1,81 @@
-"""
-Knowledge Base Agent - Design.txt Compliant
-Handles entity resolution and ensures data is properly structured for organizational and analytical purposes.
-Part of the seven-agent file organization system architecture.
-"""
+"""Knowledge Base Agent - Design.txt Compliant.
 
-import structlog
+Handles entity resolution and ensures data is properly structured for
+organizational and analytical purposes as part of the seven-agent file
+organization system architecture. Third-party dependencies such as
+``structlog`` and ``pybreaker`` are optional and gracefully degraded if not
+available."""
+
 from typing import Any, Dict, List, Optional, Set
 import json
 from functools import lru_cache
 from dataclasses import dataclass, field
 from datetime import datetime
 from tenacity import retry, stop_after_attempt, wait_exponential
-from pybreaker import CircuitBreaker
 import hashlib
 import uuid
+
+# Structured logging if available; otherwise, standard logging
+try:
+    import structlog
+    logger = structlog.get_logger()
+except Exception:  # pragma: no cover - fallback when structlog is missing
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+
+try:  # Optional dependency for circuit breaker support
+    from pybreaker import CircuitBreaker
+except Exception:  # pragma: no cover - simple fallback implementation
+    class CircuitBreaker:  # type: ignore
+        """Basic asyncio-compatible circuit breaker."""
+
+        def __init__(self, fail_max: int = 5, reset_timeout: int = 60) -> None:
+            self.fail_max = fail_max
+            self.reset_timeout = reset_timeout
+            self._fail_counter = 0
+            self._last_failure: Optional[datetime] = None
+
+        def __call__(self, func):
+            async def wrapper(*args, **kwargs):
+                if self._is_open():
+                    raise RuntimeError("CircuitBreaker is open")
+                try:
+                    result = await func(*args, **kwargs)
+                    self._reset()
+                    return result
+                except Exception:
+                    self._record_failure()
+                    raise
+
+            return wrapper
+
+        def _is_open(self) -> bool:
+            if self._fail_counter < self.fail_max:
+                return False
+            if self._last_failure is None:
+                return False
+            if (datetime.now() - self._last_failure).total_seconds() < self.reset_timeout:
+                return True
+            self._reset()
+            return False
+
+        def _record_failure(self) -> None:
+            self._fail_counter += 1
+            self._last_failure = datetime.now()
+
+        def _reset(self) -> None:
+            self._fail_counter = 0
+            self._last_failure = None
+
+        @property
+        def current_state(self) -> str:
+            return "open" if self._is_open() else "closed"
 
 from ..core.base_agent import BaseAgent
 from ..core.performance import measure_performance
 from ..legacy_extras.modular_improvements import ProcessingCache
 from ..utils.error_recovery import ErrorRecovery
-
-# Structured logging
-logger = structlog.get_logger()
 
 # Circuit breaker for database operations (design.txt requirement)
 knowledge_base_breaker = CircuitBreaker(fail_max=5, reset_timeout=60)
