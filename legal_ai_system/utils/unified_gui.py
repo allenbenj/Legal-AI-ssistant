@@ -187,15 +187,18 @@ class DocumentProcessorTab:
 
                     if upload_result.get("status") != "ERROR":
                         document_id = upload_result.get("document_id")
-                        SessionManager.set_current_document(document_id)
-                        ErrorHandler.display_success(
-                            f"Document uploaded successfully (ID: {document_id})"
-                        )
+                        if isinstance(document_id, str):
+                            SessionManager.set_current_document(document_id)
+                            ErrorHandler.display_success(
+                                f"Document uploaded successfully (ID: {document_id})"
+                            )
 
-                        # Start processing
-                        process_result = api_client.process_document(
-                            document_id, processing_options
-                        )
+                            # Start processing
+                            process_result = api_client.process_document(
+                                document_id, processing_options
+                            )
+                        else:
+                            process_result = {"status": "ERROR", "message": "Invalid document ID"}
                         if process_result.get("status") != "ERROR":
                             ErrorHandler.display_success(
                                 "Processing started successfully!"
@@ -347,7 +350,7 @@ class MemoryBrainTab:
                 ],
                 use_container_width=True,
                 hide_index=True,
-                selection_mode="multi",
+                selection_mode="multi-row",
             )
 
             # Memory visualization
@@ -538,7 +541,7 @@ class ViolationReviewTab:
                 ],
                 use_container_width=True,
                 hide_index=True,
-                selection_mode="multi",
+                selection_mode="multi-row",
                 key="violations_table",
             )
 
@@ -1370,7 +1373,7 @@ class AnalysisDashboardTab:
                 title="Daily Success Rate",
                 labels={"x": "Date", "y": "Success Rate (%)"},
             )
-            fig_success.update_yaxis(range=[90, 100])
+            fig_success.update_yaxes(range=[90, 100])
             st.plotly_chart(fig_success, use_container_width=True)
 
         # Quick actions
