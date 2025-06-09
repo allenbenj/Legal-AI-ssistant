@@ -10,15 +10,8 @@ it can operate in isolation (e.g. during documentation builds).
 from __future__ import annotations
 
 import os
-import sys
-from pathlib import Path
 from typing import Dict, Any, Optional, List
 import asyncio
-
-# Add project root to path for absolute imports
-project_root = Path(__file__).parent.parent
-if str(project_root) not in sys.path:
-    sys.path.insert(0, str(project_root))
 
 from .agent_grok_config import (
     create_agent_grok_config,

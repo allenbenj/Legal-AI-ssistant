@@ -20,9 +20,6 @@ from legal_ai_system.core.unified_exceptions import (
     ThirdPartyError,
 )
 
-embedding_provider_logger = get_detailed_logger(
-    "EmbeddingProviders", LogCategory.LLM
-)  # Log under LLM or a new EMBEDDING category
 
 
 class EmbeddingProviderVS(ABC):

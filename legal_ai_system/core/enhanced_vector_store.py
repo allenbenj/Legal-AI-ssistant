@@ -23,9 +23,11 @@ import concurrent.futures
 from queue import Queue, Empty
 
 # Import detailed logging system
-import sys
-sys.path.append(str(Path(__file__).parent.parent))
-from core.detailed_logging import get_detailed_logger, LogCategory, detailed_log_function
+from .detailed_logging import (
+    get_detailed_logger,
+    LogCategory,
+    detailed_log_function,
+)
 
 # Initialize detailed loggers for different vector store operations
 vector_logger = get_detailed_logger("Enhanced_Vector_Store", LogCategory.VECTOR_STORE)
