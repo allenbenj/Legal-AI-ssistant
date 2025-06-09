@@ -419,14 +419,3 @@ def setup_agents_example(xai_api_key: str):
     else:
         print("\n❌ Setup failed. Please check configuration.")
         return None
-
-if __name__ == "__main__":
-    print("Agent Unified Configuration")
-    print("=" * 50)
-    print("This module configures all agents to use:")
-    print(f"• LLM: {AGENT_DEFAULT_MODEL}")
-    print("• Memory: Unified Memory Manager")
-    print("• Storage: Shared SQLite database")
-    print("\nTo use:")
-    print("from config.agent_unified_config import configure_all_agents_unified")
-    print("configure_all_agents_unified(service_container, xai_api_key)")

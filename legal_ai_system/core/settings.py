@@ -76,7 +76,6 @@ except ImportError:
             "enable_embedding_cache": True, "cache_ttl_hours": 24, "max_cache_size_mb": 500, # Default from Constants.Time & Constants.Size
             "rate_limit_per_minute": 100, "enable_request_logging": True, # Default from Constants.Security
             "enable_data_encryption": False, "encryption_key_path": None,
-            "test_data_dir": Path(__file__).resolve().parent.parent / "tests/data",
             "enable_test_mode": False, "enable_agent_debugging": False, "save_intermediate_results": False
         }
 
@@ -185,7 +184,6 @@ class LegalAISettings(BaseSettings):
         self.memory_db_path = self.data_dir / "databases/memory.db"
         self.violations_db_path = self.data_dir / "databases/violations.db"
         self.tag_history_path = self.data_dir / "tag_history.json"
-        self.test_data_dir = self.base_dir / "tests/data"
 
 
     # =================== LLM PROVIDERS ===================
@@ -327,8 +325,7 @@ class LegalAISettings(BaseSettings):
     encryption_key_path: Optional[Path] = Field(default=None, env="ENCRYPTION_KEY_PATH")
     
     # =================== DEVELOPMENT ===================
-    # Testing - Path will be updated in __init__
-    test_data_dir: Optional[Path] = Field(default=None, env="TEST_DATA_DIR")
+    # Testing
     enable_test_mode: bool = Field(default=False, env="TEST_MODE")
     
     # Debugging

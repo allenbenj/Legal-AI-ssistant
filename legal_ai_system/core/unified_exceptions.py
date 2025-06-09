@@ -764,6 +764,3 @@ def with_error_handling( # Public API decorator
         
         return wrapper
     return decorator
-
-if __name__ == "__main__":
-    pass

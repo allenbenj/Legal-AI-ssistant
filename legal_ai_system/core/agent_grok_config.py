@@ -335,6 +335,3 @@ def print_agent_grok_setup_instructions():
     print(f"💰 COST: Most economical Grok model")
     
     print("\n" + "=" * 60)
-
-if __name__ == "__main__":
-    print_agent_grok_setup_instructions()

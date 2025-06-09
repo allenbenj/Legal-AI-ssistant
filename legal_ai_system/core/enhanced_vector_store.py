@@ -736,28 +736,3 @@ class EnhancedVectorStore:
     
     # Additional methods continue with same detailed logging pattern...
     # [Implementation continues with remaining methods]
-
-if __name__ == "__main__":
-    # Test the enhanced vector store
-    vector_logger.info("Testing enhanced vector store")
-    
-    store = EnhancedVectorStore()
-    
-    # Test document addition
-    doc_id = store.add_document(
-        "test_doc_1",
-        "This is a test legal document about contract violations and legal proceedings.",
-        source_file="test.pdf",
-        document_type="legal_brief",
-        tags=["contract", "violation", "legal"]
-    )
-    
-    # Test search
-    results = store.search_similar("contract violations", k=5)
-    
-    print(f"Added document: {doc_id}")
-    print(f"Search results: {len(results)}")
-    
-    # Get system status
-    status = store.get_system_status()
-    print(f"Vector store status: {status}")

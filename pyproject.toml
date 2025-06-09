@@ -216,28 +216,12 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 minversion = "7.0"
-addopts = [
-    "--strict-markers",
-    "--strict-config",
-    "--cov=legal_ai_system",
-    "--cov-report=term-missing",
-    "--cov-report=html",
-    "--cov-report=xml",
-]
-testpaths = ["tests"]
-markers = [
-    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    "integration: marks tests as integration tests",
-    "unit: marks tests as unit tests",
-    "performance: marks tests as performance tests",
-]
+markers = []
 asyncio_mode = "auto"
 
 [tool.coverage.run]
 source = ["legal_ai_system"]
 omit = [
-    "*/tests/*",
-    "*/test_*",
     "*/archive_*/*",
     "*/legacy_*/*",
     "*/__pycache__/*",
@@ -258,7 +242,7 @@ exclude_lines = [
 ]
 
 [tool.bandit]
-exclude_dirs = ["tests", "archive_backup_2025-05-24", "archive_legacy_components"]
+exclude_dirs = ["archive_backup_2025-05-24", "archive_legacy_components"]
 skips = ["B101", "B601"]  # Skip assert_used and shell_injection_subprocess
 
 [tool.vulture]

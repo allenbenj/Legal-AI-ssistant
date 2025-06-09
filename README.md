@@ -9,7 +9,6 @@ This repository contains a modular legal analysis platform. Source files live in
 - **scripts** – entry points and helper scripts for running the system.
 - **docs** – documentation and planning notes.
 - **visualizations** – architecture diagrams and interactive network files.
-- **tests** – unit tests.
 
 Extra reference materials are listed in `legal_ai_system/docs/legacy_files.md`.
 

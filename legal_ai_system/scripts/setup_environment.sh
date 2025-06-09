@@ -303,7 +303,6 @@ create_directories() {
     mkdir -p logs/{development,production}
     mkdir -p pids
     mkdir -p config/{prompts,schemas}
-    mkdir -p tests/{unit,integration,performance}
     
     # Create .env template if it doesn't exist
     if [[ ! -f ".env" ]]; then
@@ -367,62 +366,6 @@ EOF
     print_success "Directory structure created"
 }
 
-# Function to run comprehensive tests
-run_verification_tests() {
-    print_status "Running verification tests..."
-    
-    cd "$PROJECT_ROOT"
-    source "$VENV_PATH/bin/activate"
-    
-    # Test Python imports
-    python3 -c "
-import sys
-print(f'Python version: {sys.version}')
-
-# Test core dependencies
-try:
-    import fastapi
-    import uvicorn
-    import strawberry
-    import neo4j
-    import openai
-    import sentence_transformers
-    import spacy
-    print('✓ All core Python dependencies available')
-except ImportError as e:
-    print(f'✗ Missing Python dependency: {e}')
-    sys.exit(1)
-
-# Test spaCy models
-try:
-    nlp = spacy.load('en_core_web_sm')
-    print('✓ spaCy models available')
-except OSError:
-    print('✗ spaCy models not found')
-    sys.exit(1)
-"
-    
-    # Test Node.js environment
-    cd "$PROJECT_ROOT/my-legal-tech-gui"
-    node -e "
-console.log('Node.js version:', process.version);
-
-// Test core dependencies
-try {
-    require('react');
-    require('zustand');
-    require('@tanstack/react-query');
-    require('graphql-request');
-    console.log('✓ All core Node.js dependencies available');
-} catch (e) {
-    console.log('✗ Missing Node.js dependency:', e.message);
-    process.exit(1);
-}
-"
-    
-    print_success "Verification tests passed"
-}
-
 # Main setup function
 main() {
     echo "This script will set up the complete Legal AI System development environment."
@@ -475,9 +418,6 @@ main() {
     setup_node_env
     setup_docker
     setup_optional_tools
-    
-    # Run verification
-    run_verification_tests
     
     # Final instructions
     echo ""

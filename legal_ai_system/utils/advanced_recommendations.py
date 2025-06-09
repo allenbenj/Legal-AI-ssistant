@@ -520,67 +520,6 @@ class APIVersionManager:
 
 # === 10. DEVELOPER EXPERIENCE ===
 
-class DeveloperTools:
-    """Tools to improve developer experience"""
-    
-    def __init__(self):
-        self.test_data_generator = TestDataGenerator()
-        self.mock_llm = MockLLMProvider()
-        self.performance_simulator = PerformanceSimulator()
-    
-    async def generate_test_dataset(self, specs: Dict[str, Any]) -> List[Path]:
-        """Generate test documents based on specifications"""
-        documents = []
-        
-        for doc_type, count in specs.items():
-            for i in range(count):
-                doc = await self.test_data_generator.generate(
-                    doc_type=doc_type,
-                    complexity=random.choice(["simple", "moderate", "complex"]),
-                    size=random.choice(["small", "medium", "large"])
-                )
-                documents.append(doc)
-        
-        return documents
-    
-    def create_mock_pipeline(self) -> DocumentProcessingPipeline:
-        """Create pipeline with mock LLM for testing"""
-        services = {"mock_mode": True}
-        return DocumentProcessingPipeline(services, self.mock_llm)
-    
-    async def benchmark_configuration(self, config: Dict[str, Any], 
-                                    test_documents: List[Path]) -> Dict[str, Any]:
-        """Benchmark a configuration with test documents"""
-        pipeline = DocumentProcessingPipeline(config["services"], config["llm_manager"])
-        
-        results = {
-            "total_time": 0,
-            "avg_time_per_doc": 0,
-            "throughput": 0,
-            "accuracy_metrics": {},
-            "resource_usage": {}
-        }
-        
-        start_time = time.time()
-        
-        # Process all test documents
-        processing_results = []
-        for doc in test_documents:
-            result = await pipeline.process_document(doc, config.get("options", {}))
-            processing_results.append(result)
-        
-        results["total_time"] = time.time() - start_time
-        results["avg_time_per_doc"] = results["total_time"] / len(test_documents)
-        results["throughput"] = len(test_documents) / results["total_time"]
-        
-        # Calculate accuracy metrics
-        if config.get("ground_truth"):
-            results["accuracy_metrics"] = self._calculate_accuracy(
-                processing_results, 
-                config["ground_truth"]
-            )
-        
-        return results
 
 # === INTEGRATION EXAMPLE ===
 
