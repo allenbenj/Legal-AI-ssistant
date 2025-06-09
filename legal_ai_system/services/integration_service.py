@@ -8,10 +8,11 @@ This service is typically used by the API layer (e.g., FastAPI).
 """
 
 # import logging # Replaced by detailed_logging
-from typing import Dict, List, Any, Optional, Union, Callable # Added Callable
+from typing import Dict, List, Any, Optional, Union, Callable  # Added Callable
 from pathlib import Path
 import uuid
-from datetime import datetime, timezone # Added timezone
+from datetime import datetime, timezone  # Added timezone
+import asyncio
 
 # Use detailed_logging
 from ..core.detailed_logging import get_detailed_logger, LogCategory, detailed_log_function
@@ -144,9 +145,47 @@ class LegalAIIntegrationService:
         # status = await workflow_state_manager.get_status(document_id)
         # For now, mock:
         if document_id == "doc_serv_test123":
-            return {"document_id": document_id, "status": "completed", "progress": 1.0, "stage": "Done", 
+            return {"document_id": document_id, "status": "completed", "progress": 1.0, "stage": "Done",
                     "summary": {"entities_found": 10, "violations_detected": 1}}
         return {"document_id": document_id, "status": "processing", "progress": 0.5, "stage": "entity_extraction"}
+
+    @detailed_log_function(LogCategory.API)
+    async def analyze_text(self, text: str, topic: str = "general") -> str:
+        """Analyze text using the configured LLM manager."""
+        llm_manager = None
+        if self.service_container:
+            try:
+                llm_manager = await self.service_container.get_service("llm_manager")
+            except Exception as e:  # pragma: no cover - service retrieval issue
+                integration_service_logger.warning("LLMManager unavailable for analysis", exception=e)
+        if not llm_manager:
+            return text
+        prompt = f"Analyze the following text about {topic}:\n{text}"
+        try:
+            response = await llm_manager.complete(prompt)
+            return response.content
+        except Exception as e:  # pragma: no cover - LLM failure
+            integration_service_logger.error("LLM analysis failed", exception=e)
+            return text
+
+    @detailed_log_function(LogCategory.API)
+    async def summarize_text(self, text: str, max_tokens: int = 200) -> str:
+        """Summarize text using the LLM manager."""
+        llm_manager = None
+        if self.service_container:
+            try:
+                llm_manager = await self.service_container.get_service("llm_manager")
+            except Exception as e:  # pragma: no cover - service retrieval issue
+                integration_service_logger.warning("LLMManager unavailable for summarization", exception=e)
+        if not llm_manager:
+            return text[:max_tokens]
+        prompt = f"Summarize the following text in {max_tokens} tokens or fewer:\n{text}"
+        try:
+            response = await llm_manager.complete(prompt, max_tokens=max_tokens)
+            return response.content
+        except Exception as e:  # pragma: no cover - LLM failure
+            integration_service_logger.error("LLM summarization failed", exception=e)
+            return text[:max_tokens]
 
     @detailed_log_function(LogCategory.API)
     async def get_system_status_summary(self) -> Dict[str, Any]: # Renamed
