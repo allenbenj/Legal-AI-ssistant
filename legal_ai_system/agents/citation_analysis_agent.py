@@ -4,24 +4,21 @@ CitationAnalysisAgent - Legal citation detection, extraction, and classification
 Provides comprehensive analysis of legal citations.
 """
 
-import asyncio
 import json
 import re
 import uuid
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from collections import defaultdict
 
-from ..core.base_agent import BaseAgent, ProcessingResult
-from ..utils.ontology import LegalEntityType # Example, not strictly used here but good for context
+from ..core.base_agent import BaseAgent
+from ..core.models import ProcessingResult
 from ..core.llm_providers import LLMManager, LLMProviderError, LLMProviderEnum
 from ..core.model_switcher import ModelSwitcher, TaskComplexity # Assuming ModelSwitcher service
 from ..core.unified_exceptions import AgentProcessingError
-from ..core.detailed_logging import LogCategory
 
 from ..core.agent_unified_config import create_agent_memory_mixin
-from ..core.unified_memory_manager import MemoryType
 
 # Create memory mixin for agents
 MemoryMixin = create_agent_memory_mixin()
@@ -29,11 +26,11 @@ MemoryMixin = create_agent_memory_mixin()
 
 @dataclass
 class CitationDetails: # Dataclass for a single analyzed citation
-    citation_id: str = field(default_factory=lambda: f"CITE_{uuid.uuid4().hex[:8]}")
     raw_text: str
-    pattern_name: Optional[str] = None # Regex pattern that matched
     start_pos: int
     end_pos: int
+    citation_id: str = field(default_factory=lambda: f"CITE_{uuid.uuid4().hex[:8]}")
+    pattern_name: Optional[str] = None # Regex pattern that matched
     parsed_components: Dict[str, Any] = field(default_factory=dict) # e.g., volume, reporter, page
     citation_type: str = "unknown" # e.g., "case", "statute", "regulation"
     role_in_document: str = "neutral" # e.g., "supporting", "rebutting", "distinguishing", "background"
@@ -41,6 +38,7 @@ class CitationDetails: # Dataclass for a single analyzed citation
     is_valid_format: bool = True # Based on regex or LLM validation
     validation_notes: Optional[str] = None
     llm_confidence: Optional[float] = None # Confidence from LLM if used for classification/validation
+    confidence: float = 0.0  # Regex match confidence
     context_snippet: str = "" # Text surrounding the citation
 
     def to_dict(self) -> Dict[str, Any]:
@@ -67,7 +65,7 @@ class CitationAnalysisOutput: # Renamed from CitationAnalysisResult for consiste
         return data
 
 
-class CitationAnalysisAgent(BaseAgent):
+class CitationAnalysisAgent(BaseAgent, MemoryMixin):
     """
     Advanced legal citation analysis agent. Detects, parses, classifies,
     and assesses quality of legal citations.
@@ -213,13 +211,20 @@ class CitationAnalysisAgent(BaseAgent):
                 if raw_cite_dict['confidence'] >= self.min_regex_confidence_for_llm: # Filter low-confidence regex matches
                     citations_for_llm_input.append(CitationDetails(
                         raw_text=raw_cite_dict['raw_text'],
-                        pattern_name=raw_cite_dict['pattern_name'],
                         start_pos=raw_cite_dict['start_pos'],
                         end_pos=raw_cite_dict['end_pos'],
-                        parsed_components=self._parse_components_from_regex_match(raw_cite_dict['pattern_name'], raw_cite_dict['match_obj']), # Pass full match_obj
+                        pattern_name=raw_cite_dict['pattern_name'],
+                        parsed_components=self._parse_components_from_regex_match(
+                            raw_cite_dict['pattern_name'], raw_cite_dict['match_obj']
+                        ),  # Pass full match_obj
                         citation_type=raw_cite_dict['preliminary_type'],
-                        is_valid_format=True, # Assume valid if regex matched well
-                        context_snippet=self._extract_context_snippet(document_content, raw_cite_dict['start_pos'], raw_cite_dict['end_pos'])
+                        is_valid_format=True,  # Assume valid if regex matched well
+                        confidence=raw_cite_dict['confidence'],
+                        context_snippet=self._extract_context_snippet(
+                            document_content,
+                            raw_cite_dict['start_pos'],
+                            raw_cite_dict['end_pos'],
+                        ),
                     ))
             
             analyzed_citations: List[CitationDetails] = citations_for_llm_input # Default if LLM fails or disabled
@@ -230,7 +235,9 @@ class CitationAnalysisAgent(BaseAgent):
                 try:
                     text_excerpt_for_llm = document_content if len(document_content) <= self.max_text_for_llm else document_content[:self.max_text_for_llm]
                     if len(document_content) > self.max_text_for_llm:
-                         self.logger.warning(f"Document content truncated to {self.max_text_for_llm} chars for LLM citation analysis on doc '{doc_id}'.")
+                        self.logger.warning(
+                            f"Document content truncated to {self.max_text_for_llm} chars for LLM citation analysis on doc '{doc_id}'."
+                        )
 
                     # Batch citations for LLM if too many
                     batched_llm_input = [citations_for_llm_input[i:i + self.max_citations_for_llm_batch] 
@@ -386,10 +393,12 @@ class CitationAnalysisAgent(BaseAgent):
         try:
             components = {k: v.strip() if v else None for k, v in match_obj.groupdict().items() if v is not None}
         except AttributeError: # Should not happen if match_obj is a valid re.Match
-             self.logger.warning(f"Match object for pattern '{pattern_name}' does not support groupdict. Raw groups: {match_obj.groups()}")
-             # Fallback to numbered groups if no named groups and pattern is known
-             # This part needs specific logic per pattern if not using named groups consistently.
-             # For now, groupdict is preferred.
+            self.logger.warning(
+                f"Match object for pattern '{pattern_name}' does not support groupdict. Raw groups: {match_obj.groups()}"
+            )
+            # Fallback to numbered groups if no named groups and pattern is known
+            # This part needs specific logic per pattern if not using named groups consistently.
+            # For now, groupdict is preferred.
         return components
 
     def _extract_context_snippet(self, full_text: str, start: int, end: int, window: int = 150) -> str:
@@ -435,7 +444,11 @@ class CitationAnalysisAgent(BaseAgent):
 
             for llm_result_dict in parsed_llm_results:
                 raw_text_from_llm = llm_result_dict.get("raw_text")
-                original_citation_obj = original_citations_map.get(raw_text_from_llm)
+                original_citation_obj = (
+                    original_citations_map.get(raw_text_from_llm)
+                    if raw_text_from_llm
+                    else None
+                )
 
                 if original_citation_obj:
                     original_citation_obj.citation_type = llm_result_dict.get("citation_type", original_citation_obj.citation_type)
@@ -535,11 +548,15 @@ class CitationAnalysisAgent(BaseAgent):
             elif c.raw_text: # Fallback
                 key_text = c.raw_text.split(',')[0].strip() # First part of raw text
             
-            if key_text:
-                authority_counts[key_text] += 1
-                if key_text not in authority_details:
-                     authority_details[key_text] = {'text': key_text, 'type': c.citation_type, 'roles': set()}
-                authority_details[key_text]['roles'].add(c.role_in_document)
+                if key_text:
+                    authority_counts[key_text] += 1
+                    if key_text not in authority_details:
+                        authority_details[key_text] = {
+                            'text': key_text,
+                            'type': c.citation_type,
+                            'roles': set(),
+                        }
+                    authority_details[key_text]['roles'].add(c.role_in_document)
 
 
         sorted_authorities = sorted(authority_counts.items(), key=lambda x: x[1], reverse=True)
@@ -583,9 +600,11 @@ class CitationAnalysisAgent(BaseAgent):
 
     def _assess_citation_complexity(self, citations: List[CitationDetails], document_content: str) -> TaskComplexity:
         """Assess complexity for model switching."""
-        if len(citations) > 50 or len(document_content) > 10000: return TaskComplexity.HIGH
-        if len(citations) > 15 or any(c.citation_type == 'Other' for c in citations): return TaskComplexity.MEDIUM
-        return TaskComplexity.LOW
+        if len(citations) > 50 or len(document_content) > 10000:
+            return TaskComplexity.COMPLEX
+        if len(citations) > 15 or any(c.citation_type == 'Other' for c in citations):
+            return TaskComplexity.MODERATE
+        return TaskComplexity.SIMPLE
 
     def _calculate_overall_analysis_confidence(self, citations: List[CitationDetails]) -> float:
         if not citations: return 0.0 # Or higher if confident none exist
