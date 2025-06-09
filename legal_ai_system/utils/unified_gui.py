@@ -21,6 +21,14 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import logging
 from typing import Dict, List, Any, Optional
+from dataclasses import asdict
+
+from ..services.violation_review import ViolationReviewDB, ViolationReviewEntry
+from ..agents.legal_agents import (
+    LegalAuditAgent,
+    EthicsReviewAgent,
+    LEOConductAgent,
+)
 
 # Import shared components
 from shared_components import (
@@ -335,12 +343,12 @@ class ViolationReviewTab:
         st.markdown("Review detected violations, manage approval workflows, and track compliance issues.")
         
         api_client = SessionManager.get_api_client()
-        
+        db = ViolationReviewDB()
+
         # Violation metrics
         st.subheader("Violation Overview")
-        
-        # Real violations would fetch from database
-        violations_data = []
+
+        violations_data = [asdict(v) for v in db.fetch_violations()]
         
         # Calculate metrics
         total_violations = len(violations_data)
@@ -386,10 +394,12 @@ class ViolationReviewTab:
         # Apply filters
         filtered_violations = [
             v for v in violations_data
-            if (v["severity"] in severity_filter and
-                v["status"] in status_filter and
-                v["type"] in type_filter and
-                v["confidence"] >= min_confidence)
+            if (
+                v["severity"] in severity_filter
+                and v["status"] in status_filter
+                and v["violation_type"] in type_filter
+                and v.get("confidence", 0) >= min_confidence
+            )
         ]
         
         # Violations table
@@ -401,7 +411,7 @@ class ViolationReviewTab:
             
             # Display table with selection
             selected_indices = st.dataframe(
-                df[["id", "type", "severity", "status", "confidence", "description", "document_id"]],
+                df[["id", "violation_type", "severity", "status", "confidence", "description", "document_id"]],
                 use_container_width=True,
                 hide_index=True,
                 selection_mode="multi",
@@ -416,14 +426,22 @@ class ViolationReviewTab:
             with col1:
                 if st.button("✅ Approve Selected"):
                     if hasattr(selected_indices, 'selection') and selected_indices.selection.rows:
-                        ErrorHandler.display_success(f"Approved {len(selected_indices.selection.rows)} violations")
+                        for r in selected_indices.selection.rows:
+                            db.update_violation_status(df.iloc[r]["id"], "APPROVED")
+                        ErrorHandler.display_success(
+                            f"Approved {len(selected_indices.selection.rows)} violations"
+                        )
                     else:
                         ErrorHandler.display_warning("No violations selected")
             
             with col2:
                 if st.button("❌ Reject Selected"):
                     if hasattr(selected_indices, 'selection') and selected_indices.selection.rows:
-                        ErrorHandler.display_success(f"Rejected {len(selected_indices.selection.rows)} violations")
+                        for r in selected_indices.selection.rows:
+                            db.update_violation_status(df.iloc[r]["id"], "REJECTED")
+                        ErrorHandler.display_success(
+                            f"Rejected {len(selected_indices.selection.rows)} violations"
+                        )
                     else:
                         ErrorHandler.display_warning("No violations selected")
             
@@ -447,7 +465,7 @@ class ViolationReviewTab:
                 selected_violation_id = st.selectbox(
                     "Select violation for detailed view",
                     [v["id"] for v in filtered_violations],
-                    format_func=lambda x: f"{x} - {next(v['type'] for v in filtered_violations if v['id'] == x)}"
+                    format_func=lambda x: f"{x} - {next(v['violation_type'] for v in filtered_violations if v['id'] == x)}"
                 )
                 
                 selected_violation = next(v for v in filtered_violations if v["id"] == selected_violation_id)
@@ -457,7 +475,7 @@ class ViolationReviewTab:
                 with col1:
                     st.write("**Violation Information**")
                     st.write(f"**ID:** {selected_violation['id']}")
-                    st.write(f"**Type:** {selected_violation['type']}")
+                    st.write(f"**Type:** {selected_violation['violation_type']}")
                     st.write(f"**Severity:** {UIComponents.create_status_indicator(selected_violation['severity'])}")
                     st.write(f"**Status:** {UIComponents.create_status_indicator(selected_violation['status'])}")
                     st.write(f"**Confidence:** {selected_violation['confidence']:.2f}")
@@ -467,9 +485,43 @@ class ViolationReviewTab:
                     st.write(f"**Document ID:** {selected_violation['document_id']}")
                     st.write(f"**Detected:** {selected_violation['detected_time'][:19]}")
                     st.write(f"**Description:** {selected_violation['description']}")
-                    
+
                     if st.button("📄 View Source Document"):
                         st.info(f"Opening document {selected_violation['document_id']}")
+
+                # --- Agent Validation ---
+                entry_obj = ViolationReviewEntry(
+                    id=selected_violation["id"],
+                    document_id=selected_violation["document_id"],
+                    violation_type=selected_violation["violation_type"],
+                    severity=selected_violation["severity"],
+                    status=selected_violation["status"],
+                    description=selected_violation["description"],
+                    confidence=float(selected_violation.get("confidence", 0)),
+                    detected_time=datetime.fromisoformat(selected_violation["detected_time"]),
+                    reviewed_by=selected_violation.get("reviewed_by"),
+                    review_time=datetime.fromisoformat(selected_violation["review_time"]) if selected_violation.get("review_time") else None,
+                    recommended_motion=selected_violation.get("recommended_motion"),
+                )
+
+                audit_result = LegalAuditAgent().review(entry_obj)
+                ethics_result = EthicsReviewAgent().review(entry_obj)
+                leo_result = LEOConductAgent().review(entry_obj)
+
+                with st.expander("Agent Recommendations", expanded=True):
+                    for res in [audit_result, ethics_result, leo_result]:
+                        st.write(
+                            f"**{res.agent_name}** - {res.summary} (conf {res.confidence:.2f})"
+                        )
+
+                    if st.button("🚀 Escalate for Motion"):
+                        if audit_result.recommendation:
+                            db.update_violation_status(entry_obj.id, "ESCALATED")
+                            st.success(
+                                f"Escalated with recommended motion: {audit_result.recommendation}"
+                            )
+                        else:
+                            st.warning("No motion recommendation from agents")
             
             # Violation analytics
             st.subheader("Violation Analytics")
@@ -1127,8 +1179,12 @@ def main():
     
     # Quick stats
     st.sidebar.markdown("**Quick Stats:**")
+    try:
+        v_count = len(ViolationReviewDB().fetch_violations())
+    except Exception:
+        v_count = 0
     st.sidebar.write("• Documents: 0")
-    st.sidebar.write("• Violations: 0")
+    st.sidebar.write(f"• Violations: {v_count}")
     st.sidebar.write("• Memory: 0 entries")
     st.sidebar.write("• Graph: 0 nodes")
     
