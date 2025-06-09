@@ -8,7 +8,7 @@ Combines multiple extraction methods for comprehensive legal entity extraction.
 import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional
 
 from ..core.base_agent import BaseAgent, AgentResult
 from ..core.detailed_logging import get_detailed_logger, LogCategory, detailed_log_function
@@ -197,8 +197,13 @@ class HybridLegalExtractor(BaseAgent):
         
         return validated
     
-    async def _extract_relationships(self, entities: List[ExtractedEntity], text: str) -> List[ExtractedRelationship]:
-        """Extract relationships between entities."""
+    async def _extract_relationships(self, entities: List[ExtractedEntity], _text: str) -> List[ExtractedRelationship]:
+        """Extract relationships between entities.
+
+        The ``_text`` argument is reserved for future use when more
+        sophisticated relationship extraction strategies leverage the
+        source document text. It is currently unused.
+        """
         relationships = []
         
         # Simple relationship extraction based on proximity and patterns
