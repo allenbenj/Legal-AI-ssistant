@@ -16,11 +16,12 @@ from pathlib import Path
 import yaml
 import spacy
 from spacy.tokens import Doc as SpacyDoc
+from spacy.language import Language
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity # Optional, if scikit-learn is available
 
-from ..core.base_agent import BaseAgent, ProcessingResult
-from ..core.models import LegalDocument
+from ..core.base_agent import BaseAgent
+from ..core.models import LegalDocument, ProcessingResult
 from ..core.detailed_logging import LogCategory # Assuming detailed_logger setup
 
 from ..core.agent_unified_config import create_agent_memory_mixin
@@ -104,7 +105,7 @@ class OntologyExtractionAgent(BaseAgent):
         self._load_agent_config()
 
         # Load spaCy model for coreference resolution
-        self.nlp_coref: Optional[spacy.Language] = None
+        self.nlp_coref: Optional[Language] = None
         if self.enable_coreference_resolution:
             self._initialize_coref_model()
 
