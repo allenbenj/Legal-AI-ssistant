@@ -140,7 +140,7 @@ class LegalAISettings(BaseSettings):
             try:
                 from legal_ai_system.core.constants import Constants
                 self.embedding_dim = Constants.Performance.EMBEDDING_DIMENSION
-            except:
+            except Exception:
                 self.embedding_dim = 384  # Keep fallback
 
 

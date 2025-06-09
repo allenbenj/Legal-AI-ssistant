@@ -643,13 +643,6 @@ class Query:
         )  # Mock
 
 
-@strawberry.type
-
-        # success = await review_service.submit_review_decision(item_id, decision, modified_content=modified_data)
-        # await websocket_manager_instance.broadcast_to_topic(...)
-        return True  # Mock
-
-
 # Create GraphQL schema & router
 gql_schema = strawberry.Schema(query=Query, mutation=Mutation)
 graphql_app_router = GraphQLRouter(gql_schema, graphiql=True)  # Enable GraphiQL for dev
