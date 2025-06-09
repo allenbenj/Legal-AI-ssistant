@@ -52,7 +52,7 @@ for p in sys.path:
 
 # Fix for Streamlit execution - use absolute imports
 try:
-    from legal_ai_system.config.constants import Constants
+    from legal_ai_system.core.constants import Constants
 except ImportError:
     # Fallback for when package structure isn't available
     class Constants:

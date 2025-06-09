@@ -26,7 +26,7 @@ import strawberry  # type: ignore
 import uvicorn
 
 try:
-    from config.constants import Constants
+    from legal_ai_system.core.constants import Constants
 except Exception:  # pragma: no cover - fallback for incomplete environments
 
     class Constants:
@@ -641,13 +641,6 @@ class Query:
             pending_reviews_count=1,
             timestamp=datetime.now().isoformat(),
         )  # Mock
-
-
-@strawberry.type
-
-        # success = await review_service.submit_review_decision(item_id, decision, modified_content=modified_data)
-        # await websocket_manager_instance.broadcast_to_topic(...)
-        return True  # Mock
 
 
 # Create GraphQL schema & router

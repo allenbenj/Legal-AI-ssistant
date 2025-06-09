@@ -24,7 +24,7 @@ sentry_sdk.init(
     send_default_pii=True,
 )
 try:
-    from legal_ai_system.config.constants import Constants
+    from legal_ai_system.core.constants import Constants
 except ImportError:
     # Fallback for when package structure isn't available
     class Constants:
