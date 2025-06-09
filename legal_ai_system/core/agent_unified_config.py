@@ -12,7 +12,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from typing import Dict, Any, Optional, List, TYPE_CHECKING
+from typing import Dict, Any, Optional, List
 import asyncio
 
 # Add project root to path for absolute imports
@@ -20,73 +20,33 @@ project_root = Path(__file__).parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-if TYPE_CHECKING:
-    from legal_ai_system.core.agent_grok_config import (
-        create_agent_grok_config,
-        get_agent_grok_manager,
-        AGENT_DEFAULT_MODEL,
-    )
-    from legal_ai_system.memory.unified_memory_manager import (
-        UnifiedMemoryManager,
-        MemoryType,
-    )
-    from legal_ai_system.services.service_container import ServiceContainer
-else:  # pragma: no cover - fallback imports for runtime flexibility
+from .agent_grok_config import (
+    create_agent_grok_config,
+    get_agent_grok_manager,
+    AGENT_DEFAULT_MODEL,
+)
+from .unified_memory_manager import (
+    UnifiedMemoryManager,
+    MemoryType,
+)
+from ..services.service_container import ServiceContainer
+
+
+def _get_service_sync(service_container: ServiceContainer, name: str) -> Any:
+    """Retrieve a service synchronously, awaiting coroutines if needed."""
+    getter = getattr(service_container, "get_service", None)
+    if not getter:
+        return None
     try:
-        from legal_ai_system.core.agent_grok_config import (
-            create_agent_grok_config,
-            get_agent_grok_manager,
-            AGENT_DEFAULT_MODEL,
-        )
-        from legal_ai_system.memory.unified_memory_manager import (
-            UnifiedMemoryManager,
-            MemoryType,
-        )
-        from legal_ai_system.services.service_container import ServiceContainer
-    except ImportError:
-        try:  # Local relative imports when running from source tree
-            from .agent_grok_config import (
-                create_agent_grok_config,
-                get_agent_grok_manager,
-                AGENT_DEFAULT_MODEL,
-            )
-            from ..memory.unified_memory_manager import (
-                UnifiedMemoryManager,
-                MemoryType,
-            )
-            from ..services.service_container import ServiceContainer
-        except ImportError:
-            # Minimal stub implementations used when dependencies are missing.
-            from enum import Enum
-
-            class LLMConfig(dict):
-                """Light-weight stand in for :class:`LLMConfig`."""
-
-            class ServiceContainer:
-                def __init__(self) -> None:
-                    self.services: Dict[str, Any] = {}
-
-                async def register_service(self, name: str, service: Any) -> None:
-                    self.services[name] = service
-
-                def get_service(self, name: str) -> Any:
-                    return self.services.get(name)
-
-            class UnifiedMemoryManager:
-                def __init__(self, **kwargs: Any) -> None:
-                    pass
-
-            class MemoryType(Enum):
-                AGENT_SPECIFIC = "agent_specific"
-                SESSION_KNOWLEDGE = "session_knowledge"
-
-            def create_agent_grok_config(api_key: Optional[str] = None) -> LLMConfig:
-                return LLMConfig()
-
-            def get_agent_grok_manager(api_key: Optional[str] = None) -> Any:
-                return None
-
-            AGENT_DEFAULT_MODEL = "grok-3-mini"
+        service = getter(name)
+        if asyncio.iscoroutine(service):
+            try:
+                return asyncio.get_event_loop().run_until_complete(service)
+            except RuntimeError:
+                return asyncio.run(service)
+        return service
+    except Exception:
+        return None
 
 async def configure_all_agents_unified(
     service_container: ServiceContainer,
@@ -212,8 +172,8 @@ class AgentConfigHelper:
     def get_llm_config_for_agent(self, agent_name: str) -> Dict[str, Any]:
         """Get LLM configuration optimized for specific agent"""
         try:
-            grok_manager = self.service_container.get_service('grok_manager')
-            if grok_manager:
+            grok_manager = _get_service_sync(self.service_container, 'grok_manager')
+            if grok_manager and hasattr(grok_manager, 'get_agent_config'):
                 return grok_manager.get_agent_config(agent_name)
         except Exception as e:
             print(f"Warning: Could not get agent-specific LLM config: {e}")
@@ -228,20 +188,26 @@ class AgentConfigHelper:
     
     def get_memory_manager_for_agent(self, agent_name: str):
         """Get memory manager instance for agent"""
-        return self.service_container.get_service('unified_memory_manager')
+        return _get_service_sync(self.service_container, 'unified_memory_manager')
     
     def store_agent_memory(self, agent_name: str, key: str, value: Any, 
                           session_id: Optional[str] = None, memory_type: MemoryType = MemoryType.AGENT_SPECIFIC):
         """Store data in agent memory"""
         memory_manager = self.get_memory_manager_for_agent(agent_name)
         if memory_manager:
-            return memory_manager.store_agent_memory(
+            result = memory_manager.store_agent_memory(
                 agent_name=agent_name,
                 key=key,
                 value=value,
                 session_id=session_id,
                 memory_type=memory_type
             )
+            if asyncio.iscoroutine(result):
+                try:
+                    return asyncio.get_event_loop().run_until_complete(result)
+                except RuntimeError:
+                    return asyncio.run(result)
+            return result
         return False
     
     def retrieve_agent_memory(self, agent_name: str, key: str, 
@@ -249,12 +215,18 @@ class AgentConfigHelper:
         """Retrieve data from agent memory"""
         memory_manager = self.get_memory_manager_for_agent(agent_name)
         if memory_manager:
-            return memory_manager.retrieve_agent_memory(
+            result = memory_manager.retrieve_agent_memory(
                 agent_name=agent_name,
                 key=key,
                 session_id=session_id,
                 memory_type=memory_type
             )
+            if asyncio.iscoroutine(result):
+                try:
+                    return asyncio.get_event_loop().run_until_complete(result)
+                except RuntimeError:
+                    return asyncio.run(result)
+            return result
         return None
 
 def create_agent_memory_mixin():
@@ -269,13 +241,13 @@ def create_agent_memory_mixin():
         def get_memory_manager(self):
             """Get the unified memory manager"""
             if hasattr(self, 'service_container') and self.service_container:
-                return self.service_container.get_service('unified_memory_manager')
+                return _get_service_sync(self.service_container, 'unified_memory_manager')
             return None
         
         def get_agent_config_helper(self):
             """Get the agent configuration helper"""
             if hasattr(self, 'service_container') and self.service_container:
-                return self.service_container.get_service('agent_config_helper')
+                return _get_service_sync(self.service_container, 'agent_config_helper')
             return None
         
         def store_memory(self, key: str, value: Any, session_id: Optional[str] = None, 
@@ -371,7 +343,7 @@ def get_agent_configuration_status(service_container: ServiceContainer) -> Dict[
     
     for service_name in required_services:
         try:
-            service = service_container.get_service(service_name)
+            service = _get_service_sync(service_container, service_name)
             if service:
                 status["services_available"].append(service_name)
             else:
@@ -405,13 +377,18 @@ def validate_agent_setup(service_container: ServiceContainer) -> bool:
         
         # Test memory operation
         try:
-            memory_manager = service_container.get_service('unified_memory_manager')
+            memory_manager = _get_service_sync(service_container, 'unified_memory_manager')
             test_result = memory_manager.store_agent_memory(
                 agent_name="test_agent",
                 key="config_test",
                 value={"test": True},
                 memory_type=MemoryType.AGENT_SPECIFIC
             )
+            if asyncio.iscoroutine(test_result):
+                try:
+                    test_result = asyncio.get_event_loop().run_until_complete(test_result)
+                except RuntimeError:
+                    test_result = asyncio.run(test_result)
             if test_result:
                 print("✅ Memory operation test successful")
             else:
@@ -421,8 +398,13 @@ def validate_agent_setup(service_container: ServiceContainer) -> bool:
         
         # Test LLM configuration
         try:
-            grok_manager = service_container.get_service('grok_manager')
+            grok_manager = _get_service_sync(service_container, 'grok_manager')
             validation = grok_manager.validate_agent_grok_setup()
+            if asyncio.iscoroutine(validation):
+                try:
+                    validation = asyncio.get_event_loop().run_until_complete(validation)
+                except RuntimeError:
+                    validation = asyncio.run(validation)
             if validation["ready"]:
                 print("✅ LLM configuration test successful")
             else:
