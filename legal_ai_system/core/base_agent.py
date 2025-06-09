@@ -620,6 +620,24 @@ class BaseAgent(ABC):
             return response.content
         except Exception as e:
             raise AgentError(f"LLM call failed: {e}", self.name)
+
+    def get_llm_manager(self):
+        """Retrieve the LLMManager service if available."""
+        if hasattr(self, 'service_container') and self.service_container:
+            try:
+                return self.service_container.get_service('llm_manager')
+            except Exception as e:
+                self.logger.warning(
+                    "Failed to get llm_manager service", parameters={'error': str(e)}
+                )
+        elif hasattr(self, 'services') and self.services:
+            try:
+                if hasattr(self.services, 'get_service'):
+                    return self.services.get_service('llm_manager')
+                return getattr(self.services, 'llm_manager', None)
+            except Exception:
+                return getattr(self.services, 'llm_manager', None)
+        return None
     
     def _validate_input(self, data: Any, required_fields: List[str] = None) -> None:
         """Validate input data"""

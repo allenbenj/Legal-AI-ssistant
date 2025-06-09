@@ -423,9 +423,13 @@ class Query:
 @strawberry.type
 class Mutation:
     @strawberry.field
-    async def submit_review_decision_gql(self, item_id: str, decision: str, # Renamed
-                                       modified_data: Optional[strawberry.scalars.JSON] = None, # type: ignore
-                                       info: Info) -> bool:
+    async def submit_review_decision_gql(
+        self,
+        info: Info,
+        item_id: str,
+        decision: str,
+        modified_data: Optional[strawberry.scalars.JSON] = None,
+    ) -> bool:
         main_api_logger.info("GraphQL: submit_review_decision called", parameters={'item_id': item_id, 'decision': decision})
         if not service_container_instance: return False
         review_service = service_container_instance.get_service('reviewable_memory') # Or calibration_manager
