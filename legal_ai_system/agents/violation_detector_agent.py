@@ -14,89 +14,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-# Add project root to path for absolute imports
+# Ensure package root is in sys.path when running this module directly
 project_root = Path(__file__).parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-try:
-    from legal_ai_system.config.agent_unified_config import create_agent_memory_mixin
-    from legal_ai_system.core.base_agent import BaseAgent
-    from legal_ai_system.core.models import ProcessingResult
-    from legal_ai_system.core.detailed_logging import LogCategory
-    from legal_ai_system.core.llm_providers import (
-        LLMManager,
-        LLMProviderEnum,
-        LLMProviderError,
-    )
-    from legal_ai_system.core.unified_exceptions import (  # Fixed class name
-        AgentExecutionError,
-        AgentProcessingError,
-    )
-    from legal_ai_system.core.unified_memory_manager import MemoryType
-except ImportError:
-    # Fallback for relative imports
-    try:
-        from ..core.agent_unified_config import create_agent_memory_mixin
-        from ..core.base_agent import BaseAgent
-        from ..core.models import ProcessingResult
-        from ..core.detailed_logging import LogCategory
-        from ..core.llm_providers import LLMManager, LLMProviderEnum, LLMProviderError
-        from ..core.unified_exceptions import (  # Fixed class name
-            AgentExecutionError,
-            AgentProcessingError,
-        )
-        from ..core.unified_memory_manager import MemoryType
-    except ImportError:
-        # Final fallback - create minimal classes
-        class BaseAgent:
-            def __init__(self, service_container, name="Agent", agent_type="base"):
-                self.service_container = service_container
-                self.name = name
-                self.agent_type = agent_type
-                import logging
-
-                self.logger = logging.getLogger(name)
-
-            def _get_service(self, name):
-                return getattr(self.service_container, "get_service", lambda x: None)(
-                    name
-                )
-
-            def get_optimized_llm_config(self):
-                return {}
-
-        class ProcessingResult:
-            def __init__(self, **kwargs):
-                for k, v in kwargs.items():
-                    setattr(self, k, v)
-
-        class LLMManager:
-            pass
-
-        class LLMProviderError(Exception):
-            pass
-
-        class LLMProviderEnum:
-            XAI = "xai"
-
-        class AgentExecutionError(Exception):
-            pass
-
-        class AgentProcessingError(Exception):
-            pass
-
-        class LogCategory:
-            AGENT = "AGENT"
-
-        class MemoryType:
-            AGENT_SPECIFIC = "agent_specific"
-
-        def create_agent_memory_mixin():
-            class MemoryMixin:
-                pass
-
-            return MemoryMixin
+from ..core.base_agent import BaseAgent
+from ..core.agent_unified_config import create_agent_memory_mixin
+from ..core.llm_providers import LLMManager, LLMProviderEnum, LLMProviderError
+from ..core.unified_exceptions import AgentProcessingError
 
 
 # Create memory mixin for agents
