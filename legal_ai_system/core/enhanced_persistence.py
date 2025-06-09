@@ -37,13 +37,13 @@ class EntityRecord:
     entity_id: str # Should be unique, consider UUID
     entity_type: str
     canonical_name: str
+    created_by: str # User or system component ID
+    updated_by: str # User or system component ID
     attributes: Dict[str, Any] = field(default_factory=dict) # Ensure default factory
     confidence_score: float = 1.0 # Default to 1.0 if not specified
     status: EntityStatus = EntityStatus.ACTIVE # Default status
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    created_by: str # User or system component ID
-    updated_by: str # User or system component ID
     version: int = 1
     source_documents: List[str] = field(default_factory=list) # Ensure default factory
     
@@ -56,12 +56,12 @@ class WorkflowRecord:
     """Database workflow record with state tracking."""
     workflow_id: str # Should be unique, consider UUID
     state: str # Consider Enum for states
+    created_by: str
     documents: Dict[str, Any] = field(default_factory=dict)
     agent_contexts: Dict[str, Any] = field(default_factory=dict)
     shared_data: Dict[str, Any] = field(default_factory=dict)
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    created_by: str
     total_processing_time: float = 0.0
     completion_percentage: float = 0.0
 
@@ -970,6 +970,5 @@ def create_enhanced_persistence_manager(config: Dict[str, Any]) -> EnhancedPersi
     if not redis_url:
         persistence_logger.warning("REDIS_URL not provided for EnhancedPersistenceManager. Redis caching features will be unavailable.")
 
-    return EnhancedPersistenceManager(database_url, redis_url, config=config.get("persistence_config"))
-    
-  
+
+    return EnhancedPersistenceManager(db_url, redis_url, config=config.get("persistence_config"))
