@@ -10,6 +10,16 @@ import asyncio
 import time
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any, Set, Tuple
+from dataclasses import dataclass, field, asdict
+from collections import defaultdict
+
+from ..core.base_agent import BaseAgent
+from ..core.llm_providers import LLMManager, LLMProviderError, LLMProviderEnum
+from ..core.unified_exceptions import AgentProcessingError
+from ..core.detailed_logging import get_detailed_logger, LogCategory
+from ..core.agent_unified_config import create_agent_memory_mixin
+from ..core.unified_memory_manager import UnifiedMemoryManager
+
 # Create memory mixin for agents
 MemoryMixin = create_agent_memory_mixin()
 
@@ -33,10 +43,10 @@ class AutoTaggingOutput:
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
-    """
-    Intelligent auto-tagging agent that learns from patterns and user feedback,
-    persisting learning via UnifiedMemoryManager if available.
-    """
+
+class AutoTaggingAgent(BaseAgent, MemoryMixin):
+    """Intelligent auto-tagging agent that learns from patterns and user feedback,
+    persisting learning via UnifiedMemoryManager if available."""
     
     def _get_service(self, name: str) -> Any:
         """Safely retrieve a service from the container if available."""
@@ -377,6 +387,10 @@ class AutoTaggingOutput:
                     # Basic validation and normalization
                     tag_candidate = re.sub(r'\s+', '_', tag_candidate)
                     tag_candidate = re.sub(r'[^a-z0-9_:]', '', tag_candidate)  # Allow colons for existing prefixes
+                    is_covered = any(
+                        self._normalize_tag(tag_candidate) == self._normalize_tag(t)
+                        for t in existing_tags
+                    )
                     if tag_candidate and len(tag_candidate) > 2 and tag_candidate not in existing_tags:
                         if not is_covered:
                             llm_formatted_tags.append(f"llm:{tag_candidate}")
