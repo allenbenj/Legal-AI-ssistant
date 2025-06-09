@@ -133,9 +133,6 @@ def run_streamlit_app_content():
     st.sidebar.info(f"Status: {backend_status}")
 
     page = st.sidebar.radio(
-    if page == "Dashboard":
-        st.header("System Overview")
-        st.write(
         # Placeholder for dashboard components
         col1, col2, col3 = st.columns(3)
         col1.metric(label="Documents Processed", value="0", delta="0 today")
@@ -182,9 +179,6 @@ def run_streamlit_app_content():
                     # Mocking the process
                     time.sleep(2)  # Simulate API call
                     st.success(
-    elif page == "Knowledge Graph":
-        st.header("🕸️ Knowledge Graph Explorer")
-        st.write("Visualize and query the legal knowledge graph. (Conceptual)")
         if st.button("Search KG"):
             if query_st:
                 st.write(f"Searching for: {query_st}")
@@ -228,3 +222,4 @@ if __name__ == "__main__":
     # This makes streamlit_app.py directly runnable: `python legal_ai_system/gui/streamlit_app.py`
     # It's also the target for `streamlit run legal_ai_system/gui/streamlit_app.py`
     main_streamlit_entry()
+
