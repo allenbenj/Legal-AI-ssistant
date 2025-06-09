@@ -5,12 +5,16 @@ Defines the interface and concrete implementations for generating text embedding
 """
 import asyncio
 from abc import ABC, abstractmethod
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Dict
 import numpy as np # type: ignore
 import time
 
-from ...core.detailed_logging import get_detailed_logger, LogCategory, detailed_log_function # Adjusted import
-from ...core.unified_exceptions import ConfigurationError, ThirdPartyError # For provider-specific errors
+from .detailed_logging import (
+    get_detailed_logger,
+    LogCategory,
+    detailed_log_function,
+)
+from .unified_exceptions import ConfigurationError, ThirdPartyError
 
 embedding_provider_logger = get_detailed_logger("EmbeddingProviders", LogCategory.LLM) # Log under LLM or a new EMBEDDING category
 
