@@ -28,7 +28,7 @@ from pydantic import BaseModel, Field as PydanticField
 from jose import JWTError, jwt # type: ignore
 
 from core.detailed_logging import get_detailed_logger, LogCategory
-from config.constants import Constants
+from legal_ai_system.core.constants import Constants
 from core.service_container import ServiceContainer, create_service_container
 from core.security_manager import SecurityManager, AccessLevel, AuthUser # Using aliased AuthUser
 from services.integration_service import LegalAIIntegrationService, create_integration_service # Assuming factory
