@@ -2,15 +2,16 @@ import sys
 import os
 
 # Add the parent directory to sys.path to resolve imports
-parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
-import streamlit as st # Move streamlit import here
+import streamlit as st  # Move streamlit import here
 
 # Import test (for debugging)
 try:
     import legal_ai_system.gui  # Try absolute import
+
     st.write("Absolute import successful!")
 except ImportError as e:
     st.error(f"Import failed: {e}")
@@ -56,13 +57,11 @@ streamlit_logger = logging.getLogger("StreamlitAppGUI")
 if not streamlit_logger.hasHandlers():
     handler = logging.StreamHandler(sys.stdout)
     formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     handler.setFormatter(formatter)
     streamlit_logger.addHandler(handler)
     streamlit_logger.setLevel(logging.INFO)
 
 
-def setup_main_app_logging_gui() -> None:  # Renamed to avoid conflict if imported elsewhere
     """Configure basic logging for this Streamlit app entry point if not already done."""
     # This is a simplified setup. If detailed_logging is available and initialized by another part
     # of the system (e.g. if FastAPI starts first and initializes it), this might not be needed
@@ -77,25 +76,11 @@ def setup_main_app_logging_gui() -> None:  # Renamed to avoid conflict if import
     if not logging.getLogger().hasHandlers():
         logging.basicConfig(
             level=logging.INFO,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            handlers=[
-                logging.StreamHandler(sys.stdout),
-                logging.FileHandler(
-                    log_dir / "streamlit_gui.log", encoding='utf-8')
-            ]
-        )
-        streamlit_logger.info(
-            "Basic logging configured by streamlit_app.py for GUI.")
-    else:
-        streamlit_logger.info(
-            "Logging seems to be already configured. Streamlit GUI using existing setup.")
-
 
 def check_gui_dependencies() -> bool:  # Renamed
     """Check if required GUI and core dependencies are available."""
     streamlit_logger.info("Checking core dependencies for Streamlit GUI.")
     required_packages = [
-        'streamlit', 'requests', 'pandas', 'numpy',
     ]
 
     missing = []
@@ -105,12 +90,6 @@ def check_gui_dependencies() -> bool:  # Renamed
             streamlit_logger.debug(f"Dependency check: {package_name} - OK.")
         except ImportError:
             missing.append(package_name)
-            streamlit_logger.warning(
-                f"Dependency check: {package_name} - MISSING.")
-
-    if missing:
-        streamlit_logger.error(
-            f"Missing required packages for GUI: {', '.join(missing)}")
         # Attempting to # The above code is a Python script that contains a print statement. However,
         # the print statement is empty, so it will not output anything when executed.
         print("to console as Streamlit might not be fully up yet")
@@ -137,13 +116,6 @@ def run_streamlit_app_content():
         import streamlit as st
     except ImportError:
         streamlit_logger.critical(
-            "Streamlit library not found. Cannot run GUI content.")
-        print("FATAL: Streamlit library is required to run this GUI. Please install it (`pip install streamlit`) and retry.")
-        return
-
-    st.set_page_config(page_title="Legal AI System",
-                        layout="wide", initial_sidebar_state="expanded")
-
     st.title("🏛️ Legal AI System Dashboard")
     st.caption("Professional Edition - Document Analysis & Knowledge Management")
 
@@ -161,12 +133,6 @@ def run_streamlit_app_content():
     st.sidebar.info(f"Status: {backend_status}")
 
     page = st.sidebar.radio(
-        "Go to", ["Dashboard", "Document Upload", "Knowledge Graph", "System Status"])
-
-    if page == "Dashboard":
-        st.header("System Overview")
-        st.write(
-            "Welcome to the Legal AI System. This dashboard provides an overview of system activities and performance.")
         # Placeholder for dashboard components
         col1, col2, col3 = st.columns(3)
         col1.metric(label="Documents Processed", value="0", delta="0 today")
@@ -178,22 +144,12 @@ def run_streamlit_app_content():
 
     elif page == "Document Upload":
         st.header("📄 Document Upload & Processing")
-        uploaded_file = st.file_uploader("Choose a document to analyze", type=[
-            'pdf', 'docx', 'txt', 'md'])
-
         if uploaded_file is not None:
             st.write(f"Uploaded: {uploaded_file.name} ({uploaded_file.type})")
 
             with st.expander("Processing Options"):
                 # These would map to ProcessingRequest model for the backend
                 st.checkbox("Enable NER", value=True, key="opt_ner")
-                st.checkbox("Enable LLM Extraction",
-                            value=True, key="opt_llm_extract")
-                st.checkbox("Enable Confidence Calibration",
-                            value=True, key="opt_conf_calib")
-                st.slider("Confidence Threshold", 0.1, 1.0,
-                            0.7, 0.05, key="opt_conf_thresh")
-
             if st.button("Process Document"):
                 with st.spinner("Sending document to backend for processing..."):
                     # API Call to FastAPI backend's /documents/upload and /documents/{id}/process
@@ -223,18 +179,6 @@ def run_streamlit_app_content():
                     # Mocking the process
                     time.sleep(2)  # Simulate API call
                     st.success(
-                        f"Document '{uploaded_file.name}' sent for processing! (Mocked)")
-                    st.info(
-                        "In a real system, you would monitor progress via status page or WebSockets.")
-
-    elif page == "Knowledge Graph":
-        st.header("🕸️ Knowledge Graph Explorer")
-        st.write("Visualize and query the legal knowledge graph. (Conceptual)")
-        st.image("https://via.placeholder.com/800x400.png?text=Knowledge+Graph+Visualization+Placeholder",
-                 caption="Knowledge Graph (Placeholder - requires integration with a graph viz library and API)")
-
-        query_st = st.text_input(
-            "Search Knowledge Graph (e.g., 'entities related to John Doe')")
         if st.button("Search KG"):
             if query_st:
                 st.write(f"Searching for: {query_st}")
@@ -247,17 +191,10 @@ def run_streamlit_app_content():
     elif page == "System Status":
         st.header("⚙️ System Status & Health")
         st.write(
-            "Monitor the health and performance of system components. (Conceptual)")
         # API call to FastAPI backend's /system/health
         # status_data = requests.get("http://localhost:8000/api/v1/system/health").json()
         # st.json(status_data)
         st.info(
-            "System health details would be fetched from the API and displayed here.")
-        st.json({
-            "Overall Status": "HEALTHY (Mocked)", "API Backend": "Online",
-            "LLM Provider": "Connected", "Database": "Operational"
-        })
-
     st.sidebar.markdown("---")
     st.sidebar.info("Legal AI System v2.1.0")
 
@@ -269,7 +206,6 @@ def main_streamlit_entry():
 
     if not check_gui_dependencies():
         streamlit_logger.critical(
-            "Critical GUI dependencies missing. Streamlit app cannot start.")
         # Error already printed by check_gui_dependencies
         sys.exit(1)
 
