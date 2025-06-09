@@ -26,7 +26,7 @@ from ..core.detailed_logging import get_detailed_logger, LogCategory, detailed_l
 # Import exceptions
 from ..core.unified_exceptions import MemoryManagerError, ConfigurationError
 # Import constants if needed, e.g., for max_context_tokens default
-from ..config.constants import Constants
+from ..core.constants import Constants
 
 
 # Initialize loggers for this module and its sub-components
