@@ -119,6 +119,9 @@ class EmbeddingManager:
         """Get embeddings for multiple texts"""
         if not self._initialized:
             raise RuntimeError("EmbeddingManager not initialized")
+
+        if self._embedding_client is None:
+            raise RuntimeError("Embedding client not initialized")
         
         if not texts:
             return []
