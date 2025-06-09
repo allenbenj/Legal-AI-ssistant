@@ -349,10 +349,14 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
     async def _process_docx_async(self, file_path: Path, options: Dict[str, Any]) -> Dict[str, Any]:
         return await asyncio.get_event_loop().run_in_executor(None, self._sync_process_docx, file_path, options)
     async def _process_doc_async(self, file_path: Path, options: Dict[str, Any]) -> Dict[str, Any]:
-         # .doc often needs conversion or specific libraries not always available.
-         # python-docx doesn't directly handle .doc well. Fallback or specific handler.
-         self.logger.warning(f"Processing '.doc' file: {file_path.name}. Attempting with DOCX handler; results may vary. Consider converting to .docx.")
-         return await asyncio.get_event_loop().run_in_executor(None, self._sync_process_docx, file_path, options) # Try with docx, might fail
+        # .doc often needs conversion or specific libraries not always available.
+        # python-docx doesn't directly handle .doc well. Fallback or specific handler.
+        self.logger.warning(
+            f"Processing '.doc' file: {file_path.name}. Attempting with DOCX handler; results may vary. Consider converting to .docx."
+        )
+        return await asyncio.get_event_loop().run_in_executor(
+            None, self._sync_process_docx, file_path, options
+        )  # Try with docx, might fail
     async def _process_txt_async(self, file_path: Path, options: Dict[str, Any]) -> Dict[str, Any]:
         return await asyncio.get_event_loop().run_in_executor(None, self._sync_process_txt, file_path, options)
     async def _process_markdown_async(self, file_path: Path, options: Dict[str, Any]) -> Dict[str, Any]:
