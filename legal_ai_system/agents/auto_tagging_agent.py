@@ -24,7 +24,13 @@ MemoryMixin = create_agent_memory_mixin()
 
 from ..core.llm_providers import LLMManager, LLMProviderError, LLMProviderEnum
 from ..core.models import LegalDocument, ProcessingResult
-from ..core.unified_exceptions import AgentError, ConfigurationError
+from ..core.unified_exceptions import (
+    AgentError,
+    ConfigurationError,
+    AgentExecutionError,
+)
+
+AgentProcessingError = AgentExecutionError
 from ..core.unified_memory_manager import UnifiedMemoryManager  # For UMM access (if available)
 from ..utils.ontology import (
     LegalEntityType, LegalRelationshipType,
@@ -53,7 +59,7 @@ class AutoTaggingOutput:
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
-class AutoTaggingAgent(BaseAgent):
+class AutoTaggingAgent(BaseAgent, MemoryMixin):
     """
     Intelligent auto-tagging agent that learns from patterns and user feedback,
     persisting learning via UnifiedMemoryManager if available.
