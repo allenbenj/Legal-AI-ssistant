@@ -13,20 +13,20 @@ from typing import Dict, List, Optional, Any, Set, Tuple
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field, asdict
 
-from ...core.base_agent import BaseAgent
-from ...core.detailed_logging import LogCategory
+from ..core.base_agent import BaseAgent
+from ..core.detailed_logging import LogCategory
 
-from ...config.agent_unified_config import create_agent_memory_mixin
-from ...memory.unified_memory_manager import MemoryType
+from ..core.agent_unified_config import create_agent_memory_mixin
+from ..core.unified_memory_manager import MemoryType
 
 # Create memory mixin for agents
 MemoryMixin = create_agent_memory_mixin()
 
-from ...core.llm_providers import LLMManager, LLMProviderError, LLMProviderEnum
-from ...core.models import LegalDocument, ProcessingResult
-from ...core.unified_exceptions import AgentError, ConfigurationError
-from ...memory.unified_memory_manager import UnifiedMemoryManager # For UMM access (if available)
-from ...utils.ontology import ( # ADD this block
+from ..core.llm_providers import LLMManager, LLMProviderError, LLMProviderEnum
+from ..core.models import LegalDocument, ProcessingResult
+from ..core.unified_exceptions import AgentError, ConfigurationError
+from ..core.unified_memory_manager import UnifiedMemoryManager  # For UMM access (if available)
+from ..utils.ontology import (
     LegalEntityType, LegalRelationshipType,
     get_entity_types_for_prompt, get_relationship_types_for_prompt,
     get_extraction_prompt,
