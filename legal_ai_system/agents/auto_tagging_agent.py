@@ -10,15 +10,8 @@ import asyncio
 import time
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any, Set, Tuple
-from collections import defaultdict
-from dataclasses import dataclass, field, asdict
-
-from ..core.base_agent import BaseAgent
-
 # Create memory mixin for agents
 MemoryMixin = create_agent_memory_mixin()
-
-from ..core.llm_providers import LLMManager, LLMProviderError, LLMProviderEnum
 
 @dataclass
 class AutoTaggingOutput:
@@ -236,8 +229,6 @@ class AutoTaggingOutput:
         # This requires tag_accuracy_scores_cache to be populated.
         final_tags_after_learning_filter: List[str] = []
         for tag in all_tags_set:
-            # Placeholder for future heuristic using feedback statistics
-            _ = self.tag_accuracy_scores_cache.get(tag, {})
             final_tags_after_learning_filter.append(tag)
 
         return {
@@ -387,12 +378,6 @@ class AutoTaggingOutput:
                     tag_candidate = re.sub(r'\s+', '_', tag_candidate)
                     tag_candidate = re.sub(r'[^a-z0-9_:]', '', tag_candidate)  # Allow colons for existing prefixes
                     if tag_candidate and len(tag_candidate) > 2 and tag_candidate not in existing_tags:
-                        # Check if tag is already effectively covered by an existing prefixed tag
-                        is_covered = any(
-                            ex_tag.endswith(f":{tag_candidate}") or
-                            tag_candidate.endswith(f":{ex_tag.split(':')[-1]}")
-                            for ex_tag in existing_tags
-                        )
                         if not is_covered:
                             llm_formatted_tags.append(f"llm:{tag_candidate}")
             
