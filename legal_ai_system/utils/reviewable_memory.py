@@ -8,20 +8,26 @@ allowing human validation before permanent storage.
 
 import asyncio
 import sqlite3
-from datetime import datetime, timezone # Added timezone
-from typing import Dict, List, Any, Optional, Set, Tuple, cast # Added cast
-from dataclasses import dataclass, asdict, field # Added field
+from datetime import datetime, timezone, timedelta
+from typing import Dict, List, Any, Optional, Set
+from dataclasses import dataclass, asdict, field
 from enum import Enum
 import json
 import uuid
+from pathlib import Path
+import threading
 
 # Use detailed_logging
 from ..core.detailed_logging import get_detailed_logger, LogCategory, detailed_log_function
 # Import exceptions
-from ..core.unified_exceptions import MemoryManagerError, ConfigurationError # Can use a more specific ReviewError if created
+from ..core.unified_exceptions import MemoryManagerError
 # Import types from agents - this creates a coupling, but might be intended
 # Ensure these types are stable or use more generic dicts if they change often.
-from ..agents.ontology_extraction import ExtractedEntity, ExtractedRelationship, OntologyExtractionResult
+from ..agents.ontology_extraction_agent import (
+    ExtractedEntity,
+    ExtractedRelationship,
+    OntologyExtractionOutput,
+)
 
 # Initialize logger for this module
 review_mem_logger = get_detailed_logger("ReviewableMemory", LogCategory.DATABASE)
@@ -36,11 +42,11 @@ class ReviewPriority(Enum):
 
 @dataclass
 class ReviewableItem:
-    item_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     item_type: str  # 'entity', 'relationship', 'finding'
-    content: Dict[str, Any] # Original extracted content
+    content: Dict[str, Any]  # Original extracted content
     confidence: float
-    source_document_id: str # Changed from source_document (path) to an ID
+    source_document_id: str  # Changed from source_document (path) to an ID
+    item_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     extraction_context: Optional[Dict[str, Any]] = field(default_factory=dict) # Changed to dict
     review_status: ReviewStatus = ReviewStatus.PENDING
     review_priority: ReviewPriority = ReviewPriority.MEDIUM
@@ -61,23 +67,23 @@ class ReviewableItem:
 @dataclass
 class ReviewDecision:
     item_id: str
-    decision: ReviewStatus # The new status after review
-    modified_content: Optional[Dict[str, Any]] = None # If decision is MODIFIED
+    decision: ReviewStatus  # The new status after review
+    reviewer_id: str  # ID of the user/agent making the review
+    modified_content: Optional[Dict[str, Any]] = None  # If decision is MODIFIED
     reviewer_notes: str = ""
-    reviewer_id: str # ID of the user/agent making the review
     confidence_override: Optional[float] = None
 
 @dataclass
 class LegalFindingItem: # Renamed from LegalFinding to avoid confusion with a potential domain object
-    finding_id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    document_id: str # Added
+    document_id: str  # Added
     finding_type: str  # 'violation', 'connection', 'inconsistency', 'pattern'
     description: str
-    entities_involved_ids: List[str] = field(default_factory=list) # Changed to IDs
-    relationships_involved_ids: List[str] = field(default_factory=list) # Changed to IDs
-    evidence_source_refs: List[str] = field(default_factory=list) # Changed, e.g. doc_id + snippet_ref
     confidence: float
     severity: str  # 'low', 'medium', 'high', 'critical' - consider Enum
+    finding_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    entities_involved_ids: List[str] = field(default_factory=list)  # Changed to IDs
+    relationships_involved_ids: List[str] = field(default_factory=list)  # Changed to IDs
+    evidence_source_refs: List[str] = field(default_factory=list)  # Changed, e.g. doc_id + snippet_ref
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     review_status: ReviewStatus = ReviewStatus.PENDING # Findings also go through review
     
@@ -202,8 +208,8 @@ class ReviewableMemory:
             raise MemoryManagerError("ReviewableMemory DB schema setup failed.", cause=e)
 
     @detailed_log_function(LogCategory.WORKFLOW)
-    async def process_extraction_result(self, 
-                                      extraction: OntologyExtractionResult, # Renamed from result
+    async def process_extraction_result(self,
+                                      extraction: OntologyExtractionOutput,  # Renamed from result
                                       document_id: str, # Changed from document_path
                                       extraction_source_info: Optional[Dict[str,Any]] = None) -> Dict[str, int]: # Renamed param & type
         """Process extraction results and add items to review queue."""
@@ -247,7 +253,9 @@ class ReviewableMemory:
             
     async def _create_review_item_from_entity(self, entity: ExtractedEntity, 
                                             document_id: str, extraction_context: Dict[str,Any]) -> ReviewableItem:
-        priority = await self._calculate_item_priority(entity.entity_type, entity.confidence, entity.source_text)
+        priority = await self._calculate_item_priority(
+            entity.entity_type, entity.confidence, entity.source_text_snippet
+        )
         return ReviewableItem(
             item_type='entity',
             content=entity.to_dict(), # Store full entity data
@@ -259,7 +267,9 @@ class ReviewableMemory:
 
     async def _create_review_item_from_relationship(self, rel: ExtractedRelationship,
                                                   document_id: str, extraction_context: Dict[str,Any]) -> ReviewableItem:
-        priority = await self._calculate_item_priority(rel.relationship_type, rel.confidence, rel.source_text)
+        priority = await self._calculate_item_priority(
+            rel.relationship_type, rel.confidence, rel.evidence_text_snippet
+        )
         return ReviewableItem(
             item_type='relationship',
             content=rel.to_dict(), # Store full relationship data
@@ -340,14 +350,14 @@ class ReviewableMemory:
             ))
             conn.commit()
 
-    async def _detect_and_create_findings(self, extraction: OntologyExtractionResult, document_id: str) -> List[LegalFindingItem]:
+    async def _detect_and_create_findings(self, extraction: OntologyExtractionOutput, document_id: str) -> List[LegalFindingItem]:
         """Detect significant legal findings that require special attention."""
         findings_list: List[LegalFindingItem] = []
         # Example: Detect potential Brady violations if specific entities/relations appear
         brady_keywords = {"brady", "exculpatory", "failure to disclose", "withheld evidence"}
         text_for_finding_scan = " ".join(
-            [e.source_text for e in extraction.entities] + 
-            [r.source_text for r in extraction.relationships]
+            [e.source_text_snippet for e in extraction.entities] +
+            [r.evidence_text_snippet for r in extraction.relationships]
         ).lower()
 
         if any(keyword in text_for_finding_scan for keyword in brady_keywords):
@@ -428,7 +438,7 @@ class ReviewableMemory:
             review_priority=ReviewPriority(row['review_priority']),
             created_at=datetime.fromisoformat(row['created_at'].replace("Z", "+00:00")),
             reviewed_at=datetime.fromisoformat(row['reviewed_at'].replace("Z", "+00:00")) if row['reviewed_at'] else None,
-            reviewer_id=row.get('reviewer_id'), # Use .get for potentially new columns
+            reviewer_id=row['reviewer_id'],
             reviewer_notes=row['reviewer_notes'] or "",
             original_content_on_modify=json.loads(row['original_content_on_modify']) if row['original_content_on_modify'] else None
         )
@@ -523,8 +533,8 @@ class ReviewableMemory:
             # This is a placeholder for actual integration logic.
             # Example: if item.item_type == 'entity':
             #    await self.unified_memory_manager.store_session_entity(
-            #        session_id=item.source_document_id, # Or a relevant session_id
-            #        name=item.content.get('entity_id', item.content.get('source_text')),
+            #        session_id=item.source_document_id,  # Or a relevant session_id
+            #        name=item.content.get('entity_id', item.content.get('source_text_snippet')),
             #        entity_type=item.content.get('entity_type'),
             #        attributes=item.content.get('attributes'),
             #        confidence=item.confidence,
