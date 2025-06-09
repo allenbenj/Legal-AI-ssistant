@@ -30,8 +30,16 @@ from typing import Dict, List, Any, Optional, Tuple, Union, Deque
 import tenacity # For retries
 
 # Core imports
-from ....core.detailed_logging import get_detailed_logger, LogCategory, detailed_log_function
-from ....core.unified_exceptions import VectorStoreError, ConfigurationError, DatabaseError
+from .detailed_logging import (
+    get_detailed_logger,
+    LogCategory,
+    detailed_log_function,
+)
+from .unified_exceptions import (
+    VectorStoreError,
+    ConfigurationError,
+    DatabaseError,
+)
 
 # Initialize loggers for this module
 vector_store_logger = get_detailed_logger("VectorStore", LogCategory.VECTOR_STORE)
