@@ -21,19 +21,19 @@ from datetime import datetime, timezone
 from enum import Enum # Added Enum back for DocumentContentType
 
 # Core imports
-from ...core.base_agent import BaseAgent, ProcessingResult # Changed from AgentResult
-from ...core.detailed_logging import LogCategory, detailed_log_function, get_detailed_logger # Added get_detailed_logger
+from ..core.base_agent import BaseAgent
+from ..core.detailed_logging import LogCategory, detailed_log_function, get_detailed_logger
 
-from ...config.agent_unified_config import create_agent_memory_mixin
-from ...memory.unified_memory_manager import MemoryType
+from ..core.agent_unified_config import create_agent_memory_mixin
+from ..core.unified_memory_manager import MemoryType
 
 # Create memory mixin for agents
 MemoryMixin = create_agent_memory_mixin()
 
-from ...core.unified_exceptions import AgentExecutionError, DocumentProcessingError
-from ...core.shared_components import DependencyManager, DocumentChunker, LegalDocumentClassifier # Assuming these are in core.shared_components
+from ..core.unified_exceptions import AgentExecutionError, DocumentProcessingError
+from ..core.shared_components import DependencyManager, DocumentChunker, LegalDocumentClassifier
 # Constants for default values
-from ...config.constants import Constants # Example, assuming you have a constants file
+from ..core.constants import Constants
 
 # Logger specifically for this file, can be aliased from self.logger in methods
 file_logger = get_detailed_logger("DocumentProcessorAgentFileOps", LogCategory.FILE_IO)
@@ -91,7 +91,7 @@ class DocumentContentType(Enum):
         return ext_map.get(ext.lower(), cls.UNKNOWN)
 
     @classmethod
-    deffrom_mimetype(cls, mime: Optional[str]) -> 'DocumentContentType':
+    def from_mimetype(cls, mime: Optional[str]) -> 'DocumentContentType':
         if not mime: return cls.UNKNOWN
         for member in cls:
             if member.value == mime:
