@@ -48,7 +48,7 @@ class SemanticAnalysisResult:
         return asdict(self)
 
 
-class SemanticAnalysisAgent(BaseAgent):
+class SemanticAnalysisAgent(BaseAgent, MemoryMixin):
     """
     Comprehensive semantic analysis agent for legal documents.
     """
