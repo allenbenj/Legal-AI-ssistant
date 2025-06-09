@@ -330,7 +330,12 @@ async def create_service_container(app_settings: Optional[Any] = None) -> Servic
     # 1. Configuration Manager (must be first)
     from ..core.configuration_manager import create_configuration_manager
     # If app_settings (e.g. LegalAISettings from config.settings) is passed, use it
-    await container.register_service("configuration_manager", factory=create_configuration_manager, custom_settings_instance=app_settings)
+    await container.register_service(
+        "configuration_manager",
+        factory=lambda sc, custom_settings_instance=app_settings: create_configuration_manager(
+            custom_settings_instance=custom_settings_instance
+        ),
+    )
     config_manager_service = await container.get_service("configuration_manager")
 
     # 2. Core Services (Loggers are implicitly available via get_detailed_logger)
@@ -470,14 +475,14 @@ async def create_service_container(app_settings: Optional[Any] = None) -> Servic
     ))
 
     # 4. Knowledge Layer (Persistence Layer was moved up)
-    from ..knowledge.knowledge_graph_manager import create_knowledge_graph_manager
+    from .knowledge_graph_manager import create_knowledge_graph_manager
     kg_conf = { # Fetch from config_manager
         "NEO4J_URI": db_conf.get('neo4j_uri'), "NEO4J_USER": db_conf.get('neo4j_user'),
         "NEO4J_PASSWORD": db_conf.get('neo4j_password'), "ENABLE_NEO4J_PERSISTENCE": True
     }
     await container.register_service("knowledge_graph_manager", factory=create_knowledge_graph_manager, service_config=kg_conf)
 
-    from ..knowledge.vector_store.vector_store import create_vector_store # Standard one
+    from ..core.vector_store import create_vector_store  # Standard one
     vs_conf = { # Fetch from config_manager
         "STORAGE_PATH": str(config_manager_service.get('data_dir') / "vector_store_main"),
         "DEFAULT_INDEX_TYPE": embed_conf.get('vector_store_type', 'HNSW'), # Map if needed
@@ -487,14 +492,14 @@ async def create_service_container(app_settings: Optional[Any] = None) -> Servic
     # embedding_provider_instance = await container.get_service("embedding_manager").get_provider_instance() # Conceptual
     await container.register_service("vector_store", factory=create_vector_store, service_config=vs_conf)
     
-    from ..knowledge.optimized_vector_store import create_optimized_vector_store # Optimized one
+    from ..core.optimized_vector_store import create_optimized_vector_store  # Optimized one
     ovs_conf = { # Can have its own config or inherit
         "STORAGE_PATH": str(config_manager_service.get('data_dir') / "vector_store_optimized"),
          "DEFAULT_INDEX_TYPE": "HNSW", # Often optimized means HNSW or specific FAISS params
     }
     await container.register_service("optimized_vector_store", factory=create_optimized_vector_store, service_config=ovs_conf)
     
-    from ..knowledge.realtime_graph_manager import create_realtime_graph_manager
+    from .realtime_graph_manager import create_realtime_graph_manager
     kgm_service = await container.get_service("knowledge_graph_manager")
     ovs_service = await container.get_service("optimized_vector_store")
     await container.register_service("realtime_graph_manager", factory=create_realtime_graph_manager, 
@@ -508,9 +513,24 @@ async def create_service_container(app_settings: Optional[Any] = None) -> Servic
     
     from ..memory.reviewable_memory import create_reviewable_memory
     umm_service = await container.get_service("unified_memory_manager")
-    revmem_conf = {"DB_PATH": str(config_manager_service.get('data_dir') / "databases" / "review_memory.db")}
-    await container.register_service("reviewable_memory", factory=create_reviewable_memory, 
-                                   service_config=revmem_conf, unified_memory_manager=umm_service)
+    revmem_conf = {
+        "DB_PATH": str(
+            config_manager_service.get("data_dir") / "databases" / "review_memory.db"
+        )
+    }
+    await container.register_service(
+        "reviewable_memory",
+        factory=create_reviewable_memory,
+        service_config=revmem_conf,
+        unified_memory_manager=umm_service,
+    )
+
+    from .violation_review import ViolationReviewDB
+    violation_db_path = str(db_conf.get("violations_db_path"))
+    await container.register_service(
+        "violation_review_db",
+        instance=ViolationReviewDB(db_path=violation_db_path),
+    )
 
     # 6. Agents (Register factories for agents)
     # Agents are often stateful per task, so factories are common.
