@@ -7,9 +7,11 @@ as the primary LLM provider for the Legal AI System.
 Reference: https://console.x.ai/team/b10c9f9e-81c9-4524-bc1c-32f6a6651671/models?modelName=grok-3-mini
 """
 
-from typing import Dict, Any
-from .settings import LegalAISettings
-from ..core.llm_providers import LLMConfig, LLMProvider
+from typing import Dict, Any, List
+
+# Updated imports to use the canonical settings and provider enum
+from ..core.settings import LegalAISettings
+from ..core.llm_providers import LLMConfig, LLMProviderEnum
 
 # Grok model configurations
 GROK_MODELS_CONFIG = {
@@ -41,6 +43,9 @@ GROK_MODELS_CONFIG = {
 
 # Default configuration (can be switched at runtime)
 DEFAULT_GROK_MODEL = "grok-3-mini"
+
+# Provide direct access to the Grok-3-Mini configuration
+GROK_3_MINI_CONFIG = GROK_MODELS_CONFIG[DEFAULT_GROK_MODEL]
 
 # Optimized parameters for legal text (applies to all models)
 LEGAL_ANALYSIS_PARAMS = {
@@ -84,7 +89,7 @@ def create_grok_config(
     model_config = GROK_MODELS_CONFIG[model_name]
     
     return LLMConfig(
-        provider=LLMProvider.XAI,
+        provider=LLMProviderEnum.XAI,
         model=model_config["model_name"],
         api_key=api_key,
         base_url=base_url,
@@ -296,6 +301,9 @@ GROK_PROMPTS = {
     - Implications
     """
 }
+
+# Alias for compatibility with older scripts
+GROK_3_MINI_PROMPTS = GROK_PROMPTS
 
 def get_optimized_prompt(prompt_type: str, model_name: str = None, **kwargs) -> str:
     """

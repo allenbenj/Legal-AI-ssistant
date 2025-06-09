@@ -1,4 +1,4 @@
-# legal_ai_system/config/constants.py
+# legal_ai_system/core/constants.py
 #Legal AI System Constants - Centralized Configuration Values
 #==========================================================
 #This module contains all configuration constants used throughout the Legal AI System.
