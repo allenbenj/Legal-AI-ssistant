@@ -3,7 +3,17 @@
 from __future__ import annotations
 
 
-from langgraph.graph import StateGraph, END
+try:  # pragma: no cover - optional dependency
+    from langgraph.graph import StateGraph, END
+except Exception:  # ImportError or other issues if langgraph not installed
+
+    class StateGraph:  # pragma: no cover - simple placeholder
+        """Fallback StateGraph when ``langgraph`` is unavailable."""
+
+        def __init__(self) -> None:
+            raise RuntimeError("LangGraph is required to build workflows")
+
+    END = "END"
 
 from ..agents.agent_nodes import AnalysisNode, SummaryNode
 
