@@ -10,9 +10,8 @@ import os
 from pathlib import Path
 
 # Add project root to Python path
-project_root = Path(__file__).parent
-if str(project_root) not in sys.path:
-    sys.path.insert(0, str(project_root))
+project_root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(project_root))
 
 def test_logging_without_unicode():
     """Test that logging works without Unicode encoding issues."""
