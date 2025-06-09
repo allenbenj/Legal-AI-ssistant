@@ -37,6 +37,12 @@ Install remaining dependencies in batches:
 pip install -r requirements.txt
 ```
 
+If you plan to use LangGraph-based workflows, install the optional dependency:
+
+```bash
+pip install langgraph
+```
+
 Additional database utilities:
 
 ```bash

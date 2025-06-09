@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import TYPE_CHECKING
 
 try:  # pragma: no cover - optional dependency
     from langgraph.graph import BaseNode as LangGraphBaseNode
@@ -12,6 +13,10 @@ except Exception:  # ImportError or other issues if langgraph not installed
         """Fallback base class when ``langgraph`` is unavailable."""
 
         pass
+
+
+if TYPE_CHECKING:  # pragma: no cover - hint for type checkers
+    from langgraph.graph import BaseNode as LangGraphBaseNode  # noqa: F811
 
 
 # Alias used for subclassing regardless of import success
