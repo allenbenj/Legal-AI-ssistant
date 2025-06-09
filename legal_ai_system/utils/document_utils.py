@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import io
 from pathlib import Path
-from typing import Iterable, List
+from typing import Iterable, List, Dict, Any
 
 import fitz  # PyMuPDF
 import pytesseract
@@ -29,8 +28,9 @@ def extract_text(path: Path, ocr: bool = True) -> str:
     if path.suffix.lower() == ".pdf":
         text: List[str] = []
         with fitz.open(path) as doc:
-            for page in doc:
-                text.append(page.get_text())
+            for page_num in range(doc.page_count):
+                page = doc.load_page(page_num)
+                text.append(page.get_text("text"))
         return "\n".join(text)
 
     if path.suffix.lower() in {".png", ".jpg", ".jpeg"} and ocr:
