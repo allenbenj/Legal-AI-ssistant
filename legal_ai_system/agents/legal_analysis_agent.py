@@ -6,22 +6,17 @@ Performs comprehensive legal analysis using the IRAC framework (Issue, Rule, App
 enhanced with contradiction detection, causal chain analysis, and legal reasoning validation.
 """
 
-import asyncio
 import json
-# import logging # Replaced by detailed_logging
 from typing import Dict, List, Any, Optional
-from dataclasses import dataclass, field, asdict # Added field, asdict
-from datetime import datetime, timezone # Added timezone
+from dataclasses import dataclass, field, asdict
+from datetime import datetime, timezone
 
 # Core imports from the new structure
 from ..core.base_agent import BaseAgent
-from ..utils.ontology import LegalEntityType, get_entity_types_for_prompt # Assuming LegalEntityType is an Enum
-from ..core.llm_providers import LLMManager, LLMProviderError # Using LLMManager
+from ..utils.ontology import LegalEntityType  # Assuming LegalEntityType is an Enum
+from ..core.llm_providers import LLMManager, LLMProviderError, LLMProviderEnum
 from ..core.model_switcher import ModelSwitcher, TaskComplexity
-from ..core.unified_exceptions import AgentExecutionError
-from ..core.detailed_logging import LogCategory # For logger category
 from ..core.agent_unified_config import create_agent_memory_mixin
-from ..core.unified_memory_manager import MemoryType
 
 # Create memory mixin for agents
 MemoryMixin = create_agent_memory_mixin()
@@ -214,9 +209,9 @@ Ensure thorough analysis with high confidence scores (≥{min_confidence}). Focu
         try:
             json_content = response_content
             if '```json' in response_content:
-                json_content = response_content.split('```json')[1].split('```')
+                json_content = response_content.split('```json')[1].split('```')[0]
             elif '```' in response_content and response_content.strip().startswith('```') and response_content.strip().endswith('```'):
-                 json_content = response_content.strip()[3:-3]
+                json_content = response_content.strip()[3:-3]
             
             parsed_data = json.loads(json_content.strip())
             
