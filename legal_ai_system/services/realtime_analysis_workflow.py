@@ -13,11 +13,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 import time
 
-from ..agents.document_processor import DocumentProcessorAgent
-from ..agents.ontology_extraction import OntologyExtractionAgent
-from ..extraction.hybrid_extractor import HybridLegalExtractor
-from ..knowledge.realtime_graph_manager import RealTimeGraphManager
-from ..knowledge.optimized_vector_store import OptimizedVectorStore
+from ..agents.document_processor_agent import DocumentProcessorAgent
+from ..agents.ontology_extraction_agent import OntologyExtractionAgent
+from ..utils.hybrid_extractor import HybridLegalExtractor
+from .realtime_graph_manager import RealTimeGraphManager
+from ..core.optimized_vector_store import OptimizedVectorStore
 from ..memory.reviewable_memory import ReviewableMemory
 
 

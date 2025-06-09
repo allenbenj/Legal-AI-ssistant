@@ -1,0 +1,4 @@
+[
+  {"speaker": "Alice", "statement": "The contract is valid", "source": "Doc1"},
+  {"speaker": "Alice", "statement": "The contract is not valid", "source": "Doc2"}
+]
