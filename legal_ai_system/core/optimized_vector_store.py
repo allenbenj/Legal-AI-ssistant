@@ -8,11 +8,12 @@ potentially with specific configurations for high-performance scenarios.
 
 from typing import Dict, List, Any, Optional
 from pathlib import Path
+from datetime import datetime, timezone
 
 # Use detailed_logging
 from ..core.detailed_logging import get_detailed_logger, LogCategory, detailed_log_function
 # Import the primary VectorStore implementation
-from .vector_store.vector_store import VectorStore, EmbeddingProviderVS, IndexType, SearchResult, VectorMetadata
+from .vector_store import VectorStore, EmbeddingProviderVS, IndexType, SearchResult, VectorMetadata
 # Import exceptions
 from ..core.unified_exceptions import VectorStoreError
 
