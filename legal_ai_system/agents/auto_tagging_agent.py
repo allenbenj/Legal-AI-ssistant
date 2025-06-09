@@ -10,28 +10,20 @@ import asyncio
 import time
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any, Set, Tuple
-from collections import Counter, defaultdict
+from collections import defaultdict
 from dataclasses import dataclass, field, asdict
 
-from ...core.base_agent import BaseAgent
-from ...core.detailed_logging import LogCategory
+from ..core.base_agent import BaseAgent
+from ..core.detailed_logging import LogCategory, get_detailed_logger
 
-from ...config.agent_unified_config import create_agent_memory_mixin
-from ...memory.unified_memory_manager import MemoryType
+from ..core.agent_unified_config import create_agent_memory_mixin
 
 # Create memory mixin for agents
 MemoryMixin = create_agent_memory_mixin()
 
-from ...core.llm_providers import LLMManager, LLMProviderError, LLMProviderEnum
-from ...core.models import LegalDocument, ProcessingResult
-from ...core.unified_exceptions import AgentError, ConfigurationError
-from ...memory.unified_memory_manager import UnifiedMemoryManager # For UMM access (if available)
-from ...utils.ontology import ( # ADD this block
-    LegalEntityType, LegalRelationshipType,
-    get_entity_types_for_prompt, get_relationship_types_for_prompt,
-    get_extraction_prompt,
-    get_entity_type_by_label, get_relationship_type_by_label
-)
+from ..core.llm_providers import LLMManager, LLMProviderError, LLMProviderEnum
+from ..core.unified_exceptions import AgentProcessingError
+from ..core.unified_memory_manager import UnifiedMemoryManager  # For UMM access (if available)
 
 @dataclass
 class AutoTaggingOutput:
@@ -53,14 +45,36 @@ class AutoTaggingOutput:
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
-class AutoTaggingAgent(BaseAgent):
+class AutoTaggingAgent(MemoryMixin, BaseAgent):
     """
     Intelligent auto-tagging agent that learns from patterns and user feedback,
     persisting learning via UnifiedMemoryManager if available.
     """
     
+    def _get_service(self, name: str) -> Any:
+        """Safely retrieve a service from the container if available."""
+        if not self.service_container:
+            return None
+
+        getter = getattr(self.service_container, "get_service", None)
+        if getter:
+            try:
+                svc = getter(name)
+                if asyncio.iscoroutine(svc):
+                    try:
+                        return asyncio.get_event_loop().run_until_complete(svc)
+                    except RuntimeError:
+                        return asyncio.run(svc)
+                return svc
+            except Exception:
+                return None
+        return getattr(self.service_container, name, None)
+
     def __init__(self, service_container: Any, **config: Any):
-        super().__init__(service_container, name="AutoTaggingAgent", agent_type="classification")
+        super().__init__(service_container, name="AutoTaggingAgent")
+
+        # Initialize logger for this agent
+        self.logger: Any = get_detailed_logger(self.__class__.__name__, LogCategory.AGENT)
         
         
         # Get optimized Grok-Mini configuration for this agent
@@ -79,10 +93,14 @@ class AutoTaggingAgent(BaseAgent):
         self.tag_accuracy_scores_cache: Dict[str, Dict[str, float]] = defaultdict(lambda: {"correct": 0.0, "incorrect": 0.0, "suggested": 0.0, "last_updated_ts": 0.0})
         self.feedback_session_log: List[Dict[str,Any]] = [] # In-memory log for current agent instance
 
-        self.logger.info(f"{self.name} initialized.", 
-                        parameters={'llm_tag_gen': self.enable_llm_tag_generation, 
-                                    'llm_available': self.llm_manager is not None,
-                                    'umm_available': self.unified_memory_manager is not None})
+        self.logger.info(
+            f"{self.name} initialized.",
+            parameters={
+                'llm_tag_gen': self.enable_llm_tag_generation,
+                'llm_available': self.llm_manager is not None,
+                'umm_available': self.unified_memory_manager is not None,
+            },
+        )
 
     async def initialize_agent_async(self): # Optional: called by a system if agent needs async setup
         """Asynchronously initializes components, e.g., loading learning data."""
@@ -224,12 +242,8 @@ class AutoTaggingAgent(BaseAgent):
         # This requires tag_accuracy_scores_cache to be populated.
         final_tags_after_learning_filter: List[str] = []
         for tag in all_tags_set:
-            stats = self.tag_accuracy_scores_cache.get(tag, {})
-            correct_count = stats.get("correct", 0)
-            incorrect_count = stats.get("incorrect", 0)
-            # Simple heuristic: if incorrect > correct significantly, maybe don't suggest it as strongly.
-            # For now, we'll include all and let feedback refine.
-            # A more advanced filter could use these scores to adjust confidence or prune.
+            # Placeholder for future heuristic using feedback statistics
+            _ = self.tag_accuracy_scores_cache.get(tag, {})
             final_tags_after_learning_filter.append(tag)
 
         return {
@@ -377,12 +391,16 @@ class AutoTaggingAgent(BaseAgent):
                 for tag_candidate in potential_tags:
                     # Basic validation and normalization
                     tag_candidate = re.sub(r'\s+', '_', tag_candidate)
-                    tag_candidate = re.sub(r'[^a-z0-9_:]', '', tag_candidate) # Allow colons for existing prefixes
+                    tag_candidate = re.sub(r'[^a-z0-9_:]', '', tag_candidate)  # Allow colons for existing prefixes
                     if tag_candidate and len(tag_candidate) > 2 and tag_candidate not in existing_tags:
-                         # Check if tag is already effectively covered by an existing prefixed tag
-                        is_covered = any(ex_tag.endswith(f":{tag_candidate}") or tag_candidate.endswith(f":{ex_tag.split(':')[-1]}") for ex_tag in existing_tags)
+                        # Check if tag is already effectively covered by an existing prefixed tag
+                        is_covered = any(
+                            ex_tag.endswith(f":{tag_candidate}") or
+                            tag_candidate.endswith(f":{ex_tag.split(':')[-1]}")
+                            for ex_tag in existing_tags
+                        )
                         if not is_covered:
-                            llm_formatted_tags.append(f"llm:{tag_candidate}") # Prefix LLM-generated tags
+                            llm_formatted_tags.append(f"llm:{tag_candidate}")
             
             self.logger.debug(f"LLM ({model_used_str}) generated {len(llm_formatted_tags)} additional tags for doc '{doc_id}'.")
             return llm_formatted_tags[:7], model_used_str # Limit number of LLM tags
