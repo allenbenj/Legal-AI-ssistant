@@ -308,7 +308,16 @@ class BaseAgent(ABC):
             except Exception as e:
                 logger.warning(f"Failed to get vector_store_manager: {e}")
         return None
-    
+
+    def get_llm_manager(self):
+        """Get LLMManager from service container"""
+        if self.service_container:
+            try:
+                return self.service_container.get_service("llm_manager")
+            except Exception as e:
+                logger.warning(f"Failed to get llm_manager: {e}")
+        return None
+
     def get_memory_manager(self):
         """Get UnifiedMemoryManager from service container"""
         if self.service_container:
