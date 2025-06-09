@@ -10,7 +10,11 @@ This repository contains a modular legal analysis platform. Source files live in
 - **docs** – documentation and planning notes.
 - **visualizations** – architecture diagrams and interactive network files.
 - **tests** – unit tests.
+- **extraneous_files** – archive for unused scripts, environment helpers, and other extras. Move outdated files here for reference. See `extraneous_files/ARCHIVE.md` for the list of archived items.
 
-Extra reference materials are listed in `legal_ai_system/docs/legacy_files.md`.
+Older reference materials previously found in `legal_ai_system/docs` were
+removed from the repository. If you need to review any of those documents,
+check the `extraneous_files` archive for legacy notes and scripts.
 
 Run `python legal_ai_system/scripts/main.py` to start the demo application.
+
