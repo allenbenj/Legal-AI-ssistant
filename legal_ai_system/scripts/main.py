@@ -22,38 +22,54 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union  # Added Union
 
-import strawberry  # type: ignore
-import uvicorn
+# third-party imports
+try:
+    import strawberry  # type: ignore
+except ImportError:  # pragma: no cover - optional GraphQL dependency
+    strawberry = None
 
 try:
+    import uvicorn
+except ImportError:  # pragma: no cover - optional server dependency
+    uvicorn = None
+
+# Attempt to import project constants. If running in an isolated context where
+# the package isn't installed, fall back to a minimal implementation so the
+# script can still start without import errors.
+try:
     from legal_ai_system.core.constants import Constants
+except Exception:  # pragma: no cover - fallback for testing/archive usage
     class Constants:
-        """Fallback constants when the config package is unavailable."""
+        """Fallback constants used when the full package is unavailable."""
 
         DEBUG = True
 
 
 # Assuming these will be structured correctly during refactoring
 # Use absolute imports from the project root 'legal_ai_system'
-from fastapi import Form  # Added Form
-from fastapi import (
-    BackgroundTasks,
-    Depends,
-    FastAPI,
-    File,
-    HTTPException,
-    UploadFile,
-    WebSocket,
-    WebSocketDisconnect,
-    status,
-)
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse  # Added HTMLResponse for root
-from fastapi.security import (  # Kept for structure, though auth is mocked
-    HTTPAuthorizationCredentials,
-    HTTPBearer,
-)
-from fastapi.staticfiles import StaticFiles
+try:
+    from fastapi import Form  # Added Form
+    from fastapi import (
+        BackgroundTasks,
+        Depends,
+        FastAPI,
+        File,
+        HTTPException,
+        UploadFile,
+        WebSocket,
+        WebSocketDisconnect,
+        status,
+    )
+    from fastapi.middleware.cors import CORSMiddleware
+    from fastapi.responses import HTMLResponse, JSONResponse  # Added HTMLResponse for root
+    from fastapi.security import (
+        HTTPAuthorizationCredentials,
+        HTTPBearer,
+    )
+    from fastapi.staticfiles import StaticFiles
+except ImportError:  # pragma: no cover - optional web dependency
+    print("FastAPI not installed; exiting.")
+    sys.exit(0)
 from pydantic import BaseModel
 from pydantic import Field as PydanticField  # Alias Field
 from strawberry.fastapi import GraphQLRouter  # type: ignore
