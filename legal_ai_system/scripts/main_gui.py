@@ -55,6 +55,8 @@ except ImportError:
 # Import our components
 from shared_components import SessionManager, ErrorHandler, UIComponents
 from database_manager import DatabaseManager, ViolationRecord, MemoryRecord
+from ..core.unified_services import get_service_container, register_core_services
+from ..services.violation_review import ViolationReviewEntry, ActorInfo
 from unified_gui import (
     DocumentProcessorTab, MemoryBrainTab, ViolationReviewTab,
     KnowledgeGraphTab, SettingsLogsTab, AnalysisDashboardTab
@@ -70,6 +72,12 @@ class EnhancedGUIApplication:
     
     def __init__(self):
         self.db_manager = DatabaseManager()
+        register_core_services()
+        container = get_service_container()
+        try:
+            self.violation_review_manager = container.get_service("violation_review_manager")
+        except Exception:
+            self.violation_review_manager = None
         self._initialize_session_state()
         self._initialize_sample_data()
     
@@ -132,9 +140,20 @@ class EnhancedGUIApplication:
                 comments="Verified and approved for remediation"
             )
         ]
-        
+
         for violation in sample_violations:
             self.db_manager.save_violation(violation)
+            if self.violation_review_manager:
+                entry = ViolationReviewEntry(
+                    case_id="demo_case",
+                    violation_type=violation.violation_type,
+                    statute="",
+                    jurisdiction="",
+                    actor=ActorInfo(name="demo", role="system"),
+                    harms=[violation.description],
+                    created_by="GUI",
+                )
+                self.violation_review_manager.insert_violation(entry)
     
     def _load_sample_memory(self):
         """Load sample memory data"""

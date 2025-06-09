@@ -5,8 +5,10 @@ This repository contains a modular legal analysis platform. Source files live in
 - **core** – shared components such as the base agent, configuration utilities and vector store implementations.
 - **agents** – specialized agents for tasks like document processing, citation analysis and violation detection.
 - **services** – service classes for memory management, knowledge graphs and real-time workflows.
+- **archive_legacy_components** – deprecated modules preserved for reference.
 - **utils** – helper modules for parsing, ontology management and other utilities.
 - **scripts** – entry points and helper scripts for running the system.
+- **services/violation_review.py** – manages legal violation records in SQLite.
 - **docs** – documentation and planning notes.
 - **visualizations** – architecture diagrams and interactive network files.
 - **tests** – unit tests.
