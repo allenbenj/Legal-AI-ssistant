@@ -539,7 +539,10 @@ async def create_service_container(app_settings: Optional[Any] = None) -> Servic
     # If agents are true "services" (long-lived, shared), then register instances.
     # For now, let's assume workflows will get agent *classes* or factories.
     # Or, if agents are simple enough to be singletons:
-    from ..agents import DocumentProcessorAgent, OntologyExtractionAgent, StreamlinedEntityExtractionAgent # etc.
+    from ..agents.document_processor_agent import DocumentProcessorAgent
+    from ..agents.document_rewriter_agent import DocumentRewriterAgent
+    from ..agents.ontology_extraction_agent import OntologyExtractionAgent
+    from ..agents.entity_extraction_agent import StreamlinedEntityExtractionAgent
     # Example: await container.register_service("document_processor_agent", instance=DocumentProcessorAgent(container))
     # This needs careful thought: are agents services or instantiated by workflows?
     # The original code often had agents take 'services' in __init__, implying they are created with access to container.
@@ -554,6 +557,7 @@ async def create_service_container(app_settings: Optional[Any] = None) -> Servic
         "structural_analysis_agent": getattr(__import__('legal_ai_system.agents', fromlist=['StructuralAnalysisAgent']), 'StructuralAnalysisAgent', None),
         "citation_analysis_agent": getattr(__import__('legal_ai_system.agents', fromlist=['CitationAnalysisAgent']), 'CitationAnalysisAgent', None),
         "text_correction_agent": getattr(__import__('legal_ai_system.agents', fromlist=['TextCorrectionAgent']), 'TextCorrectionAgent', None),
+        "document_rewriter_agent": DocumentRewriterAgent,
         "violation_detector_agent": getattr(__import__('legal_ai_system.agents', fromlist=['ViolationDetectorAgent']), 'ViolationDetectorAgent', None),
         "auto_tagging_agent": getattr(__import__('legal_ai_system.agents', fromlist=['AutoTaggingAgent']), 'AutoTaggingAgent', None),
         "note_taking_agent": getattr(__import__('legal_ai_system.agents', fromlist=['NoteTakingAgent']), 'NoteTakingAgent', None),

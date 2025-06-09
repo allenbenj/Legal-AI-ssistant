@@ -14,6 +14,7 @@ from pathlib import Path
 import time
 
 from ..agents.document_processor_agent import DocumentProcessorAgent
+from ..agents.document_rewriter_agent import DocumentRewriterAgent
 from ..agents.ontology_extraction_agent import OntologyExtractionAgent
 from ..utils.hybrid_extractor import HybridLegalExtractor
 from .realtime_graph_manager import RealTimeGraphManager
@@ -94,6 +95,7 @@ class RealTimeAnalysisWorkflow:
         
         # Initialize components
         self.document_processor = DocumentProcessorAgent(services, **config)
+        self.document_rewriter = DocumentRewriterAgent(services, **config)
         self.ontology_extractor = OntologyExtractionAgent(services, **config)
         self.hybrid_extractor = HybridLegalExtractor(services, **config)
         self.graph_manager = RealTimeGraphManager(services, **config)
@@ -161,14 +163,20 @@ class RealTimeAnalysisWorkflow:
                 if not document_result or not self._is_processing_successful(document_result):
                     raise ValueError("Document processing failed")
                 
-                # Phase 2: Hybrid Extraction (NER + LLM)
+                # Phase 2: Document Rewriting
+                await self._notify_progress("Document rewriting", 0.2)
+                phase_start = time.time()
+
+                document_text = self._extract_text_from_result(document_result)
+                rewrite_res = await self.document_rewriter.rewrite_text(document_text, {"document_id": document_id})
+                processing_times['document_rewriting'] = time.time() - phase_start
+
+                # Phase 3: Hybrid Extraction (NER + LLM)
                 await self._notify_progress("Hybrid entity extraction", 0.3)
                 phase_start = time.time()
-                
-                # Extract text for analysis
-                document_text = self._extract_text_from_result(document_result)
-                
-                # Run hybrid extraction
+
+                document_text = rewrite_res.corrected_text
+
                 hybrid_result = await self.hybrid_extractor.extract_hybrid(
                     document_text, document_id, enable_targeted=True
                 )
@@ -178,7 +186,7 @@ class RealTimeAnalysisWorkflow:
                 await self._notify_progress("Ontology extraction", 0.5)
                 phase_start = time.time()
                 
-                legal_document = self._create_legal_document(document_result, document_path, document_id)
+                legal_document = self._create_legal_document(document_result, document_path, document_id, text_override=document_text)
                 ontology_result = await self.ontology_extractor.process_document(legal_document)
                 processing_times['ontology_extraction'] = time.time() - phase_start
                 
@@ -542,14 +550,14 @@ class RealTimeAnalysisWorkflow:
         else:
             return ""
     
-    def _create_legal_document(self, result, document_path: str, document_id: str):
+    def _create_legal_document(self, result, document_path: str, document_id: str, text_override: Optional[str] = None):
         """Create legal document object for ontology extraction."""
         from ..core.types import LegalDocument
-        
+
         return LegalDocument(
             id=document_id,
             file_path=document_path,
-            content=self._extract_text_from_result(result),
+            content=text_override or self._extract_text_from_result(result),
             metadata={'processing_result': result}
         )
     
