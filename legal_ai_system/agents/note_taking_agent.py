@@ -12,19 +12,19 @@ from uuid import uuid4
 from dataclasses import dataclass, field, asdict # Added
 
 # Core imports from the new structure
-from ...core.base_agent import BaseAgent, AgentResult # AgentResult is already generic
-from ...core.llm_providers import LLMManager, LLMProviderError
-from ...core.unified_exceptions import AgentExecutionError, MemoryManagerError
-from ...core.detailed_logging import LogCategory
+from ..core.base_agent import BaseAgent, AgentResult # AgentResult is already generic
+from ..core.llm_providers import LLMManager, LLMProviderError
+from ..core.unified_exceptions import AgentExecutionError, MemoryManagerError
+from ..core.detailed_logging import LogCategory
 
-from ...config.agent_unified_config import create_agent_memory_mixin
-from ...memory.unified_memory_manager import MemoryType
+from ..core.agent_unified_config import create_agent_memory_mixin
+from ..core.unified_memory_manager import MemoryType
 
 # Create memory mixin for agents
 MemoryMixin = create_agent_memory_mixin()
 
 # Assuming UnifiedMemoryManager is the service for memory
-from ...memory.unified_memory_manager import UnifiedMemoryManager
+from ..core.unified_memory_manager import UnifiedMemoryManager
 
 # Logger will be inherited from BaseAgent.
 

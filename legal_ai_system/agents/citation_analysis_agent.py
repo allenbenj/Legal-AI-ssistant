@@ -13,15 +13,15 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from collections import defaultdict
 
-from ...core.base_agent import BaseAgent, ProcessingResult
-from ...utils.ontology import LegalEntityType # Example, not strictly used here but good for context
-from ...core.llm_providers import LLMManager, LLMProviderError, LLMProviderEnum
-from ...core.model_switcher import ModelSwitcher, TaskComplexity # Assuming ModelSwitcher service
-from ...core.unified_exceptions import AgentProcessingError
-from ...core.detailed_logging import LogCategory
+from ..core.base_agent import BaseAgent, ProcessingResult
+from ..utils.ontology import LegalEntityType # Example, not strictly used here but good for context
+from ..core.llm_providers import LLMManager, LLMProviderError, LLMProviderEnum
+from ..core.model_switcher import ModelSwitcher, TaskComplexity # Assuming ModelSwitcher service
+from ..core.unified_exceptions import AgentProcessingError
+from ..core.detailed_logging import LogCategory
 
-from ...config.agent_unified_config import create_agent_memory_mixin
-from ...memory.unified_memory_manager import MemoryType
+from ..core.agent_unified_config import create_agent_memory_mixin
+from ..core.unified_memory_manager import MemoryType
 
 # Create memory mixin for agents
 MemoryMixin = create_agent_memory_mixin()

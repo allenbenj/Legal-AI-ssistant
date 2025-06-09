@@ -19,23 +19,23 @@ from spacy.tokens import Doc as SpacyDoc
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity # Optional, if scikit-learn is available
 
-from ...core.base_agent import BaseAgent, ProcessingResult
-from ...core.models import LegalDocument
-from ...core.detailed_logging import LogCategory # Assuming detailed_logger setup
+from ..core.base_agent import BaseAgent, ProcessingResult
+from ..core.models import LegalDocument
+from ..core.detailed_logging import LogCategory # Assuming detailed_logger setup
 
-from ...config.agent_unified_config import create_agent_memory_mixin
-from ...memory.unified_memory_manager import MemoryType
+from ..core.agent_unified_config import create_agent_memory_mixin
+from ..core.unified_memory_manager import MemoryType
 
 # Create memory mixin for agents
 MemoryMixin = create_agent_memory_mixin()
 
-from ...utils.ontology import (
+from ..utils.ontology import (
     LegalEntityType, LegalRelationshipType,
     get_entity_types_for_prompt, get_relationship_types_for_prompt,
     get_extraction_prompt,
     get_entity_type_by_label, get_relationship_type_by_label
 )
-from ...core.unified_exceptions import AgentProcessingError, ConfigurationError
+from ..core.unified_exceptions import AgentProcessingError, ConfigurationError
 
 
 @dataclass

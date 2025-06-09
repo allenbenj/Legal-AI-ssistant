@@ -30,12 +30,12 @@ try:
 except ImportError:
     # Fallback for relative imports
     try:
-        from ...core.base_agent import BaseAgent, ProcessingResult
-        from ...core.llm_providers import LLMManager, LLMProviderError, LLMProviderEnum
-        from ...core.unified_exceptions import AgentExecutionError  # Fixed class name
-        from ...core.detailed_logging import LogCategory
-        from ...config.agent_unified_config import create_agent_memory_mixin
-        from ...memory.unified_memory_manager import MemoryType
+        from ..core.base_agent import BaseAgent, ProcessingResult
+        from ..core.llm_providers import LLMManager, LLMProviderError, LLMProviderEnum
+        from ..core.unified_exceptions import AgentExecutionError  # Fixed class name
+        from ..core.detailed_logging import LogCategory
+        from ..core.agent_unified_config import create_agent_memory_mixin
+        from ..core.unified_memory_manager import MemoryType
     except ImportError:
         # Final fallback - create minimal classes
         class BaseAgent:
