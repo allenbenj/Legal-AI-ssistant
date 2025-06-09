@@ -12,6 +12,11 @@ import logging
 from dataclasses import dataclass, asdict
 from contextlib import contextmanager
 
+from legal_ai_system.agents.violation_review import (
+    ViolationReviewEntry,
+    ViolationReviewManager,
+)
+
 logger = logging.getLogger(__name__)
 
 @dataclass
@@ -66,11 +71,14 @@ class GraphEdge:
 
 class DatabaseManager:
     """Manages SQLite database operations for the GUI"""
-    
+
     def __init__(self, db_path: str = "legal_ai_gui.db"):
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._initialize_database()
+        # Specialized manager for violation review operations
+        review_db = self.db_path.with_name("violation_review.db")
+        self.violation_manager = ViolationReviewManager(str(review_db))
     
     def _initialize_database(self):
         """Initialize database with required tables"""
@@ -196,100 +204,94 @@ class DatabaseManager:
     
     # Violation management methods
     def save_violation(self, violation: ViolationRecord) -> bool:
-        """Save a violation record to the database"""
+        """Persist a violation using :class:`ViolationReviewManager`."""
         try:
-            with self._get_connection() as conn:
-                conn.execute("""
-                    INSERT OR REPLACE INTO violations (
-                        id, document_id, violation_type, severity, status,
-                        description, confidence, detected_time, reviewed_by,
-                        review_time, comments
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    violation.id, violation.document_id, violation.violation_type,
-                    violation.severity, violation.status, violation.description,
-                    violation.confidence, violation.detected_time, violation.reviewed_by,
-                    violation.review_time, violation.comments
-                ))
-                conn.commit()
-                return True
+            entry = ViolationReviewEntry(
+                id=violation.id,
+                case_id=violation.document_id,
+                actor=violation.reviewed_by or "unknown",
+                violation_type=violation.violation_type,
+                description=violation.description,
+                status=violation.status,
+                created_at=violation.detected_time.isoformat(),
+                updated_at=(violation.review_time or violation.detected_time).isoformat(),
+                metadata={
+                    "confidence": violation.confidence,
+                    "severity": violation.severity,
+                    "comments": violation.comments,
+                },
+            )
+            self.violation_manager.insert_violation(entry)
+            return True
         except Exception as e:
             logger.error(f"Failed to save violation: {e}")
             return False
     
     def get_violations(self, filters: Optional[Dict[str, Any]] = None) -> List[ViolationRecord]:
-        """Retrieve violations with optional filters"""
+        """Retrieve violations stored via :class:`ViolationReviewManager`."""
         try:
-            query = "SELECT * FROM violations WHERE 1=1"
-            params = []
-            
-            if filters:
-                if "status" in filters and filters["status"]:
-                    placeholders = ",".join(["?" for _ in filters["status"]])
-                    query += f" AND status IN ({placeholders})"
-                    params.extend(filters["status"])
-                
-                if "severity" in filters and filters["severity"]:
-                    placeholders = ",".join(["?" for _ in filters["severity"]])
-                    query += f" AND severity IN ({placeholders})"
-                    params.extend(filters["severity"])
-                
-                if "violation_type" in filters and filters["violation_type"]:
-                    placeholders = ",".join(["?" for _ in filters["violation_type"]])
-                    query += f" AND violation_type IN ({placeholders})"
-                    params.extend(filters["violation_type"])
-                
-                if "min_confidence" in filters:
-                    query += " AND confidence >= ?"
-                    params.append(filters["min_confidence"])
-                
-                if "start_date" in filters:
-                    query += " AND detected_time >= ?"
-                    params.append(filters["start_date"])
-                
-                if "end_date" in filters:
-                    query += " AND detected_time <= ?"
-                    params.append(filters["end_date"])
-            
-            query += " ORDER BY detected_time DESC"
-            
-            with self._get_connection() as conn:
-                cursor = conn.execute(query, params)
-                rows = cursor.fetchall()
-                
-                violations = []
-                for row in rows:
-                    violation = ViolationRecord(
-                        id=row["id"],
-                        document_id=row["document_id"],
-                        violation_type=row["violation_type"],
-                        severity=row["severity"],
-                        status=row["status"],
-                        description=row["description"],
-                        confidence=row["confidence"],
-                        detected_time=datetime.fromisoformat(row["detected_time"]) if isinstance(row["detected_time"], str) else row["detected_time"],
-                        reviewed_by=row["reviewed_by"],
-                        review_time=datetime.fromisoformat(row["review_time"]) if row["review_time"] and isinstance(row["review_time"], str) else row["review_time"],
-                        comments=row["comments"]
-                    )
-                    violations.append(violation)
-                
-                return violations
+            entries = self.violation_manager.fetch_violations(
+                case_id=filters.get("document_id") if filters else None,
+                status=filters.get("status") if filters and isinstance(filters.get("status"), str) else None,
+            )
+
+            violations: List[ViolationRecord] = []
+            for ent in entries:
+                metadata = ent.metadata or {}
+                try:
+                    detected_time = datetime.fromisoformat(ent.created_at)
+                except Exception:
+                    detected_time = datetime.utcnow()
+
+                try:
+                    review_time = datetime.fromisoformat(ent.updated_at)
+                except Exception:
+                    review_time = None
+
+                record = ViolationRecord(
+                    id=ent.id,
+                    document_id=ent.case_id,
+                    violation_type=ent.violation_type,
+                    severity=metadata.get("severity", "LOW"),
+                    status=ent.status,
+                    description=ent.description,
+                    confidence=metadata.get("confidence", 0.0),
+                    detected_time=detected_time,
+                    reviewed_by=ent.actor,
+                    review_time=review_time,
+                    comments=metadata.get("comments"),
+                )
+                # Filter by severity, type, etc., if provided
+                if filters:
+                    if filters.get("severity") and record.severity not in filters["severity"]:
+                        continue
+                    if filters.get("violation_type") and record.violation_type not in filters["violation_type"]:
+                        continue
+                    if filters.get("min_confidence") and record.confidence < filters["min_confidence"]:
+                        continue
+                violations.append(record)
+
+            # Sort by detected_time descending like original
+            violations.sort(key=lambda v: v.detected_time, reverse=True)
+            return violations
         except Exception as e:
             logger.error(f"Failed to retrieve violations: {e}")
             return []
     
     def update_violation_status(self, violation_id: str, status: str, reviewed_by: str, comments: Optional[str] = None) -> bool:
-        """Update violation status and review information"""
+        """Update violation status via :class:`ViolationReviewManager`."""
         try:
-            with self._get_connection() as conn:
-                conn.execute("""
-                    UPDATE violations 
-                    SET status = ?, reviewed_by = ?, review_time = ?, comments = ?
-                    WHERE id = ?
-                """, (status, reviewed_by, datetime.now(), comments, violation_id))
-                conn.commit()
-                return conn.total_changes > 0
+            success = self.violation_manager.update_violation_status(violation_id, status)
+            if success and comments:
+                entries = self.violation_manager.fetch_violations()
+                entry = next((e for e in entries if e.id == violation_id), None)
+                if entry:
+                    meta = entry.metadata or {}
+                    meta["comments"] = comments
+                    entry.metadata = meta
+                    entry.updated_at = datetime.utcnow().isoformat()
+                    self.violation_manager.insert_violation(entry)
+            return success
         except Exception as e:
             logger.error(f"Failed to update violation status: {e}")
             return False
@@ -681,3 +683,4 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Failed to cleanup old data: {e}")
             return False
+

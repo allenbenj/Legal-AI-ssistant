@@ -224,7 +224,7 @@ addopts = [
     "--cov-report=html",
     "--cov-report=xml",
 ]
-# Only run tests inside the main package
+
 testpaths = ["legal_ai_system/tests"]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
