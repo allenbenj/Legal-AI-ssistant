@@ -38,6 +38,8 @@ faiss-cpu = "^1.7.0"
 lancedb = "^0.5.0"
 neo4j = "^5.0.0"
 sqlite-utils = "^3.34.0"
+asyncpg = "^0.28.0"
+aioredis = "^2.0.0"
 
 # Document Processing
 PyMuPDF = "^1.23.0"

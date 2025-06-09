@@ -47,6 +47,8 @@ pypdf>=3.15.0
 faiss-cpu>=1.7.0
 lancedb>=0.5.0
 sqlite-utils>=3.34.0
+asyncpg>=0.28.0
+aioredis>=2.0.0
 
 # GUI Framework
 PyQt6>=6.5.0

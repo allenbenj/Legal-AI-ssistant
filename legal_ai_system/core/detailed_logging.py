@@ -107,6 +107,11 @@ class DetailedLogger:
         if not self.logger.handlers:  # Configure only if no handlers are present
             self._configure_logger()
 
+    def getChild(self, suffix: str) -> "DetailedLogger":
+        """Return a child logger with the same category."""
+        child_name = f"{self.name}.{suffix}"
+        return get_detailed_logger(child_name, self.category)
+
     def _configure_logger(self):
         """Configure the underlying logger with multiple handlers"""
         self.logger.setLevel(LogLevel.TRACE.value)  # Set level for the logger instance
