@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any
+import asyncio
 
-from langgraph.graph import BaseNode
+try:  # pragma: no cover - optional dependency
+    from langgraph.graph import BaseNode
+except Exception:  # ImportError or other issues if langgraph not installed
+    class BaseNode:  # type: ignore
+        """Fallback BaseNode when LangGraph is unavailable."""
+        pass
 from ..services.integration_service import (
     LegalAIIntegrationService,
     create_integration_service,
@@ -27,7 +32,10 @@ class AnalysisNode(BaseNode):
     def __call__(self, input_text: str) -> str:
         if not self.service or not hasattr(self.service, "analyze_text"):
             return f"Analysis not available for {self.topic}: {input_text[:30]}"
-        return self.service.analyze_text(input_text, topic=self.topic)
+        result = self.service.analyze_text(input_text, topic=self.topic)
+        if asyncio.iscoroutine(result):
+            result = asyncio.run(result)
+        return result
 
 
 class SummaryNode(BaseNode):
@@ -44,6 +52,9 @@ class SummaryNode(BaseNode):
     def __call__(self, input_text: str) -> str:
         if not self.service or not hasattr(self.service, "summarize_text"):
             return input_text[:200]
-        return self.service.summarize_text(input_text)
+        result = self.service.summarize_text(input_text)
+        if asyncio.iscoroutine(result):
+            result = asyncio.run(result)
+        return result
 
 __all__ = ["AnalysisNode", "SummaryNode"]
