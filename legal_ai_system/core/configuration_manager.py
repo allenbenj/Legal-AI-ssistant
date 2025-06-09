@@ -5,39 +5,22 @@ Configuration Manager - Centralized Configuration Management
 Provides a service-oriented interface to the Legal AI System configuration.
 """
 
-from typing import Any, Dict, Optional, List, Union
+from typing import Any, Dict, Optional, Union
 from pathlib import Path
+from datetime import datetime
+from enum import Enum
 import os
-import json # For serializing complex objects in logs if needed
 import sys
 
 # Import detailed logging system
 from .detailed_logging import get_detailed_logger, LogCategory, detailed_log_function
 
 # Import configuration settings
-try:
-    # This assumes settings.py is in ../config/ relative to this file (core/)
-    from ..config.settings import settings as global_settings, LegalAISettings, get_db_url, get_vector_store_path, is_supported_file
-except ImportError:
-    # Fallback for scenarios where the relative import might fail (e.g., direct script execution or tests)
-    # This might happen if the PYTHONPATH isn't set up as expected for the new structure yet.
-    # For robustness in a large system, consider making imports absolute from the project root.
-    # e.g., from legal_ai_system.config.settings import ...
-    # For now, let's assume the relative import works in the final structure.
-    # If `settings` is an object, `global_settings` is a good alias.
-    # If `settings` is a module, then `from ..config import settings as global_settings_module` might be needed.
-    # Given the original code, `settings` is an instance of `LegalAISettings`.
-    class LegalAISettings: # Dummy for fallback
-        def __init__(self, **data): pass
-        def __getattr__(self, name): return None 
-    
-    global_settings = LegalAISettings() # Dummy instance
-    
-    def get_db_url(db_type: str) -> str: return ""
-    def get_vector_store_path(store_type: str) -> Path: return Path(".")
-    def is_supported_file(file_path: Union[str,Path]) -> bool: return False
-    
-    print("WARNING: ConfigurationManager using fallback imports for settings. Ensure correct project structure.", file=sys.stderr)
+from ..config.settings import (
+    settings as global_settings,
+    LegalAISettings,
+)
+from .constants import Constants
 
 
 # Initialize logger
@@ -204,10 +187,11 @@ class ConfigurationManager:
         """Get database configuration."""
         config_manager_logger.trace("Retrieving database configuration")
         
+        data_dir = Path(self._settings.data_dir or Path('.'))
         config = {
-            'sqlite_path': str(self.get('sqlite_path', self._settings.data_dir / "databases/legal_ai.db")),
-            'memory_db_path': str(self.get('memory_db_path', self._settings.data_dir / "databases/memory.db")),
-            'violations_db_path': str(self.get('violations_db_path', self._settings.data_dir / "databases/violations.db")),
+            'sqlite_path': str(self.get('sqlite_path', data_dir / "databases/legal_ai.db")),
+            'memory_db_path': str(self.get('memory_db_path', data_dir / "databases/memory.db")),
+            'violations_db_path': str(self.get('violations_db_path', data_dir / "databases/violations.db")),
             'neo4j_uri': self.get('neo4j_uri', "bolt://localhost:7687"),
             'neo4j_user': self.get('neo4j_user', "neo4j"),
             'neo4j_password': self.get('neo4j_password', "neo4j"), # Default pass, should be in .env
@@ -222,13 +206,14 @@ class ConfigurationManager:
         """Get vector store configuration."""
         config_manager_logger.trace("Retrieving vector store configuration")
         
+        data_dir = Path(self._settings.data_dir or Path('.'))
         config = {
             'type': self.get('vector_store_type', 'hybrid'),
             'embedding_model': self.get('embedding_model', "all-MiniLM-L6-v2"),
             'embedding_dim': self.get('embedding_dim', Constants.Performance.EMBEDDING_DIMENSION),
-            'faiss_index_path': str(self.get('faiss_index_path', self._settings.data_dir / "vectors/faiss_index.bin")),
-            'faiss_metadata_path': str(self.get('faiss_metadata_path', self._settings.data_dir / "vectors/faiss_metadata.json")),
-            'lance_db_path': str(self.get('lance_db_path', self._settings.data_dir / "vectors/lancedb")),
+            'faiss_index_path': str(self.get('faiss_index_path', data_dir / "vectors/faiss_index.bin")),
+            'faiss_metadata_path': str(self.get('faiss_metadata_path', data_dir / "vectors/faiss_metadata.json")),
+            'lance_db_path': str(self.get('lance_db_path', data_dir / "vectors/lancedb")),
             'lance_table_name': self.get('lance_table_name', "documents")
         }
         
@@ -277,15 +262,15 @@ class ConfigurationManager:
         
         # These paths are now set in LegalAISettings.__init__ relative to base_dir
         directories = {
-            'base_dir': self._settings.base_dir,
-            'data_dir': self._settings.data_dir,
-            'documents_dir': self._settings.documents_dir,
-            'models_dir': self._settings.models_dir,
-            'logs_dir': self._settings.logs_dir,
+            'base_dir': Path(self._settings.base_dir),
+            'data_dir': Path(self._settings.data_dir),
+            'documents_dir': Path(self._settings.documents_dir),
+            'models_dir': Path(self._settings.models_dir),
+            'logs_dir': Path(self._settings.logs_dir),
             # Add other important dirs if they are part of settings
-            'faiss_index_dir': self._settings.faiss_index_path.parent,
-            'lance_db_dir': self._settings.lance_db_path, # LanceDB path is a directory
-            'sqlite_db_dir': self._settings.sqlite_path.parent,
+            'faiss_index_dir': Path(self._settings.faiss_index_path).parent,
+            'lance_db_dir': Path(self._settings.lance_db_path),  # LanceDB path is a directory
+            'sqlite_db_dir': Path(self._settings.sqlite_path).parent,
         }
         
         for name, path_obj in directories.items():
@@ -367,11 +352,13 @@ class ConfigurationManager:
                 if isinstance(value, Path): value = str(value)
                 elif isinstance(value, Enum): value = value.value
                 settings_dict[key] = value
-        elif hasattr(self._settings, '__fields__'): # Pydantic V1
-             for key in self._settings.__fields__.keys():
+        elif hasattr(self._settings, '__fields__'):  # Pydantic V1
+            for key in self._settings.__fields__.keys():
                 value = self.get(key)
-                if isinstance(value, Path): value = str(value)
-                elif isinstance(value, Enum): value = value.value
+                if isinstance(value, Path):
+                    value = str(value)
+                elif isinstance(value, Enum):
+                    value = value.value
                 settings_dict[key] = value
         else: # Fallback for non-Pydantic or very old Pydantic
             for key in dir(self._settings):
