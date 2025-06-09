@@ -7,28 +7,28 @@ Integrates optional dependencies gracefully and uses shared components.
 """
 
 
-
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import io
 import mimetypes
 import re
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
+from ..core.agent_unified_config import create_agent_memory_mixin
 from ..core.base_agent import BaseAgent
+from ..core.constants import Constants
 from ..core.detailed_logging import (
     LogCategory,
     detailed_log_function,
     get_detailed_logger,
 )
-from ..core.agent_unified_config import create_agent_memory_mixin
 from ..core.unified_exceptions import AgentExecutionError, DocumentProcessingError
-from ..core.constants import Constants
 from ..utils.dependency_manager import DependencyManager
 from ..utils.document_utils import DocumentChunker, LegalDocumentClassifier
 
@@ -429,7 +429,9 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
                 ),  # 'basic' or 'full'
             }
 
-            handler_result = await handler_method(file_path, processing_options)
+            handler_result = await asyncio.to_thread(
+                handler_method, file_path, processing_options
+            )
 
             # Populate output from handler result
             output.text_content = handler_result.get("text_content")
@@ -518,7 +520,6 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
 
     # --- ASYNC WRAPPERS FOR HANDLERS ---
 
-
     # --- SYNCHRONOUS FILE PROCESSING LOGIC ---
     def _common_text_cleaning(self, text: Optional[str]) -> Optional[str]:
         if not text:
@@ -559,7 +560,7 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
 
             for i in range(page_count):
                 page = doc.load_page(i)
-                page_text = page.get_text(
+                page_text = page.get_text(  # type: ignore[attr-defined]
                     "text", sort=True
                 ).strip()  # Added sort=True for reading order
 
@@ -575,8 +576,10 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
                             f"Page {i+1}: Attempting OCR (Reason: {'forced' if options.get('force_ocr') else 'no text layer'})."
                         )
                         try:
-                            pix = page.get_pixmap(dpi=options.get("ocr_dpi", 300))
-                            img_bytes = pix.tobytes(
+                            pix = page.get_pixmap(  # type: ignore[attr-defined]
+                                dpi=options.get("ocr_dpi", 300)
+                            )
+                            img_bytes = pix.tobytes(  # type: ignore[attr-defined]
                                 "png"
                             )  # Get bytes in a common format
                             pil_img = Image.open(io.BytesIO(img_bytes))  # type: ignore
@@ -1103,7 +1106,9 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
                         # Basic table text extraction (no structure preserved here, add to notes)
                         table = shape.table
                         table_text_content = []
-                        table_text_content.append(" | ".join(row_cells))
+                        for row in table.rows:
+                            row_cells = [cell.text.strip() for cell in row.cells]
+                            table_text_content.append(" | ".join(row_cells))
                         if table_text_content:
                             slide_texts.append(
                                 f"Table Content: {'; '.join(table_text_content)}"
@@ -1141,7 +1146,7 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
         file_logger.info(f"Processing Image for OCR (sync): {file_path.name}")
         notes = []
         text_content = ""
-        extracted_meta = {"source_format": "image"}
+        extracted_meta: Dict[str, Any] = {"source_format": "image"}
 
         if not (
             dep_manager.is_available("pytesseract") and dep_manager.is_available("PIL")
@@ -1153,14 +1158,13 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
         try:
             pil_img = Image.open(str(file_path))  # type: ignore
             # Store basic image metadata
-            extracted_meta.update(
-                {
-                    "format": pil_img.format,
-                    "mode": pil_img.mode,
-                    "size": pil_img.size,
-                    "info": pil_img.info,
-                }
-            )  # pil_img.info can be large
+            meta_info: Dict[str, Any] = {
+                "format": pil_img.format,
+                "mode": pil_img.mode,
+                "size": pil_img.size,
+                "info": pil_img.info,
+            }
+            extracted_meta.update(meta_info)  # pil_img.info can be large
 
             # Pre-processing (optional, can improve OCR)
             # img = img.convert('L') # Convert to grayscale
@@ -1208,7 +1212,7 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
             "processing_notes": notes,
         }
 
-async def health_check(self) -> Dict[str, Any]:  # Public method
+    async def health_check(self) -> Dict[str, Any]:  # Public method
         base_status = await super().health_check()
         base_status["agent_name"] = self.name
         base_status["config_summary"] = self.get_config_summary_params()
