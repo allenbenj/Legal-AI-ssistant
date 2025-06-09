@@ -6,6 +6,8 @@ Part of the seven-agent file organization system architecture.
 
 import structlog
 from typing import Any, Dict, List, Optional, Set
+import json
+from functools import lru_cache
 from dataclasses import dataclass, field
 from datetime import datetime
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -119,7 +121,9 @@ class KnowledgeBaseAgent(BaseAgent):
             'duplicates_merged': 0,
             'organizational_structures_created': 0,
             'analytical_insights_generated': 0,
-            'average_confidence': 0.0
+            'average_confidence': 0.0,
+            'confidence_sum': 0.0,
+            'confidence_samples': 0
         }
         
         # Structured logging initialization
@@ -219,8 +223,9 @@ class KnowledgeBaseAgent(BaseAgent):
     
     def _generate_cache_key(self, entities: List[Dict], metadata: Dict) -> str:
         """Generate cache key for entity resolution results."""
-        entity_hash = hashlib.md5(str(sorted([e.get("name", "") for e in entities])).encode()).hexdigest()
-        metadata_hash = hashlib.md5(str(sorted(metadata.items())).encode()).hexdigest()
+        entity_names = sorted(e.get("name", "") for e in entities)
+        entity_hash = hashlib.md5(json.dumps(entity_names, sort_keys=True).encode()).hexdigest()
+        metadata_hash = hashlib.md5(json.dumps(metadata, sort_keys=True, default=str).encode()).hexdigest()
         return f"kb_resolution_{entity_hash}_{metadata_hash}"
     
     @knowledge_base_breaker
@@ -309,7 +314,9 @@ class KnowledgeBaseAgent(BaseAgent):
         
         return None
     
-    def _calculate_name_similarity(self, name1: str, name2: str) -> float:
+    @staticmethod
+    @lru_cache(maxsize=1024)
+    def _calculate_name_similarity(name1: str, name2: str) -> float:
         """Calculate similarity between two entity names."""
         # Simple Jaccard similarity for now
         set1 = set(name1.split())
@@ -462,15 +469,15 @@ class KnowledgeBaseAgent(BaseAgent):
     def _update_metrics(self, result: EntityResolutionResult) -> None:
         """Update agent metrics for observability."""
         self.metrics['entities_processed'] += result.resolution_metrics.get("input_entities", 0)
-        
-        # Update running average confidence
+
+        # Update running average confidence using cumulative sum for accuracy
         if result.resolved_entities:
             total_confidence = sum(e.confidence_score for e in result.resolved_entities)
-            avg_confidence = total_confidence / len(result.resolved_entities)
-            
-            current_avg = self.metrics['average_confidence']
-            total_processed = self.metrics['entities_processed']
-            self.metrics['average_confidence'] = ((current_avg * (total_processed - 1)) + avg_confidence) / total_processed
+            self.metrics['confidence_sum'] += total_confidence
+            self.metrics['confidence_samples'] += len(result.resolved_entities)
+            self.metrics['average_confidence'] = (
+                self.metrics['confidence_sum'] / self.metrics['confidence_samples']
+            )
     
     # Health check method (design.txt requirement)
     async def health_check(self) -> Dict[str, Any]:
