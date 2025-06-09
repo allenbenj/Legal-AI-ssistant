@@ -10,34 +10,22 @@ import asyncio
 import time
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any, Set, Tuple
-from collections import Counter, defaultdict
+from collections import defaultdict
 from dataclasses import dataclass, field, asdict
 
 from ..core.base_agent import BaseAgent
-from ..core.detailed_logging import LogCategory
-
 from ..core.agent_unified_config import create_agent_memory_mixin
-from ..core.unified_memory_manager import MemoryType
 
 # Create memory mixin for agents
 MemoryMixin = create_agent_memory_mixin()
 
 from ..core.llm_providers import LLMManager, LLMProviderError, LLMProviderEnum
-from ..core.models import LegalDocument, ProcessingResult
 from ..core.unified_exceptions import (
-    AgentError,
-    ConfigurationError,
     AgentExecutionError,
 )
 
 AgentProcessingError = AgentExecutionError
 from ..core.unified_memory_manager import UnifiedMemoryManager  # For UMM access (if available)
-from ..utils.ontology import (
-    LegalEntityType, LegalRelationshipType,
-    get_entity_types_for_prompt, get_relationship_types_for_prompt,
-    get_extraction_prompt,
-    get_entity_type_by_label, get_relationship_type_by_label
-)
 
 @dataclass
 class AutoTaggingOutput:
@@ -231,8 +219,6 @@ class AutoTaggingAgent(BaseAgent, MemoryMixin):
         final_tags_after_learning_filter: List[str] = []
         for tag in all_tags_set:
             stats = self.tag_accuracy_scores_cache.get(tag, {})
-            correct_count = stats.get("correct", 0)
-            incorrect_count = stats.get("incorrect", 0)
             # Simple heuristic: if incorrect > correct significantly, maybe don't suggest it as strongly.
             # For now, we'll include all and let feedback refine.
             # A more advanced filter could use these scores to adjust confidence or prune.
@@ -385,7 +371,7 @@ class AutoTaggingAgent(BaseAgent, MemoryMixin):
                     tag_candidate = re.sub(r'\s+', '_', tag_candidate)
                     tag_candidate = re.sub(r'[^a-z0-9_:]', '', tag_candidate) # Allow colons for existing prefixes
                     if tag_candidate and len(tag_candidate) > 2 and tag_candidate not in existing_tags:
-                         # Check if tag is already effectively covered by an existing prefixed tag
+                        # Check if tag is already effectively covered by an existing prefixed tag
                         is_covered = any(ex_tag.endswith(f":{tag_candidate}") or tag_candidate.endswith(f":{ex_tag.split(':')[-1]}") for ex_tag in existing_tags)
                         if not is_covered:
                             llm_formatted_tags.append(f"llm:{tag_candidate}") # Prefix LLM-generated tags
