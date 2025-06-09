@@ -5,11 +5,13 @@ from __future__ import annotations
 import asyncio
 
 try:  # pragma: no cover - optional dependency
-    from langgraph.graph import BaseNode
+    from langgraph.graph import BaseNode as LangGraphBaseNode
 except Exception:  # ImportError or other issues if langgraph not installed
-    class BaseNode:  # type: ignore
-        """Fallback BaseNode when LangGraph is unavailable."""
-        pass
+    # Fallback to ``object`` so subclasses remain valid Python classes.
+    LangGraphBaseNode = object  # type: ignore[misc]
+
+# Alias used for subclassing regardless of import success
+BaseNode = LangGraphBaseNode
 from ..services.integration_service import (
     LegalAIIntegrationService,
     create_integration_service,
