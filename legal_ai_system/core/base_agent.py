@@ -30,6 +30,7 @@ from datetime import datetime
 from enum import Enum
 
 from ..core.constants import Constants
+from ..core.detailed_logging import get_detailed_logger, LogCategory
 
 logger = logging.getLogger(__name__)
 
@@ -186,7 +187,8 @@ class BaseAgent(ABC):
         >>> result = await agent.process({"text": "content"})
     """
     
-    def __init__(self, service_container=None, name: Optional[str] = None) -> None:
+    def __init__(self, service_container=None, name: Optional[str] = None,
+                 agent_type: str = "base") -> None:
         """Initialize agent with service container for dependency injection.
         
         Args:
@@ -205,6 +207,9 @@ class BaseAgent(ABC):
             self.service_container = None
         
         self.name = name or self.__class__.__name__
+        self.agent_type = agent_type
+        # Detailed logger for the agent instance
+        self.logger = get_detailed_logger(self.name, LogCategory.AGENT)
         self.status = AgentStatus.IDLE
         self.task_queue: asyncio.Queue = asyncio.Queue()
         self.current_task: Optional[AgentTask] = None
@@ -225,7 +230,7 @@ class BaseAgent(ABC):
         self._processing = False
         self._shutdown = False
         
-        logger.info(f"Initialized agent: {self.name}")
+        self.logger.info("Initialized agent.")
     
     def _load_config(self) -> Dict[str, Any]:
         """Load agent-specific configuration from ConfigurationManager if available"""
@@ -320,6 +325,15 @@ class BaseAgent(ABC):
                 return self.service_container.get_service("workflow_state_manager")
             except Exception as e:
                 logger.warning(f"Failed to get workflow_state_manager: {e}")
+        return None
+
+    def _get_service(self, name: str) -> Any:
+        """Generic helper to retrieve a service by name."""
+        if self.service_container:
+            try:
+                return self.service_container.get_service(name)
+            except Exception as e:
+                self.logger.warning(f"Service '{name}' unavailable", parameters={'error': str(e)})
         return None
     
     # =================== AGENT PROCESSING METHODS ===================

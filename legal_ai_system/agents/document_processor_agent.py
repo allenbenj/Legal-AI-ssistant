@@ -21,19 +21,19 @@ from datetime import datetime, timezone
 from enum import Enum # Added Enum back for DocumentContentType
 
 # Core imports
-from ...core.base_agent import BaseAgent, ProcessingResult # Changed from AgentResult
-from ...core.detailed_logging import LogCategory, detailed_log_function, get_detailed_logger # Added get_detailed_logger
+from ..core.base_agent import BaseAgent, ProcessingResult
+from ..core.detailed_logging import LogCategory, detailed_log_function, get_detailed_logger
 
-from ...config.agent_unified_config import create_agent_memory_mixin
-from ...memory.unified_memory_manager import MemoryType
+from ..config.agent_unified_config import create_agent_memory_mixin
+from ..memory.unified_memory_manager import MemoryType
 
 # Create memory mixin for agents
 MemoryMixin = create_agent_memory_mixin()
 
-from ...core.unified_exceptions import AgentExecutionError, DocumentProcessingError
-from ...core.shared_components import DependencyManager, DocumentChunker, LegalDocumentClassifier # Assuming these are in core.shared_components
+from ..core.unified_exceptions import AgentExecutionError, DocumentProcessingError
+from ..core.shared_components import DependencyManager, DocumentChunker, LegalDocumentClassifier
 # Constants for default values
-from ...config.constants import Constants # Example, assuming you have a constants file
+from ..config.constants import Constants
 
 # Logger specifically for this file, can be aliased from self.logger in methods
 file_logger = get_detailed_logger("DocumentProcessorAgentFileOps", LogCategory.FILE_IO)
@@ -91,7 +91,7 @@ class DocumentContentType(Enum):
         return ext_map.get(ext.lower(), cls.UNKNOWN)
 
     @classmethod
-    deffrom_mimetype(cls, mime: Optional[str]) -> 'DocumentContentType':
+    def from_mimetype(cls, mime: Optional[str]) -> 'DocumentContentType':
         if not mime: return cls.UNKNOWN
         for member in cls:
             if member.value == mime:
@@ -139,7 +139,7 @@ class DocumentProcessingOutput:
         return data
 
 
-class DocumentProcessorAgent(BaseAgent):
+class DocumentProcessorAgent(BaseAgent, MemoryMixin):
     """
     Consolidated agent for processing various legal document formats.
     Extracts text, metadata, and basic structure. Handles optional dependencies.
@@ -215,12 +215,20 @@ class DocumentProcessorAgent(BaseAgent):
                 processing_strategy_used="unknown"
             )
         except FileNotFoundError:
-             self.logger.error(f"File not found at path: {file_path}")
-             # Return a minimal error output directly
-             error_output = DocumentProcessingOutput(file_path=str(file_path), file_name=file_path.name, file_size_bytes=0, document_content_type=DocumentContentType.UNKNOWN, processing_strategy_used="error")
-             error_output.errors.append(f"File not found: {file_path}")
-             error_output.processing_time_sec = round((datetime.now(timezone.utc) - start_time).total_seconds(), 3)
-             return error_output.to_dict()
+            self.logger.error(f"File not found at path: {file_path}")
+            # Return a minimal error output directly
+            error_output = DocumentProcessingOutput(
+                file_path=str(file_path),
+                file_name=file_path.name,
+                file_size_bytes=0,
+                document_content_type=DocumentContentType.UNKNOWN,
+                processing_strategy_used="error",
+            )
+            error_output.errors.append(f"File not found: {file_path}")
+            error_output.processing_time_sec = round(
+                (datetime.now(timezone.utc) - start_time).total_seconds(), 3
+            )
+            return error_output.to_dict()
 
 
         try:
@@ -315,10 +323,14 @@ class DocumentProcessorAgent(BaseAgent):
             output.errors.append(f"Unexpected critical error: {type(e).__name__} - {str(e)}")
         
         finally:
-            output.processing_time_sec = round((datetime.now(timezone.utc) - start_time).total_seconds(), 3)
+            output.processing_time_sec = round(
+                (datetime.now(timezone.utc) - start_time).total_seconds(), 3
+            )
             if output.errors:
-                 self.logger.warning(f"Processing for '{file_path.name}' completed with {len(output.errors)} error(s).", 
-                                    parameters={'first_error': output.errors[0] if output.errors else "N/A"})
+                self.logger.warning(
+                    f"Processing for '{file_path.name}' completed with {len(output.errors)} error(s).",
+                    parameters={'first_error': output.errors[0] if output.errors else "N/A"},
+                )
         
         return output.to_dict()
 
