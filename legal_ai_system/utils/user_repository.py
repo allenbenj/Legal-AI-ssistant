@@ -6,7 +6,12 @@ import json
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-import asyncpg
+try:
+    import asyncpg
+except ImportError as exc:  # pragma: no cover - optional dependency
+    raise ImportError(
+        "asyncpg is required for database operations. Install it via 'pip install asyncpg'."
+    ) from exc
 
 from legal_ai_system.core.detailed_logging import (
     LogCategory,
