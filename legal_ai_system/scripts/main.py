@@ -26,7 +26,7 @@ import strawberry  # type: ignore
 import uvicorn
 
 try:
-    from config.constants import Constants
+    from legal_ai_system.core.constants import Constants
 except Exception:  # pragma: no cover - fallback for incomplete environments
 
     class Constants:

@@ -88,7 +88,7 @@ try:
     from .constants import Constants
 except ImportError:
     # Fallback for when constants module is not available directly (e.g. script execution)
-    from legal_ai_system.config.constants import Constants
+    from legal_ai_system.core.constants import Constants
 
 
 class LegalAISettings(BaseSettings):
@@ -138,7 +138,7 @@ class LegalAISettings(BaseSettings):
         # Set embedding dimension from constants if available
         if self.embedding_dim == 384:  # Default fallback value
             try:
-                from legal_ai_system.config.constants import Constants
+                from legal_ai_system.core.constants import Constants
                 self.embedding_dim = Constants.Performance.EMBEDDING_DIMENSION
             except:
                 self.embedding_dim = 384  # Keep fallback
@@ -146,7 +146,7 @@ class LegalAISettings(BaseSettings):
 
         # Set values from constants if available
         try:
-            from legal_ai_system.config.constants import Constants
+            from legal_ai_system.core.constants import Constants
             if self.max_file_size_mb is None:
                 self.max_file_size_mb = Constants.Document.MAX_DOCUMENT_SIZE_MB
             if self.chunk_size is None:
