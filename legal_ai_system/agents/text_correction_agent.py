@@ -7,7 +7,6 @@ grammar correction, tone adjustment, role-based formatting, and legal writing
 style enhancement with context-aware improvements.
 """
 
-import asyncio
 import json
 # import logging # Replaced by detailed_logging
 from typing import Dict, List, Any, Optional
@@ -17,13 +16,11 @@ from datetime import datetime, timezone # Added timezone
 # Core imports from the new structure
 from ..core.base_agent import BaseAgent
 from ..utils.ontology import LegalEntityType # Assuming LegalEntityType is an Enum for role schema hints
-from ..core.llm_providers import LLMManager, LLMProviderError # Using LLMManager
+from ..core.llm_providers import LLMManager, LLMProviderError, LLMProviderEnum
 from ..core.model_switcher import ModelSwitcher, TaskComplexity
-from ..core.unified_exceptions import AgentExecutionError
-from ..core.detailed_logging import LogCategory # For logger category
 
 from ..core.agent_unified_config import create_agent_memory_mixin
-from ..core.unified_memory_manager import MemoryType
+from collections import defaultdict
 
 # Create memory mixin for agents
 MemoryMixin = create_agent_memory_mixin()
@@ -49,7 +46,7 @@ class TextCorrectionResult:
         return asdict(self)
 
 
-class TextCorrectionAgent(BaseAgent):
+class TextCorrectionAgent(BaseAgent, MemoryMixin):
     """
     Advanced text correction agent for legal documents.
     """
@@ -60,7 +57,9 @@ class TextCorrectionAgent(BaseAgent):
         
         # Get optimized Grok-Mini configuration for this agent
         self.llm_config = self.get_optimized_llm_config()
-        self.logger.info(f"TextCorrectionAgentAgent configured with model: {self.llm_config.get('llm_model', 'default')}")
+        self.logger.info(
+            f"TextCorrectionAgent configured with model: {self.llm_config.get('llm_model', 'default')}"
+        )
         self.llm_manager: Optional[LLMManager] = self.get_llm_manager()
         self.model_switcher: Optional[ModelSwitcher] = self._get_service("model_switcher")
 
@@ -204,13 +203,25 @@ Ensure high-quality corrections with confidence ≥{min_confidence}. Focus on pr
             for role_name_str in legal_roles_str_list:
                 try:
                     entity_type_enum_member = getattr(LegalEntityType, role_name_str, None)
-                    hint = entity_type_enum_member.value.prompt_hint if entity_type_enum_member else role_descriptions_map.get(role_name_str, f"Professional {role_name_str.lower()} language")
+                    hint = (
+                        entity_type_enum_member.value.prompt_hint
+                        if entity_type_enum_member
+                        else role_descriptions_map.get(
+                            role_name_str, f"Professional {role_name_str.lower()} language"
+                        )
+                    )
                     schema_lines.append(f"- {role_name_str}: {hint}")
                 except AttributeError:
-                     schema_lines.append(f"- {role_name_str}: {role_descriptions_map.get(role_name_str, 'Standard professional language.')}")
+                    schema_lines.append(
+                        f"- {role_name_str}: {role_descriptions_map.get(role_name_str, 'Standard professional language.')}"
+                    )
         else:
-            self.logger.warning("LegalEntityType ontology not available for building role schema.")
-            schema_lines = [f"- {role}: {desc}" for role, desc in role_descriptions_map.items()]
+            self.logger.warning(
+                "LegalEntityType ontology not available for building role schema."
+            )
+            schema_lines = [
+                f"- {role}: {desc}" for role, desc in role_descriptions_map.items()
+            ]
         return '\n'.join(schema_lines)
 
     def _parse_correction_response(self, response_content: str, original_text: str) -> Dict[str, Any]:
@@ -218,10 +229,14 @@ Ensure high-quality corrections with confidence ≥{min_confidence}. Focus on pr
         # ... (logic remains similar, ensure robust JSON parsing)
         try:
             json_content = response_content
-            if '```json' in response_content:
-                json_content = response_content.split('```json')[1].split('```')
-            elif '```' in response_content and response_content.strip().startswith('```') and response_content.strip().endswith('```'):
-                 json_content = response_content.strip()[3:-3]
+            if "```json" in response_content:
+                json_content = response_content.split("```json")[1].split("```")[0]
+            elif (
+                "```" in response_content
+                and response_content.strip().startswith("```")
+                and response_content.strip().endswith("```")
+            ):
+                json_content = response_content.strip()[3:-3]
             
             parsed_data = json.loads(json_content.strip())
             
