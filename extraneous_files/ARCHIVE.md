@@ -11,7 +11,7 @@ The following scripts were moved from `legal_ai_system/scripts` because they are
 - `document_processor_clean.py`
 - `fix_dependencies.py`
 - `grok_3_mini_setup.py`
-- `legal-ai-fixes.py`
+- `legal-ai-fixes.md`
 - `list_project_structure.ps1`
 - `main2.py`
 - `main_gui_backup.py`
