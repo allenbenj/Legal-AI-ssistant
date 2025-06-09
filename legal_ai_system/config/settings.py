@@ -11,7 +11,7 @@ from ..core.settings import (
     get_vector_store_path,
     is_supported_file,
     settings,
-)
+)  # noqa: F401 - re-exported for external use
 
 __all__ = [
     "LegalAISettings",
