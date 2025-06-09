@@ -129,9 +129,8 @@ class ConnectionPool:
             self.logger.error("Attempted to get PG connection, but pool is not initialized.")
             raise DatabaseError("PostgreSQL pool not initialized. Check configuration and logs.")
         
-        # Type hinting for connection might be tricky due to Pool.acquire() returning PoolConnectionProxy
-        # which is private. asyncpg.Connection is the actual connection type.
-        async with self.pg_pool.acquire() as connection: # type: asyncpg.Connection
+        # Type hinting for connection is tricky because Pool.acquire() returns a private proxy.
+        async with self.pg_pool.acquire() as connection:
             self.logger.trace("PostgreSQL connection acquired from pool.")
             yield connection
             self.logger.trace("PostgreSQL connection released back to pool.")
@@ -182,7 +181,7 @@ class TransactionManager:
         self.logger.debug("Starting new database transaction.")
         async with self.pool.get_pg_connection() as connection:
             # Start a new transaction block
-            pg_transaction = connection.transaction() # type: asyncpg.Transaction
+            pg_transaction = connection.transaction()
             await pg_transaction.start()
             self.logger.trace("PostgreSQL transaction started.", parameters={'transaction_id': id(pg_transaction)})
             try:
