@@ -16,7 +16,7 @@ import hashlib
 import uuid
 
 from ..core.base_agent import BaseAgent
-from ..core.performance import measure_performance, performance_tracker
+from ..core.performance import measure_performance
 from ..legacy_extras.modular_improvements import ProcessingCache
 from ..utils.error_recovery import ErrorRecovery
 
@@ -59,7 +59,7 @@ class ResolvedEntity:
 class EntityResolutionResult:
     """Results from entity resolution with organizational and analytical structure."""
     resolved_entities: List[ResolvedEntity]
-    resolution_metrics: Dict[str, int]
+    resolution_metrics: Dict[str, float]
     organizational_structure: Dict[str, Any]
     analytical_insights: Dict[str, Any]
     processing_time: float
@@ -163,7 +163,7 @@ class KnowledgeBaseAgent(BaseAgent):
             
             # Check cache first (performance optimization)
             cache_key = self._generate_cache_key(raw_entities, metadata)
-            cached_result = self.cache.get(document_id, cache_key)
+            cached_result = await self.cache.get(document_id, cache_key)
             if cached_result:
                 logger.info("knowledge_base_cache_hit", 
                            document_id=document_id,
@@ -187,7 +187,7 @@ class KnowledgeBaseAgent(BaseAgent):
             )
             
             # Cache the result
-            self.cache.set(document_id, cache_key, result.to_dict())
+            await self.cache.set(document_id, cache_key, result.to_dict())
             
             # Update metrics
             self._update_metrics(result)
