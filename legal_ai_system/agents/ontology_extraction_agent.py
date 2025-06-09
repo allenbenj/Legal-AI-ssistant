@@ -4,28 +4,25 @@ Ontology-driven legal entity and relationship extraction agent.
 Enhanced with externalized patterns, advanced deduplication, and coreference resolution.
 """
 
-import asyncio
 import json
 import re
 import uuid
 from datetime import datetime, timezone
-from typing import Dict, List, Any, Optional, Tuple, Set
+from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, asdict, field
 from pathlib import Path
 
 import yaml
 import spacy
-from spacy.tokens import Doc as SpacyDoc
+from spacy.tokens import Doc as SpacyDoc, Span, SpanGroup
 from spacy.language import Language
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity # Optional, if scikit-learn is available
 
 from ..core.base_agent import BaseAgent
 from ..core.models import LegalDocument, ProcessingResult
-from ..core.detailed_logging import LogCategory # Assuming detailed_logger setup
 
 from ..core.agent_unified_config import create_agent_memory_mixin
-from ..core.unified_memory_manager import MemoryType
 
 # Create memory mixin for agents
 MemoryMixin = create_agent_memory_mixin()
@@ -36,7 +33,7 @@ from ..utils.ontology import (
     get_extraction_prompt,
     get_entity_type_by_label, get_relationship_type_by_label
 )
-from ..core.unified_exceptions import AgentProcessingError, ConfigurationError
+from ..core.unified_exceptions import ConfigurationError
 
 
 @dataclass
@@ -279,9 +276,9 @@ class OntologyExtractionAgent(BaseAgent):
                         if not attributes: # Skip if no attributes were extracted
                             continue
 
-                        entity_id = self._generate_unique_id(entity_type_enum.label)
+                        entity_id = self._generate_unique_id(entity_type_enum.value.label)
                         extracted_entities.append(ExtractedEntity(
-                            entity_id=entity_id, entity_type=entity_type_enum.label,
+                            entity_id=entity_id, entity_type=entity_type_enum.value.label,
                             attributes=attributes, confidence=context_score,
                             source_text_snippet=match.group(0)[:150].strip(), # Increased snippet size
                             span=match.span()
@@ -336,14 +333,14 @@ class OntologyExtractionAgent(BaseAgent):
         num_mentions = 0
         for i, cluster_group_or_obj in enumerate(clusters_data):
             canonical_cluster_id = f"CORECL_{doc_id}_{i}"
-            mentions_in_cluster: List[spacy.tokens.Span] = []
+            mentions_in_cluster: List[Span] = []
 
-            if isinstance(cluster_group_or_obj, spacy.tokens.span_group.SpanGroup): # New spaCy SpanGroup
+            if isinstance(cluster_group_or_obj, SpanGroup): # New spaCy SpanGroup
                 mentions_in_cluster = list(cluster_group_or_obj) # Iterate over the SpanGroup
             elif hasattr(cluster_group_or_obj, 'mentions'): # neuralcoref.Cluster object
                 mentions_in_cluster = cluster_group_or_obj.mentions
-            elif isinstance(cluster_group_or_obj, list): # Some models might return List[List[Span]]
-                 mentions_in_cluster = cluster_group_or_obj
+            elif isinstance(cluster_group_or_obj, list):  # Some models might return List[List[Span]]
+                mentions_in_cluster = cluster_group_or_obj
             else:
                 self.logger.warning(f"Unexpected coref cluster data type: {type(cluster_group_or_obj)}. Skipping cluster {i}.")
                 continue
@@ -419,15 +416,15 @@ class OntologyExtractionAgent(BaseAgent):
                     chunk_span = entity_data.get('span', (0,0))
                     original_doc_span = (chunk_span[0] + chunk_offset, chunk_span[1] + chunk_offset)
 
-                    entity_id = entity_data.get('entity_id', self._generate_unique_id(f"{entity_type_enum.label}_LLM"))
+                    entity_id = entity_data.get('entity_id', self._generate_unique_id(f"{entity_type_enum.value.label}_LLM"))
                     
                     # Check coreference map for this span
                     canonical_id_from_coref = None
                     if mention_to_canonical_id_map:
-                         canonical_id_from_coref = mention_to_canonical_id_map.get(original_doc_span)
+                        canonical_id_from_coref = mention_to_canonical_id_map.get(original_doc_span)
                     
                     all_llm_entities.append(ExtractedEntity(
-                        entity_id=entity_id, entity_type=entity_type_enum.label,
+                        entity_id=entity_id, entity_type=entity_type_enum.value.label,
                         attributes=entity_data.get('attributes', {}), confidence=confidence,
                         source_text_snippet=entity_data.get('source_text_snippet', '')[:150].strip(),
                         span=original_doc_span,
@@ -451,8 +448,8 @@ class OntologyExtractionAgent(BaseAgent):
                     # LLM provides source/target IDs. These might be chunk-local.
                     # We'll need to resolve them to global canonical IDs later.
                     all_llm_relationships.append(ExtractedRelationship(
-                        relationship_id=rel_data.get('relationship_id', self._generate_unique_id(f"{rel_type_enum.label}_LLM")),
-                        relationship_type=rel_type_enum.label,
+                        relationship_id=rel_data.get('relationship_id', self._generate_unique_id(f"{rel_type_enum.value.label}_LLM")),
+                        relationship_type=rel_type_enum.value.label,
                         source_entity_id=rel_data.get('source_entity_id', ''), # Store as is, resolve later
                         target_entity_id=rel_data.get('target_entity_id', ''), # Store as is, resolve later
                         properties=rel_data.get('properties', {}), confidence=confidence,
@@ -521,9 +518,11 @@ class OntologyExtractionAgent(BaseAgent):
 
                     if last_idx > first_idx :
                         json_str = response_str[first_idx : last_idx+1]
-                    else: # Could not determine a valid JSON substring
-                         self.logger.warning(f"Could not isolate JSON substring reliably. Full response: {response_str[:200]}...")
-                         return None
+                    else:  # Could not determine a valid JSON substring
+                        self.logger.warning(
+                            f"Could not isolate JSON substring reliably. Full response: {response_str[:200]}..."
+                        )
+                        return None
                 else: # No opening brace/bracket found
                     self.logger.warning(f"No JSON start character found in LLM response: {response_str[:200]}...")
                     return None
@@ -613,20 +612,16 @@ class OntologyExtractionAgent(BaseAgent):
                         similarity_matrix = cosine_similarity(embeddings)
                         
                         merged_by_semantic = [False] * len(current_processing_list)
-                        semantic_dedup_list: List[ExtractedEntity] = []
                         # Iterate through sorted (by confidence) current_processing_list
                         # current_processing_list is already result of span dedup, and effectively sorted by confidence from that
                         # Re-sort by confidence again to ensure primary for semantic merge is highest confidence
-                        current_processing_list_sorted_sem = sorted(current_processing_list, key=lambda e: (-e.confidence, e.entity_id))
                         
                         # Need to map indices from sorted_sem list back to similarity_matrix indices
                         # (which were based on order of current_processing_list)
-                        # For simplicity here, let's assume we recalculate embeddings for current_processing_list_sorted_sem
                         # Or, better, keep track of original indices for the matrix.
                         # This is intricate. Let's simplify: iterate and merge based on the matrix for `current_processing_list`.
                         
                         temp_semantic_list: List[ExtractedEntity] = [] # Store entities chosen after semantic merge
-                        indices_to_original_list = {i: entity for i, entity in enumerate(current_processing_list)}
 
 
                         for i in range(len(current_processing_list)):
@@ -699,9 +694,9 @@ class OntologyExtractionAgent(BaseAgent):
                 unique_rels_dict[dedup_key] = rel
             else: # Merge properties if duplicate found (preferring higher confidence)
                 existing_rel = unique_rels_dict[dedup_key]
-                if rel.confidence > existing_rel.confidence: # Replace if new one is more confident
-                     unique_rels_dict[dedup_key] = rel
-                else: # Merge properties into existing, higher-confidence rel
+                if rel.confidence > existing_rel.confidence:  # Replace if new one is more confident
+                    unique_rels_dict[dedup_key] = rel
+                else:  # Merge properties into existing, higher-confidence rel
                     for p_key, p_val in rel.properties.items():
                         if p_key not in existing_rel.properties:
                             existing_rel.properties[p_key] = p_val
@@ -746,7 +741,7 @@ class OntologyExtractionAgent(BaseAgent):
                 regex_entities = self._extract_entities_by_patterns(text_content, document.id)
                 initial_entities.extend(regex_entities)
             
-            if self.enable_llm_extraction and self.llm_provider:
+            if self.enable_llm_extraction and self.llm_manager:
                 output.extraction_metadata['extraction_methods_used'].append('llm_extraction')
                 # Pass coref map so LLM can potentially use it or be aware of it
                 llm_extracted_data = await self._extract_with_llm(text_content, document.id, mention_to_canonical_id_map)
@@ -768,6 +763,8 @@ class OntologyExtractionAgent(BaseAgent):
             # Group entities by their canonical_entity_id
             entities_grouped_by_canonical_id: Dict[str, List[ExtractedEntity]] = {}
             for entity in initial_entities:
+                if entity.canonical_entity_id is None:
+                    continue
                 entities_grouped_by_canonical_id.setdefault(entity.canonical_entity_id, []).append(entity)
 
             consolidated_pre_dedup_entities: List[ExtractedEntity] = []
@@ -788,8 +785,10 @@ class OntologyExtractionAgent(BaseAgent):
 
             # 4. Advanced Deduplication on Consolidated Canonical Entities
             if self.enable_advanced_deduplication:
-                 output.extraction_metadata['extraction_methods_used'].append('advanced_entity_deduplication')
-            output.entities = await self._post_process_entities_advanced_dedup(consolidated_pre_dedup_entities)
+                output.extraction_metadata['extraction_methods_used'].append('advanced_entity_deduplication')
+            output.entities = await self._post_process_entities_advanced_dedup(
+                consolidated_pre_dedup_entities
+            )
             
             # Filter by confidence and max_entities_per_type AFTER deduplication
             # These are now part of _post_process_entities_advanced_dedup or a final filter step
@@ -844,8 +843,10 @@ class OntologyExtractionAgent(BaseAgent):
                     rel.target_entity_id = target_cluster_id
                     updated_relationships.append(rel)
                 else:
-                     self.logger.debug(f"Rel {rel.relationship_id}: source cluster '{source_cluster_id}' "
-                                       f"or target cluster '{target_cluster_id}' not found in final entities map. Skipping.")
+                    self.logger.debug(
+                        f"Rel {rel.relationship_id}: source cluster '{source_cluster_id}' "
+                        f"or target cluster '{target_cluster_id}' not found in final entities map. Skipping."
+                    )
             
             output.relationships = self._post_process_relationships(
                 self._validate_relationships(updated_relationships, final_entities_map_by_id)
@@ -864,7 +865,7 @@ class OntologyExtractionAgent(BaseAgent):
             self.logger.error(f"Critical error during ontology extraction for document {document.id}", exception=e, exc_info=True)
             output.processing_time_sec = round((datetime.now(timezone.utc) - start_time_utc).total_seconds(), 3)
             output.extraction_metadata['error'] = f"Critical workflow error: {type(e).__name__} - {str(e)}"
-            return ProcessingResult(success=False, error=str(e), data=output.to_dict(), error_type=type(e).__name__)
+            return ProcessingResult(success=False, error=str(e), data=output.to_dict())
 
     def _calculate_overall_confidence(self, entities: List[ExtractedEntity], 
                                    relationships: List[ExtractedRelationship]) -> float:
@@ -890,7 +891,7 @@ class OntologyExtractionAgent(BaseAgent):
         # Determine overall agent health
         if (self.enable_llm_extraction and not self.llm_manager) or \
            (self.enable_coreference_resolution and not self.nlp_coref) or \
-           (self.enable_advanced_deduplication and self.enable_semantic_deduplication and not self.embedding_manager): # Added semantic check
+           (self.enable_advanced_deduplication and not self.embedding_manager):
             status['status'] = 'degraded'
             status['reason'] = 'One or more enabled critical dependencies are unavailable.'
         
