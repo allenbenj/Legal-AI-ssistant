@@ -10,11 +10,8 @@ import asyncio
 import hashlib
 import io
 import mimetypes
-import os
-import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union, Tuple
-import json
+from typing import Any, Dict, List, Optional, Union
 import re
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
@@ -767,8 +764,8 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
                         # Basic table text extraction (no structure preserved here, add to notes)
                         table = shape.table
                         table_text_content = []
-                        for row_idx, row in enumerate(table.rows):
-                            row_cells = [cell.text_frame.text.strip() for cell_idx, cell in enumerate(row.cells)]
+                        for row in table.rows:
+                            row_cells = [cell.text_frame.text.strip() for cell in row.cells]
                             table_text_content.append(" | ".join(row_cells))
                         if table_text_content:
                             slide_texts.append(f"Table Content: {'; '.join(table_text_content)}")
