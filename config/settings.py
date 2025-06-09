@@ -1,7 +1,5 @@
 """Public re-export of project settings."""
 
-from legal_ai_system.config import settings as _core_settings
-
 
 __all__ = [
     "LegalAISettings",
