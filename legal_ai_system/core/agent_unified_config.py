@@ -14,8 +14,10 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 try:
-    from legal_ai_system.config.agent_grok_config import (
-        create_agent_grok_config, get_agent_grok_manager, AGENT_DEFAULT_MODEL
+    from legal_ai_system.core.agent_grok_config import (
+        create_agent_grok_config,
+        get_agent_grok_manager,
+        AGENT_DEFAULT_MODEL,
     )
     from legal_ai_system.memory.unified_memory_manager import UnifiedMemoryManager, MemoryType
     from legal_ai_system.services.service_container import ServiceContainer
