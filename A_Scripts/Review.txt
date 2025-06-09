@@ -1,4 +1,0 @@
-/mnt/E:/A_Scripts/legal_ai_system/my-legal-tech-gui/src
-enhanced-legal-ai-gui.tsx
-enhanced-legal-ai-gui2.tsx
-also review index.css and App.css and App.tsx
