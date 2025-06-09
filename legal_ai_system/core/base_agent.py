@@ -24,7 +24,7 @@ import asyncio
 import logging
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Union, TypeVar, Generic
+from typing import Any, Dict, List, Optional, TypeVar, Generic
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -404,8 +404,8 @@ class BaseAgent(ABC):
         self,
         data: Any,
         priority: TaskPriority = TaskPriority.NORMAL,
-        metadata: Dict[str, Any] = None,
-        timeout: float = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
     ) -> AgentResult:
         """
         Process data with the agent
@@ -531,6 +531,8 @@ class BaseAgent(ABC):
                     )
 
         # Should never reach here, but just in case
+        if last_error is None:
+            raise AgentError("Unknown processing error", self.name)
         raise last_error
 
     def _update_avg_execution_time(self, execution_time: float) -> None:
@@ -550,7 +552,7 @@ class BaseAgent(ABC):
         self,
         data: Any,
         priority: TaskPriority = TaskPriority.NORMAL,
-        metadata: Dict[str, Any] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Add task to processing queue"""
         task_id = f"{self.name}_{int(time.time())}"
@@ -649,7 +651,7 @@ class BaseAgent(ABC):
         """Perform health check"""
         try:
             # Try to access services
-            if hasattr(self.services, "llm_manager"):
+            if self.services and hasattr(self.services, "llm_manager"):
                 llm_health = await self.services.llm_manager.health_check()
             else:
                 llm_health = {"status": "unknown"}
@@ -680,7 +682,9 @@ class BaseAgent(ABC):
         except Exception as e:
             raise AgentError(f"LLM call failed: {e}", self.name)
 
-    def _validate_input(self, data: Any, required_fields: List[str] = None) -> None:
+    def _validate_input(
+        self, data: Any, required_fields: Optional[List[str]] = None
+    ) -> None:
         """Validate input data"""
         if data is None:
             raise AgentError("Input data cannot be None", self.name)
