@@ -7,16 +7,20 @@ import asyncio
 try:  # pragma: no cover - optional dependency
     from langgraph.graph import BaseNode as LangGraphBaseNode
 except Exception:  # ImportError or other issues if langgraph not installed
-    # Fallback to ``object`` so subclasses remain valid Python classes.
-    LangGraphBaseNode = object  # type: ignore[misc]
+
+    class LangGraphBaseNode:  # type: ignore[misc]
+        """Fallback base class when ``langgraph`` is unavailable."""
+
+        pass
+
 
 # Alias used for subclassing regardless of import success
 BaseNode = LangGraphBaseNode
+from ..core.unified_services import get_service_container, register_core_services
 from ..services.integration_service import (
     LegalAIIntegrationService,
     create_integration_service,
 )
-from ..core.unified_services import get_service_container, register_core_services
 
 
 class AnalysisNode(BaseNode):
@@ -58,5 +62,6 @@ class SummaryNode(BaseNode):
         if asyncio.iscoroutine(result):
             result = asyncio.run(result)
         return result
+
 
 __all__ = ["AnalysisNode", "SummaryNode"]
