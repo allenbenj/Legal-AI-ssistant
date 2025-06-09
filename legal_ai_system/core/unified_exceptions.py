@@ -351,7 +351,19 @@ class AgentExecutionError(LegalAIException):
         super().__init__(message, **kwargs)
 
 # Alias for backward compatibility
+
 AgentError = AgentExecutionError
+
+class AgentProcessingError(AgentExecutionError):
+    """Errors occurring during agent processing steps."""
+
+    def __init__(self, message: str, underlying_exception: Optional[Exception] = None, **kwargs):
+        kwargs.setdefault("category", ErrorCategory.AGENT)
+        kwargs.setdefault("recovery_strategy", ErrorRecoveryStrategy.RETRY)
+        if underlying_exception is not None:
+            kwargs.setdefault("technical_details", {})["cause"] = str(underlying_exception)
+        super().__init__(message, **kwargs)
+        self.cause = underlying_exception
 
 class SystemInitializationError(LegalAIException):
     """System initialization and startup errors"""
