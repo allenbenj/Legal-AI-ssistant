@@ -1,3 +1,22 @@
-from ..core.settings import *
+"""Re-export configuration settings for external use.
 
-__all__ = globals().get('__all__', [])
+This module exposes the main :class:`LegalAISettings` model along with helper
+functions used across the application.  Importing from this module avoids
+having to know the internal ``core`` package structure.
+"""
+
+from ..core.settings import (
+    LegalAISettings,
+    get_db_url,
+    get_vector_store_path,
+    is_supported_file,
+    settings,
+)
+
+__all__ = [
+    "LegalAISettings",
+    "settings",
+    "get_db_url",
+    "get_vector_store_path",
+    "is_supported_file",
+]
