@@ -6,19 +6,19 @@ Comprehensive logging system with detailed tracking of every operation,
 function call, decision point, and system state change.
 """
 
-import logging
-import sys
-import os
+import functools
 import json
+import logging
+import os
+import sys
+import threading
 import time
 import traceback
-import functools
-import threading
-from pathlib import Path
+from dataclasses import asdict, dataclass
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Callable
-from dataclasses import dataclass, asdict
 from enum import Enum
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional
 
 # Define LOGS_DIR relative to this file's location (core/) then up to legal_ai_system/logs
 LOGS_DIR = Path(__file__).resolve().parent.parent / "logs"
@@ -50,7 +50,6 @@ class LogCategory(Enum):
     LLM = "LLM"
     DATABASE = "DATABASE"
     FILE_IO = "FILE_IO"
-    DOCUMENT_PROCESSING = "DOCUMENT_PROCESSING"
     VALIDATION = "VALIDATION"
     ERROR_HANDLING = "ERROR_HANDLING"
     PERFORMANCE = "PERFORMANCE"
