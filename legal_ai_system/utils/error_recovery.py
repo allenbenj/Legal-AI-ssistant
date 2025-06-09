@@ -345,8 +345,14 @@ class ErrorRecovery:
         total = len(self.recovery_attempt_history)
         successful = sum(1 for r in self.recovery_attempt_history if r.success)
         
-        by_error_type: Dict[str, Dict[str, int]] = defaultdict(lambda: {"attempts": 0, "successes": 0})
-        by_strategy: Dict[str, Dict[str, int]] = defaultdict(lambda: {"attempts": 0, "successes": 0})
+        # Allow floats for success_rate values calculated below while keeping
+        # integer counts for attempts and successes.
+        by_error_type: Dict[str, Dict[str, float]] = defaultdict(
+            lambda: {"attempts": 0, "successes": 0}
+        )
+        by_strategy: Dict[str, Dict[str, float]] = defaultdict(
+            lambda: {"attempts": 0, "successes": 0}
+        )
 
         for rec in self.recovery_attempt_history:
             by_error_type[rec.error_type.value]["attempts"] += 1
