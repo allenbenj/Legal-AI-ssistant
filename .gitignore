@@ -1,0 +1,22 @@
+# Bytecode and caches
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Test artifacts
+.coverage
+coverage.xml
+htmlcov/
+.pytest_cache/
+
+# Logs
+*.log
+*.jsonl
+legal_ai_system/logs/
+
+# Environment files
+.env
+
+# Node or web build artifacts
+frontend/node_modules/
+
