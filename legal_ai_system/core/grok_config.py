@@ -248,6 +248,23 @@ def is_reasoning_model(model_name: str) -> bool:
     return False
 
 
+def get_optimal_model_for_task(task_type: str) -> str:
+    """Return the recommended Grok model name for a given task type."""
+    task_recommendations = {
+        "reasoning": "grok-3-reasoning",
+        "constitutional_analysis": "grok-3-reasoning",
+        "case_analysis": "grok-3-reasoning",
+        "violation_detection": "grok-3-reasoning",
+        "citation": "grok-3-mini",
+        "summary": "grok-3-mini",
+        "extraction": "grok-3-mini",
+        "classification": "grok-3-mini",
+        "general": "grok-3-mini",
+    }
+
+    return task_recommendations.get(task_type, DEFAULT_GROK_MODEL)
+
+
 # Grok prompt templates optimized for different models and legal analysis
 GROK_PROMPTS: Dict[str, str] = {
     "legal_analysis": """
