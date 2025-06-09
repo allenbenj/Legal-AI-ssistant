@@ -4,10 +4,8 @@ Handles entity resolution and ensures data is properly structured for organizati
 Part of the seven-agent file organization system architecture.
 """
 
-import asyncio
-import logging
 import structlog
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set
 from dataclasses import dataclass, field
 from datetime import datetime
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -15,11 +13,10 @@ from pybreaker import CircuitBreaker
 import hashlib
 import uuid
 
-from .base_agent import BaseAgent
-from ..core.shared_components import (
-    measure_performance, performance_tracker, ProcessingCache
-)
-from ..core.error_recovery import ErrorRecovery
+from ..core.base_agent import BaseAgent
+from ..core.performance import measure_performance, performance_tracker
+from ..legacy_extras.modular_improvements import ProcessingCache
+from ..utils.error_recovery import ErrorRecovery
 
 # Structured logging
 logger = structlog.get_logger()
@@ -439,7 +436,7 @@ class KnowledgeBaseAgent(BaseAgent):
         
         return insights
     
-    def _calculate_resolution_metrics(self, raw_entities: List[Dict], resolved_entities: List[ResolvedEntity]) -> Dict[str, int]:
+    def _calculate_resolution_metrics(self, raw_entities: List[Dict], resolved_entities: List[ResolvedEntity]) -> Dict[str, float]:
         """Calculate metrics about the resolution process."""
         return {
             "input_entities": len(raw_entities),
