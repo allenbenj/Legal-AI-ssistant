@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable, List, Dict, Any
+from typing import Iterable, List, Dict, Any, cast
 
 import fitz  # PyMuPDF
 import pytesseract
@@ -29,8 +29,13 @@ def extract_text(path: Path, ocr: bool = True) -> str:
         text: List[str] = []
         with fitz.open(path) as doc:
             for page_num in range(doc.page_count):
-                page = doc.load_page(page_num)
-                text.append(page.get_text("text"))
+                page = cast(Any, doc.load_page(page_num))
+                # Newer versions of PyMuPDF expose `get_text` while older
+                # releases used `getText`. We support both for compatibility
+                if hasattr(page, "get_text"):
+                    text.append(page.get_text("text"))
+                else:  # pragma: no cover - fallback for legacy PyMuPDF
+                    text.append(page.getText("text"))
         return "\n".join(text)
 
     if path.suffix.lower() in {".png", ".jpg", ".jpeg"} and ocr:
