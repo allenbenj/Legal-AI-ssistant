@@ -5,12 +5,11 @@ Configuration Manager - Centralized Configuration Management
 Provides a service-oriented interface to the Legal AI System configuration.
 """
 
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional
 from pathlib import Path
 from datetime import datetime
 from enum import Enum
 import os
-import sys
 
 # Import detailed logging system
 from .detailed_logging import get_detailed_logger, LogCategory, detailed_log_function
@@ -108,12 +107,15 @@ class ConfigurationManager:
                     config_manager_logger.trace(f"Using environment override for '{key}'", parameters={'value': casted_value})
                     return casted_value
                 except ValueError as e:
-                    config_manager_logger.warning(f"Could not cast env override for '{key}' to type {original_value_type}. Returning as string.",
-                                                 parameters={'env_value': env_value_str, 'error': str(e)})
-                    return env_value_str # Return as string if casting fails
-            else: # No type hint, return as string
-                 config_manager_logger.trace(f"Using environment override for '{key}' (as string)", parameters={'value': env_value_str})
-                 return env_value_str
+                    config_manager_logger.warning(
+                        f"Could not cast env override for '{key}' to type {original_value_type}. Returning as string.",
+                        parameters={'env_value': env_value_str, 'error': str(e)})
+                    return env_value_str  # Return as string if casting fails
+            else:  # No type hint, return as string
+                config_manager_logger.trace(
+                    f"Using environment override for '{key}' (as string)",
+                    parameters={'value': env_value_str})
+                return env_value_str
 
 
         # Check if value exists in settings object
@@ -262,15 +264,15 @@ class ConfigurationManager:
         
         # These paths are now set in LegalAISettings.__init__ relative to base_dir
         directories = {
-            'base_dir': Path(self._settings.base_dir),
-            'data_dir': Path(self._settings.data_dir),
-            'documents_dir': Path(self._settings.documents_dir),
-            'models_dir': Path(self._settings.models_dir),
-            'logs_dir': Path(self._settings.logs_dir),
+            'base_dir': self._settings.base_dir,
+            'data_dir': self._settings.data_dir,
+            'documents_dir': self._settings.documents_dir,
+            'models_dir': self._settings.models_dir,
+            'logs_dir': self._settings.logs_dir,
             # Add other important dirs if they are part of settings
-            'faiss_index_dir': Path(self._settings.faiss_index_path).parent,
-            'lance_db_dir': Path(self._settings.lance_db_path),  # LanceDB path is a directory
-            'sqlite_db_dir': Path(self._settings.sqlite_path).parent,
+            'faiss_index_dir': self._settings.faiss_index_path.parent,
+            'lance_db_dir': self._settings.lance_db_path,  # LanceDB path is a directory
+            'sqlite_db_dir': self._settings.sqlite_path.parent,
         }
         
         for name, path_obj in directories.items():

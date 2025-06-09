@@ -9,10 +9,12 @@ import logging
 import sqlite3
 import json
 import asyncio
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from pathlib import Path
 from datetime import datetime
 import threading
+
+from legal_ai_system.integration_ready.vector_store_enhanced import MemoryStore
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +34,7 @@ class MemoryManager:
         self.max_context_tokens = max_context_tokens
         
         self._db_lock = threading.Lock()
-        self._memory_store = None
+        self._memory_store: MemoryStore | None = None
         self._initialized = False
         
         logger.info(f"MemoryManager initialized with db: {db_path}")
@@ -47,9 +49,7 @@ class MemoryManager:
             # Create database directory
             Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
             
-            # Import and initialize the memory store
-            from ..integration_ready.vector_store_enhanced import MemoryStore
-            
+            # Initialize the memory store
             self._memory_store = MemoryStore(self.db_path)
             
             # Initialize database schema
