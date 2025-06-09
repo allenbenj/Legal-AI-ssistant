@@ -23,9 +23,11 @@ def run_system(): # Renamed from main for clarity
     # Attempt to import the primary GUI entry point
     try:
         # Assuming streamlit_app.py contains the main function to launch the GUI
-        from legal_ai_system.gui.streamlit_app import main_streamlit_entry
-        
-        print(f"INFO: Launching Legal AI System GUI via: legal_ai_system.gui.streamlit_app.main_streamlit_entry()")
+        from legal_ai_system.scripts.streamlit_app import main_streamlit_entry
+
+        print(
+            "INFO: Launching Legal AI System GUI via: legal_ai_system.scripts.streamlit_app.main_streamlit_entry()"
+        )
         # Call the main function from streamlit_app.py
         # This function should handle its own setup (logging, etc.) and then run Streamlit.
         main_streamlit_entry() 
