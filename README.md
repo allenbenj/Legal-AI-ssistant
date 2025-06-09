@@ -9,5 +9,3 @@ This repository contains a modular legal analysis platform. Source files live in
 - **scripts** – entry points and helper scripts for running the system.
 
 
-Run `python legal_ai_system/scripts/main.py` to start the demo application.
-
