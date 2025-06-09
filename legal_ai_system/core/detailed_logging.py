@@ -9,7 +9,6 @@ function call, decision point, and system state change.
 import functools
 import json
 import logging
-import os
 import sys
 import threading
 import time
@@ -318,16 +317,20 @@ class DetailedLogger:
         return entry
 
     def function_call(
-        self, func_name: str, parameters: Dict[str, Any] = None, **kwargs
-    ):
+        self, func_name: str, parameters: Optional[Dict[str, Any]] = None, **kwargs
+    ) -> DetailedLogEntry:
         """Log function entry with parameters"""
         # param_str = json.dumps(parameters, default=str) if parameters else "None" # Already handled by self.trace
         message = f"FUNCTION_ENTRY: {func_name}()"
         return self.trace(message, parameters=parameters, **kwargs)
 
     def function_result(
-        self, func_name: str, result: Any = None, execution_time: float = None, **kwargs
-    ):
+        self,
+        func_name: str,
+        result: Any = None,
+        execution_time: Optional[float] = None,
+        **kwargs,
+    ) -> DetailedLogEntry:
         """Log function exit with result and timing"""
         # result_str = json.dumps(result, default=str) if result is not None else "None" # Handled by self.trace
         time_str = f" [took {execution_time:.4f}s]" if execution_time else ""
@@ -374,9 +377,9 @@ class DetailedLogger:
         self,
         operation: str,
         duration: float,
-        additional_metrics: Dict[str, Any] = None,
+        additional_metrics: Optional[Dict[str, Any]] = None,
         **kwargs,
-    ):
+    ) -> DetailedLogEntry:
         """Log performance measurements"""
         message = f"PERFORMANCE: {operation} took {duration:.4f}s"
         # if additional_metrics: # Handled by self.debug
@@ -386,7 +389,7 @@ class DetailedLogger:
             message, execution_time=duration, parameters=additional_metrics, **kwargs
         )
 
-    def export_logs(self, filepath: Path = None) -> Path:
+    def export_logs(self, filepath: Optional[Path] = None) -> Path:
         """Export all log entries to JSON file"""
         if not filepath:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
