@@ -30,8 +30,10 @@ try:
     # Import uvicorn
     import uvicorn  # type: ignore
     
-    # Import our API app
-    from api.main import app
+    # Import our API app using absolute package path
+    # The API implementation resides in legal_ai_system.scripts.main
+    # rather than the older api.main location referenced by legacy scripts.
+    from legal_ai_system.scripts.main import app
     
     print("✅ Imports successful, starting server...")
     

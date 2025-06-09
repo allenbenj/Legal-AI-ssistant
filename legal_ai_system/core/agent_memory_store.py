@@ -8,7 +8,7 @@ across sessions, including entities, relationships, observations, and session co
 import sqlite3
 import json
 import logging
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional, Any
 from pathlib import Path
 from datetime import datetime
 import threading
@@ -123,7 +123,7 @@ class ClaudeMemoryStore:
             """)
             conn.commit()
     
-    def create_session(self, session_name: str = None) -> str:
+    def create_session(self, session_name: Optional[str] = None) -> str:
         """Create a new session and return session ID"""
         session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         
@@ -137,7 +137,9 @@ class ClaudeMemoryStore:
         logger.info(f"Created session: {session_id}")
         return session_id
     
-    def store_entity(self, name: str, entity_type: str, metadata: Dict[str, Any] = None) -> bool:
+    def store_entity(
+        self, name: str, entity_type: str, metadata: Optional[Dict[str, Any]] = None
+    ) -> bool:
         """Store or update an entity"""
         try:
             with self._lock, sqlite3.connect(self.db_path) as conn:
@@ -179,8 +181,14 @@ class ClaudeMemoryStore:
             logger.error(f"Failed to add observation to {entity_name}: {e}")
             return False
     
-    def create_relation(self, from_entity: str, to_entity: str, relation_type: str,
-                       strength: float = 1.0, metadata: Dict[str, Any] = None) -> bool:
+    def create_relation(
+        self,
+        from_entity: str,
+        to_entity: str,
+        relation_type: str,
+        strength: float = 1.0,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> bool:
         """Create a relationship between entities"""
         try:
             with self._lock, sqlite3.connect(self.db_path) as conn:
@@ -206,8 +214,14 @@ class ClaudeMemoryStore:
             logger.error(f"Failed to create relation {from_entity} -> {to_entity}: {e}")
             return False
     
-    def store_knowledge_fact(self, subject: str, predicate: str, object_val: str,
-                           confidence: float = 1.0, source_entity: str = None) -> bool:
+    def store_knowledge_fact(
+        self,
+        subject: str,
+        predicate: str,
+        object_val: str,
+        confidence: float = 1.0,
+        source_entity: Optional[str] = None,
+    ) -> bool:
         """Store a knowledge fact (subject-predicate-object triple)"""
         try:
             # Create hash for deduplication
@@ -285,8 +299,9 @@ class ClaudeMemoryStore:
             logger.error(f"Failed to get entity {name}: {e}")
             return None
     
-    def search_entities(self, query: str, entity_type: str = None, 
-                       limit: int = 10) -> List[Dict[str, Any]]:
+    def search_entities(
+        self, query: str, entity_type: Optional[str] = None, limit: int = 10
+    ) -> List[Dict[str, Any]]:
         """Search entities by name or observations"""
         try:
             with sqlite3.connect(self.db_path) as conn:
@@ -300,7 +315,7 @@ class ClaudeMemoryStore:
                     LEFT JOIN observations o ON e.name = o.entity_name
                     WHERE (e.name LIKE ? OR o.content LIKE ?)
                 """
-                params = [f"%{query}%", f"%{query}%"]
+                params: List[Any] = [f"%{query}%", f"%{query}%"]
                 
                 if entity_type:
                     sql += " AND e.entity_type = ?"
@@ -320,7 +335,7 @@ class ClaudeMemoryStore:
             logger.error(f"Failed to search entities: {e}")
             return []
     
-    def get_related_entities(self, entity_name: str, max_depth: int = 2) -> List[Dict[str, Any]]:
+    def get_related_entities(self, entity_name: str, _max_depth: int = 2) -> List[Dict[str, Any]]:
         """Get entities related to the given entity"""
         try:
             with sqlite3.connect(self.db_path) as conn:
@@ -360,8 +375,12 @@ class ClaudeMemoryStore:
             logger.error(f"Failed to get related entities for {entity_name}: {e}")
             return []
     
-    def get_knowledge_facts(self, subject: str = None, predicate: str = None,
-                          limit: int = 50) -> List[Dict[str, Any]]:
+    def get_knowledge_facts(
+        self,
+        subject: Optional[str] = None,
+        predicate: Optional[str] = None,
+        limit: int = 50,
+    ) -> List[Dict[str, Any]]:
         """Get knowledge facts, optionally filtered"""
         try:
             with sqlite3.connect(self.db_path) as conn:
