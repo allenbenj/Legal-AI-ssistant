@@ -6,36 +6,6 @@ for text extraction, metadata retrieval, and structural analysis.
 Integrates optional dependencies gracefully and uses shared components.
 """
 
-import asyncio
-import hashlib
-import io
-import mimetypes
-import re
-from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
-from enum import Enum  # Added Enum back for DocumentContentType
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
-
-from ..core.agent_unified_config import create_agent_memory_mixin
-
-# Core imports
-from ..core.base_agent import BaseAgent
-from ..core.constants import Constants
-from ..core.detailed_logging import (
-    LogCategory,
-    detailed_log_function,
-    get_detailed_logger,
-)
-from ..core.unified_exceptions import AgentExecutionError, DocumentProcessingError
-from ..utils.dependency_manager import DependencyManager
-from ..utils.document_utils import DocumentChunker, LegalDocumentClassifier
-
-# Create memory mixin for agents
-MemoryMixin = create_agent_memory_mixin()
-
-# Logger specifically for this file, can be aliased from self.logger in methods
-file_logger = get_detailed_logger("DocumentProcessorAgentFileOps", LogCategory.FILE_IO)
 
 
 # Attempt to import optional dependencies via DependencyManager
@@ -1107,12 +1077,7 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
                         # Basic table text extraction (no structure preserved here, add to notes)
                         table = shape.table
                         table_text_content = []
-                        for _, row in enumerate(table.rows):
-                            row_cells = [
-                                cell.text_frame.text.strip()
-                                for _, cell in enumerate(row.cells)
-                            ]
-                            table_text_content.append(" | ".join(row_cells))
+                        table_text_content.append(" | ".join(row_cells))
                         if table_text_content:
                             slide_texts.append(
                                 f"Table Content: {'; '.join(table_text_content)}"
@@ -1231,26 +1196,3 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
             if deps_ok:
                 supported_formats_with_deps.append(content_type.name)
             else:
-                missing = [
-                    dep
-                    for dep in config_details.get("deps", [])
-                    if not dep_manager.is_available(dep)
-                ]
-                unsupported_due_to_deps.append(
-                    f"{content_type.name} (missing: {', '.join(missing)})"
-                )
-
-        base_status["supported_formats_current"] = sorted(supported_formats_with_deps)
-        base_status["formats_pending_deps"] = sorted(unsupported_due_to_deps)
-
-        if (
-            unsupported_due_to_deps
-        ):  # If some formats are not supported due to missing deps
-            base_status["status"] = (
-                "degraded"  # Could be 'warning' depending on severity definition
-            )
-            base_status["reason"] = (
-                f"Some file formats unsupported due to missing dependencies: {len(unsupported_due_to_deps)} types."
-            )
-
-        return base_status
