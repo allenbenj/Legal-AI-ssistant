@@ -9,10 +9,11 @@ import logging
 import asyncio
 import hashlib
 import pickle
-from typing import List, Dict, Any, Optional, Union
+from typing import Dict, List, Any
 from pathlib import Path
 import threading
-import time
+
+from legal_ai_system.integration_ready.vector_store_enhanced import EmbeddingClient
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,7 @@ class EmbeddingManager:
         self.cache_dir = cache_dir
         self.batch_size = batch_size
         
-        self._embedding_client = None
+        self._embedding_client: EmbeddingClient | None = None
         self._cache: Dict[str, Any] = {}
         self._cache_lock = threading.Lock()
         self._initialized = False
@@ -49,9 +50,6 @@ class EmbeddingManager:
             return
         
         try:
-            # Import the embedding client from vector store
-            from ..integration_ready.vector_store_enhanced import EmbeddingClient
-            
             # Initialize the embedding client
             self._embedding_client = EmbeddingClient(model=self.model_name)
             
