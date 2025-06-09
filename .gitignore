@@ -1,3 +1,6 @@
 .venv/
 __pycache__/
 legal_ai_system/logs/
+.coverage
+coverage.xml
+htmlcov/
