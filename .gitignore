@@ -1,0 +1,9 @@
+__pycache__/
+*.py[cod]
+*.db
+*.sqlite
+*.log
+.env
+
+*.jsonl
+legal_ai_system/logs/
