@@ -5,14 +5,6 @@ functions used across the application.  Importing from this module avoids
 having to know the internal ``core`` package structure.
 """
 
-from ..core.settings import (
-    LegalAISettings,
-    get_db_url,
-    get_vector_store_path,
-    is_supported_file,
-    settings,
-)  # noqa: F401 - re-exported for external use
-
 __all__ = [
     "LegalAISettings",
     "settings",
