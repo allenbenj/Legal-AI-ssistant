@@ -1,53 +1,92 @@
+"""Unified Agent Configuration
+===============================
+
+Provides helpers to configure all agents to use Grok based LLMs and a
+shared :class:`UnifiedMemoryManager` instance.  The module attempts to
+import the real implementations but falls back to light-weight stubs so
+it can operate in isolation (e.g. during documentation builds).
 """
-Unified Agent Configuration
-Ensures all agents use Grok-Mini for LLM operations and shared memory for storage
-"""
+
+from __future__ import annotations
 
 import os
 import sys
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, TYPE_CHECKING
+import asyncio
 
 # Add project root to path for absolute imports
 project_root = Path(__file__).parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-try:
+if TYPE_CHECKING:
     from legal_ai_system.core.agent_grok_config import (
         create_agent_grok_config,
         get_agent_grok_manager,
         AGENT_DEFAULT_MODEL,
     )
-    from legal_ai_system.memory.unified_memory_manager import UnifiedMemoryManager, MemoryType
+    from legal_ai_system.memory.unified_memory_manager import (
+        UnifiedMemoryManager,
+        MemoryType,
+    )
     from legal_ai_system.services.service_container import ServiceContainer
-except ImportError:
-    # Fallback for relative imports
+else:  # pragma: no cover - fallback imports for runtime flexibility
     try:
-        from .agent_grok_config import (
-            create_agent_grok_config, get_agent_grok_manager, AGENT_DEFAULT_MODEL
+        from legal_ai_system.core.agent_grok_config import (
+            create_agent_grok_config,
+            get_agent_grok_manager,
+            AGENT_DEFAULT_MODEL,
         )
-        from ..memory.unified_memory_manager import UnifiedMemoryManager, MemoryType
-        from ..services.service_container import ServiceContainer
+        from legal_ai_system.memory.unified_memory_manager import (
+            UnifiedMemoryManager,
+            MemoryType,
+        )
+        from legal_ai_system.services.service_container import ServiceContainer
     except ImportError:
-        # Final fallback - create minimal classes
-        class ServiceContainer:
-            def __init__(self):
-                self.services = {}
-            def register_service(self, name, service):
-                self.services[name] = service
-            def get_service(self, name):
-                return self.services.get(name)
-        class UnifiedMemoryManager:
-            def __init__(self, **kwargs):
-                pass
-        class MemoryType:
-            AGENT_SPECIFIC = "agent_specific"
-            SESSION_KNOWLEDGE = "session_knowledge"
-        # Mock functions
-        def create_agent_grok_config(**kwargs): return {}
-        def get_agent_grok_manager(**kwargs): return None
-        AGENT_DEFAULT_MODEL = "grok-3-mini"
+        try:  # Local relative imports when running from source tree
+            from .agent_grok_config import (
+                create_agent_grok_config,
+                get_agent_grok_manager,
+                AGENT_DEFAULT_MODEL,
+            )
+            from ..memory.unified_memory_manager import (
+                UnifiedMemoryManager,
+                MemoryType,
+            )
+            from ..services.service_container import ServiceContainer
+        except ImportError:
+            # Minimal stub implementations used when dependencies are missing.
+            from enum import Enum
+
+            class LLMConfig(dict):
+                """Light-weight stand in for :class:`LLMConfig`."""
+
+            class ServiceContainer:
+                def __init__(self) -> None:
+                    self.services: Dict[str, Any] = {}
+
+                async def register_service(self, name: str, service: Any) -> None:
+                    self.services[name] = service
+
+                def get_service(self, name: str) -> Any:
+                    return self.services.get(name)
+
+            class UnifiedMemoryManager:
+                def __init__(self, **kwargs: Any) -> None:
+                    pass
+
+            class MemoryType(Enum):
+                AGENT_SPECIFIC = "agent_specific"
+                SESSION_KNOWLEDGE = "session_knowledge"
+
+            def create_agent_grok_config(api_key: Optional[str] = None) -> LLMConfig:
+                return LLMConfig()
+
+            def get_agent_grok_manager(api_key: Optional[str] = None) -> Any:
+                return None
+
+            AGENT_DEFAULT_MODEL = "grok-3-mini"
 
 async def configure_all_agents_unified(
     service_container: ServiceContainer,
@@ -223,6 +262,9 @@ def create_agent_memory_mixin():
     
     class AgentMemoryMixin:
         """Mixin to add unified memory capabilities to agents"""
+
+        # Hint for type checkers; actual attribute injected by concrete agents
+        service_container: Optional[ServiceContainer] = None
         
         def get_memory_manager(self):
             """Get the unified memory manager"""
@@ -402,9 +444,11 @@ def setup_agents_example(xai_api_key: str):
     service_container = ServiceContainer()
     
     # 2. Configure all agents
-    config_result = configure_all_agents_unified(
-        service_container=service_container,
-        xai_api_key=xai_api_key
+    _config_result = asyncio.run(
+        configure_all_agents_unified(
+            service_container=service_container,
+            xai_api_key=xai_api_key,
+        )
     )
     
     # 3. Validate setup
