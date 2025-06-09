@@ -7,11 +7,8 @@ import os
 from typing import Any, Dict, Optional
 
 from .grok_config import (
-    DEFAULT_GROK_MODEL,
     GROK_MODELS_CONFIG,
     LEGAL_ANALYSIS_PARAMS,
-    create_grok_config,
-    create_grok_legal_settings,
 )
 from .llm_providers import LLMConfig, LLMProviderEnum
 

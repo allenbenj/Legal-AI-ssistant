@@ -7,7 +7,7 @@
 import asyncio
 import time # Replaced logging with detailed_logging
 from abc import ABC, abstractmethod
-from typing import Optional, List, Dict, Any, Union
+from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field as PydanticField # Alias to avoid conflict with FastAPI's Field
 from enum import Enum
 
@@ -71,8 +71,8 @@ class BaseLLMProvider(ABC):
         pass
     
     @abstractmethod
-    async def embed(self, text: str) -> List[float]: # Or text_or_texts: Union[str, List[str]]
-        """Generate embedding for text"""
+    async def embed(self, text: str, model: Optional[str] = None) -> List[float]:
+        """Generate embedding for text."""
         pass
     
     @abstractmethod
@@ -485,8 +485,11 @@ class LLMManager:
                 health_summary["overall_status"] = "degraded" # If any provider errors, manager is degraded
         
         if not self.providers:
-             health_summary["overall_status"] = "error" # No providers initialized
-             health_summary["providers_status"]["manager"] = {"status": "error", "error_message": "No LLM providers initialized."}
+            health_summary["overall_status"] = "error"  # No providers initialized
+            health_summary["providers_status"]["manager"] = {
+                "status": "error",
+                "error_message": "No LLM providers initialized."
+            }
 
 
         self.logger.info("LLMManager health check complete.", parameters={'overall_status': health_summary["overall_status"]})

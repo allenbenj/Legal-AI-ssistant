@@ -1,5 +1,4 @@
-"""Public re-export of project settings."""
-
+"""Public re-export of project settings.
 
 __all__ = [
     "LegalAISettings",
