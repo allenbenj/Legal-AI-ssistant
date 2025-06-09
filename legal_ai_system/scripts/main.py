@@ -27,8 +27,6 @@ import uvicorn
 
 try:
     from legal_ai_system.core.constants import Constants
-except Exception:  # pragma: no cover - fallback for incomplete environments
-
     class Constants:
         """Fallback constants when the config package is unavailable."""
 
