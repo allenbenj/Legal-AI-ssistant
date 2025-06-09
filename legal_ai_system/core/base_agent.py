@@ -30,7 +30,11 @@ from datetime import datetime
 from enum import Enum
 
 from ..core.constants import Constants
-from ..core.detailed_logging import get_detailed_logger, LogCategory
+from ..core.detailed_logging import (
+    DetailedLogger,
+    get_detailed_logger,
+    LogCategory,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -229,7 +233,9 @@ class BaseAgent(ABC):
         self.name = name or self.__class__.__name__
         self.agent_type = agent_type
         # Detailed logger for the agent instance
-        self.logger = get_detailed_logger(self.name, LogCategory.AGENT)
+        self.logger: DetailedLogger = get_detailed_logger(
+            self.name, LogCategory.AGENT
+        )
         self.status = AgentStatus.IDLE
         self.task_queue: asyncio.Queue = asyncio.Queue()
         self.current_task: Optional[AgentTask] = None
