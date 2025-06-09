@@ -1,0 +1,69 @@
+# Core Web Framework & Server
+fastapi>=0.100.0
+uvicorn[standard]>=0.23.0
+
+# GraphQL
+strawberry-graphql[fastapi]>=0.200.0
+
+# Data Validation & Settings
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# Frontend GUI
+streamlit>=1.25.0
+requests>=2.30.0 # For Streamlit to call FastAPI, etc.
+
+# Data Handling & Numerics
+pandas>=2.0.0
+numpy>=1.24.0 # Optional for embedding_manager, but good to have
+
+# LLM & Embedding Providers
+ollama>=0.1.7
+openai>=1.0.0
+sentence-transformers>=2.2.0
+
+# Document Processing
+pymupdf>=1.23.0 # PyMuPDF (fitz)
+python-docx>=1.1.0
+pytesseract>=0.3.10
+Pillow>=10.0.0
+python-pptx>=0.6.21
+markdown>=3.4.0
+beautifulsoup4>=4.12.0
+striprtf>=0.0.21
+openpyxl>=3.1.0 # For pandas .xlsx support
+xlrd>=2.0.0    # For pandas .xls support
+
+# Security (Assumed for FastAPI auth)
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+
+# Knowledge Graph (If Neo4j is used)
+neo4j>=5.10.0 # Assuming Neo4j is used as hinted by KnowledgeGraphManager
+
+# Configuration File Parsing
+PyYAML>=6.0
+
+# Workflow Orchestration (Optional)
+# langgraph>=0.0.20 # Uncomment if LangGraph is a core dependency
+
+# Standard Library (no need to list, but were identified)
+# asyncio
+# collections
+# dataclasses
+# datetime
+# enum
+# functools
+# hashlib
+# io
+# json
+# mimetypes
+# os
+# pathlib
+# pickle
+# re
+# tempfile
+# threading
+# time
+# typing
+# uuid

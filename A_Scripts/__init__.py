@@ -1,7 +1,4 @@
-# legal_ai_system/services/__init__.py
-from .integration_service import LegalAIIntegrationService # , integration_service (if global instance is exported)
+"""A_Scripts package placeholder."""
 
-__all__ = [
-    "LegalAIIntegrationService",
-    # "integration_service" 
-]
+# Avoid heavy imports during test discovery
+__all__ = []
