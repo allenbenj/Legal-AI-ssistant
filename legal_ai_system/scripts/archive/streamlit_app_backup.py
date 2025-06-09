@@ -24,7 +24,7 @@ for p in sys.path:
 # Your existing import (keep this)
 # Fix for Streamlit execution - use absolute imports
 try:
-    from legal_ai_system.config.constants import Constants
+    from legal_ai_system.core.constants import Constants
 except ImportError:
     # Fallback for when package structure isn't available
     class Constants:
@@ -326,7 +326,7 @@ st.write("Python's sys.path when running from gui:")
 for p in sys.path:
     st.write(p)
 
-from legal_ai_system.config.constants import Constants  # ADDED IMPORT
+from legal_ai_system.core.constants import Constants  # ADDED IMPORT
 
 # Using standard logging initially, can be augmented by detailed_logging if main system is run first
 streamlit_logger = logging.getLogger("StreamlitAppGUI")

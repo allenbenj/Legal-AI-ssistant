@@ -22,3 +22,7 @@ The following scripts were moved from `legal_ai_system/scripts` because they are
 - `start_with_path_fix.py`
 - `streamlit_app_backup.py`
 - `test_consolidation_success - Copy.py`
+
+Additional copies of several scripts remain under `legal_ai_system/scripts/archive`.
+Those duplicates are preserved for historical reference and mirror the files
+listed above.
