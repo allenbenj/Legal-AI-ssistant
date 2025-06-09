@@ -5,11 +5,12 @@ NoteTakingAgent - Intelligent note-taking with legal context awareness.
 
 # import logging # Replaced by detailed_logging
 from typing import Dict, List, Optional, Any, Tuple
+import asyncio
 import re
-from datetime import datetime, timezone # Added timezone
+from datetime import datetime, timezone  # Added timezone
 import json
 from uuid import uuid4
-from dataclasses import dataclass, field, asdict # Added
+from dataclasses import dataclass, field, asdict  # Added
 
 # Core imports from the new structure
 from ..core.base_agent import BaseAgent, AgentResult # AgentResult is already generic
@@ -61,7 +62,7 @@ class NoteTakingOutput: # Dataclass for the output of this agent's operations
         return data
 
 
-class NoteTakingAgent(BaseAgent):
+class NoteTakingAgent(BaseAgent, MemoryMixin):
     """
     Intelligent note-taking agent with legal context awareness.
     """
@@ -110,7 +111,7 @@ class NoteTakingAgent(BaseAgent):
         task_data: 'text_content', 'action' (suggest, create, etc.), 'existing_notes_data', 'context_info'
         metadata: 'document_id'
         """
-        document_id = metadata.get('document_id', f"unknown_doc_{uuid.uuid4().hex[:8]}")
+        document_id = metadata.get('document_id', f"unknown_doc_{uuid4().hex[:8]}")
         text_content = task_data.get('text_content', task_data.get('text', task_data.get('content', ''))) # Flexible text input
         note_action = task_data.get('action', 'suggest').lower()
         # existing_notes_data should be List[Dict] that can be converted to List[Note]
@@ -150,8 +151,10 @@ class NoteTakingAgent(BaseAgent):
                 self.logger.info(f"Note action '{note_action}' completed successfully.", 
                                 parameters={'doc_id': document_id, 'notes_count': len(output.notes)})
             else:
-                 self.logger.warning(f"Note action '{note_action}' failed or produced no results.",
-                                    parameters={'doc_id': document_id, 'errors': output.errors})
+                self.logger.warning(
+                    f"Note action '{note_action}' failed or produced no results.",
+                    parameters={'doc_id': document_id, 'errors': output.errors}
+                )
 
         except Exception as e:
             self.logger.error(f"Error during note-taking action '{note_action}'.", 
@@ -267,9 +270,13 @@ class NoteTakingAgent(BaseAgent):
                 self.logger.error("Failed to store created note in UnifiedMemoryManager.", 
                                  parameters={'note_id': note_obj.id}, exception=e)
                 return None # Indicate failure to store
-            except Exception as e: # Catch other unexpected errors
-                 self.logger.error("Unexpected error storing created note.", parameters={'note_id': note_obj.id}, exception=e)
-                 return None
+            except Exception as e:  # Catch other unexpected errors
+                self.logger.error(
+                    "Unexpected error storing created note.",
+                    parameters={'note_id': note_obj.id},
+                    exception=e,
+                )
+                return None
         else:
             self.logger.warning("MemoryManager not available. Note created but not persisted.", parameters={'note_id': note_obj.id})
             return note_obj # Return note even if not persisted, caller can decide

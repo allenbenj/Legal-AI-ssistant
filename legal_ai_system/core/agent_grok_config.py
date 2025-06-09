@@ -14,9 +14,13 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 try:
-    from legal_ai_system.config.grok_config import (
-        create_grok_config, DEFAULT_GROK_MODEL, GROK_MODELS_CONFIG,
-        LEGAL_ANALYSIS_PARAMS, create_grok_legal_settings
+    # Prefer absolute imports when the package is available
+    from legal_ai_system.core.grok_config import (
+        create_grok_config,
+        DEFAULT_GROK_MODEL,
+        GROK_MODELS_CONFIG,
+        LEGAL_ANALYSIS_PARAMS,
+        create_grok_legal_settings,
     )
     from legal_ai_system.core.llm_providers import LLMConfig, LLMProviderEnum
 except ImportError:
@@ -319,11 +323,11 @@ def print_agent_grok_setup_instructions():
     print(f"   export LLM_MODEL={AGENT_DEFAULT_MODEL}")
     
     print("\n2. IMPORT AND CONFIGURE IN YOUR APPLICATION:")
-    print("   from config.agent_grok_config import ensure_agents_use_grok")
+    print("   from legal_ai_system.core.agent_grok_config import ensure_agents_use_grok")
     print("   ensure_agents_use_grok(service_container, api_key)")
     
     print("\n3. VERIFY CONFIGURATION:")
-    print("   from config.agent_grok_config import get_agent_grok_manager")
+    print("   from legal_ai_system.core.agent_grok_config import get_agent_grok_manager")
     print("   manager = get_agent_grok_manager()")
     print("   validation = manager.validate_agent_grok_setup()")
     print("   print(validation)")

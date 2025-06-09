@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional
 
 from ..core.base_agent import BaseAgent, AgentResult
 from ..core.detailed_logging import get_detailed_logger, LogCategory, detailed_log_function
-from ..core.models import ExtractedEntity, EntityType, LegalDocument
+from ..core.models import LegalDocument
 from ..core.unified_exceptions import AgentError
 
 
