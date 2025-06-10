@@ -24,6 +24,8 @@ from ..utils.reviewable_memory import (
     ReviewStatus,
 )
 from .realtime_graph_manager import RealTimeGraphManager
+from ..config.workflow_config import WorkflowConfig
+from ..config.agent_unified_config import AGENT_CLASS_MAP
 
 
 @dataclass
@@ -82,9 +84,10 @@ class RealTimeAnalysisWorkflow:
     - Performance monitoring and optimization
     """
 
-    def __init__(self, services, **config):
+    def __init__(self, services, workflow_config: Optional[WorkflowConfig] = None, **config):
         self.services = services
         self.config = config
+        self.workflow_config = workflow_config or WorkflowConfig()
         self.logger = services.logger
 
         # Workflow configuration
@@ -100,14 +103,36 @@ class RealTimeAnalysisWorkflow:
             "auto_optimization_threshold", 100
         )
 
-        # Initialize components
-        self.document_processor = DocumentProcessorAgent(services, **config)
-        self.document_rewriter = DocumentRewriterAgent(services, **config)
-        self.ontology_extractor = OntologyExtractionAgent(services, **config)
-        self.hybrid_extractor = HybridLegalExtractor(services, **config)
-        self.graph_manager = RealTimeGraphManager(services, **config)
-        self.vector_store = OptimizedVectorStore(services, **config)
-        self.reviewable_memory = ReviewableMemory(services, **config)
+        # Initialize components based on workflow configuration
+        dp_cls = AGENT_CLASS_MAP.get(
+            self.workflow_config.document_processor_agent, DocumentProcessorAgent
+        )
+        dr_cls = AGENT_CLASS_MAP.get(
+            self.workflow_config.document_rewriter_agent, DocumentRewriterAgent
+        )
+        oe_cls = AGENT_CLASS_MAP.get(
+            self.workflow_config.ontology_extraction_agent, OntologyExtractionAgent
+        )
+        hy_cls = AGENT_CLASS_MAP.get(
+            self.workflow_config.hybrid_extractor, HybridLegalExtractor
+        )
+        gm_cls = AGENT_CLASS_MAP.get(
+            self.workflow_config.graph_manager, RealTimeGraphManager
+        )
+        vs_cls = AGENT_CLASS_MAP.get(
+            self.workflow_config.vector_store, OptimizedVectorStore
+        )
+        rm_cls = AGENT_CLASS_MAP.get(
+            self.workflow_config.reviewable_memory, ReviewableMemory
+        )
+
+        self.document_processor = dp_cls(services, **config)
+        self.document_rewriter = dr_cls(services, **config)
+        self.ontology_extractor = oe_cls(services, **config)
+        self.hybrid_extractor = hy_cls(services, **config)
+        self.graph_manager = gm_cls(services, **config)
+        self.vector_store = vs_cls(services, **config)
+        self.reviewable_memory = rm_cls(services, **config)
 
         # Performance tracking
         self.documents_processed = 0
