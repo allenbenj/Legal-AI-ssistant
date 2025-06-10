@@ -12,6 +12,8 @@ import {
   DashboardErrorBoundary,
   DocumentProcessingErrorBoundary,
 } from '../../frontend/src/components/AsyncErrorBoundary';
+import Login from '../../frontend/src/components/Login';
+import { useAuth } from '../../frontend/src/contexts/AuthContext';
 
 
 
@@ -21,6 +23,7 @@ const AppContext = createContext({});
 
 // Main App Component
 export default function LegalAISystem() {
+  const { token } = useAuth();
   const [currentView, setCurrentView] = useState('dashboard');
   const [notifications, setNotifications] = useState([]);
   const [systemStatus, setSystemStatus] = useState({
@@ -44,6 +47,10 @@ export default function LegalAISystem() {
     currentView,
     setCurrentView
   };
+
+  if (!token) {
+    return <Login />;
+  }
 
   return (
     <ErrorBoundary level="critical">
@@ -148,6 +155,7 @@ function Sidebar() {
 // Header Component
 function Header() {
   const { systemStatus } = useContext(AppContext);
+  const { logout } = useAuth();
   const healthPercentage = (systemStatus.services.healthy / systemStatus.services.total) * 100;
 
   return (
@@ -179,6 +187,7 @@ function Header() {
           <div className="flex items-center gap-2">
             <img src="/api/placeholder/32/32" alt="User" className="w-8 h-8 rounded-full" />
             <span className="text-sm font-medium">Admin User</span>
+            <Button variant="outline" size="sm" onClick={logout}>Logout</Button>
           </div>
         </div>
       </div>

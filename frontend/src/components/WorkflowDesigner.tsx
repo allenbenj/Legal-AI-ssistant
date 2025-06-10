@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import apiFetch from "../apiClient";
 import { Plus, Edit } from "lucide-react";
 import useLoadingState from "../hooks/useLoadingState";
 import TableSkeleton from "./skeletons/TableSkeleton";
@@ -28,7 +29,7 @@ const WorkflowDesigner: React.FC = () => {
 
   useEffect(() => {
     executeAsync(() =>
-      fetch("/api/v1/workflows").then((res) => {
+      apiFetch("/api/v1/workflows").then((res) => {
         if (!res.ok) {
           throw new Error("Failed to load workflows");
         }
@@ -71,7 +72,7 @@ const WorkflowDesigner: React.FC = () => {
                 className="underline"
                 onClick={() =>
                   executeAsync(() =>
-                    fetch("/api/v1/workflows").then((res) => {
+                    apiFetch("/api/v1/workflows").then((res) => {
                       if (!res.ok) throw new Error("Failed to load workflows");
                       return res.json();
                     })
