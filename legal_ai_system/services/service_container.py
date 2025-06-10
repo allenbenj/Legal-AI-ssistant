@@ -152,7 +152,7 @@ class ServiceContainer:
         depends_on: Optional[List[str]] = None,
         config_key: Optional[str] = None,  # Key to fetch config for this service
         **factory_kwargs: Any,
-    ):
+    ) -> None:
         """
         Registers a service instance or a factory to create it.
         If a factory is provided, the service will be created on first get() or during initialize_all().
@@ -253,7 +253,7 @@ class ServiceContainer:
                 self._services[name] = instance
 
     @detailed_log_function(LogCategory.SYSTEM)
-    async def initialize_all_services(self):
+    async def initialize_all_services(self) -> None:
         """Initializes all registered services that have an 'initialize_service' or 'initialize' method."""
         service_container_logger.info("Initializing all registered services...")
         # Sort services by dependency order if complex dependencies exist (topological sort)
@@ -318,7 +318,7 @@ class ServiceContainer:
         service_container_logger.info("All services initialization process completed.")
 
     @detailed_log_function(LogCategory.SYSTEM)
-    async def shutdown_all_services(self):
+    async def shutdown_all_services(self) -> None:
         """Shuts down all registered services that have a 'shutdown' or 'close' method."""
         service_container_logger.info("Shutting down all registered services...")
 
@@ -443,7 +443,7 @@ class ServiceContainer:
         )
         return summary
 
-    def add_background_task(self, coro: Awaitable[Any]):
+    def add_background_task(self, coro: Awaitable[Any]) -> None:
         """Adds an awaitable to be run as a background task, managed by the container."""
         task = asyncio.create_task(coro)
         self._async_tasks.append(task)
@@ -510,9 +510,7 @@ async def create_service_container(
 
     db_conf = config_manager_service.get_database_config()
     persistence_cfg_for_factory = {
-        "database_url": db_conf.get(
-            "neo4j_uri"
-        ),  # Example, if EnhancedPersistence uses Neo4j as primary
+        "database_url": db_conf.neo4j_uri,  # Example if EnhancedPersistence uses Neo4j
         # Or better: db_conf.get_url_for_service("main_relational_db")
         "redis_url": config_manager_service.get("REDIS_URL_CACHE"),  # Example
         "persistence_config": config_manager_service.get(
@@ -581,7 +579,7 @@ async def create_service_container(
         "security_manager",
         instance=SecurityManager(
             encryption_password=enc_pass,
-            allowed_directories=sec_config.get("allowed_directories", []),
+            allowed_directories=sec_config.allowed_directories,
         ),
     )
     # SecurityManager's AuthManager needs the UserRepository
@@ -619,8 +617,8 @@ async def create_service_container(
         LLMProviderEnum,
     )  # Assuming in core
 
-    llm_primary_conf_dict = config_manager_service.get_llm_config()
-    primary_llm_config = LLMConfig(**llm_primary_conf_dict)  # Create Pydantic model
+    llm_primary_conf = config_manager_service.get_llm_config()
+    primary_llm_config = llm_primary_conf
     # Example fallback config (could also come from ConfigurationManager)
     fallback_llm_conf_dict = config_manager_service.get(
         "llm_fallback_config",
@@ -644,7 +642,7 @@ async def create_service_container(
     # ModelSwitcher needs API key if it's to create new configs for XAI/OpenAI
     # This key should come from a secure source, e.g. config_manager
     api_key_for_switcher = config_manager_service.get(
-        f"{llm_primary_conf_dict['provider']}_api_key"
+        f"{llm_primary_conf.provider}_api_key"
     )  # e.g. xai_api_key
     await container.register_service(
         "model_switcher",
@@ -655,13 +653,11 @@ async def create_service_container(
 
     from ..core.embedding_manager import EmbeddingManager
 
-    embed_conf = (
-        config_manager_service.get_vector_store_config()
-    )  # Embedding model is part of VS config
+    embed_conf = config_manager_service.get_vector_store_config()  # Embedding model is part of VS config
     await container.register_service(
         "embedding_manager",
         instance=EmbeddingManager(
-            model_name=embed_conf.get("embedding_model", "all-MiniLM-L6-v2"),
+            model_name=embed_conf.embedding_model,
             cache_dir_str=str(
                 config_manager_service.get("data_dir") / "cache" / "embeddings"
             ),
@@ -672,9 +668,9 @@ async def create_service_container(
     from .knowledge_graph_manager import create_knowledge_graph_manager
 
     kg_conf = {  # Fetch from config_manager
-        "NEO4J_URI": db_conf.get("neo4j_uri"),
-        "NEO4J_USER": db_conf.get("neo4j_user"),
-        "NEO4J_PASSWORD": db_conf.get("neo4j_password"),
+        "NEO4J_URI": db_conf.neo4j_uri,
+        "NEO4J_USER": db_conf.neo4j_user,
+        "NEO4J_PASSWORD": db_conf.neo4j_password,
         "ENABLE_NEO4J_PERSISTENCE": True,
     }
     await container.register_service(
@@ -691,10 +687,10 @@ async def create_service_container(
         "STORAGE_PATH": str(
             config_manager_service.get("data_dir") / "vector_store_main"
         ),
-        "DOCUMENT_INDEX_PATH": embed_conf.get("document_index_path"),
-        "ENTITY_INDEX_PATH": embed_conf.get("entity_index_path"),
-        "DEFAULT_INDEX_TYPE": embed_conf.get("vector_store_type", "HNSW"),
-        "embedding_model_name": embed_conf.get("embedding_model"),
+        "DOCUMENT_INDEX_PATH": str(embed_conf.document_index_path),
+        "ENTITY_INDEX_PATH": str(embed_conf.entity_index_path),
+        "DEFAULT_INDEX_TYPE": embed_conf.type,
+        "embedding_model_name": embed_conf.embedding_model,
     }
     # EmbeddingProvider instance can be fetched from EmbeddingManager if VectorStore is designed to take it
     # embedding_provider_instance = await container.get_service("embedding_manager").get_provider_instance() # Conceptual
@@ -716,7 +712,7 @@ async def create_service_container(
     # 5. Memory Layer
     from ..core.unified_memory_manager import create_unified_memory_manager
 
-    umm_conf = {"DB_PATH": str(db_conf.get("memory_db_path"))}
+    umm_conf = {"DB_PATH": str(db_conf.memory_db_path)}
     await container.register_service(
         "unified_memory_manager",
         factory=create_unified_memory_manager,
@@ -740,7 +736,7 @@ async def create_service_container(
 
     from .violation_review import ViolationReviewDB
 
-    violation_db_path = str(db_conf.get("violations_db_path"))
+    violation_db_path = str(db_conf.violations_db_path)
     await container.register_service(
         "violation_review_db",
         instance=ViolationReviewDB(db_path=violation_db_path),

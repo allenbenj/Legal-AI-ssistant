@@ -85,6 +85,9 @@ class RealTimeAnalysisResult:
 class RealTimeAnalysisWorkflow:
     """Master workflow for real-time legal document analysis."""
 
+    def __init__(self, *args, max_concurrent_documents: int = 1, **kwargs) -> None:
+        self.max_concurrent_documents = max_concurrent_documents
+        self.logger = get_detailed_logger("RealTimeAnalysisWorkflow", LogCategory.WORKFLOW)
 
         # Performance tracking
         self.documents_processed = 0

@@ -1,3 +1,3 @@
 class MemoryStore:
 
-        pass
+
