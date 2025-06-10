@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from queue import Queue
+from .enhanced_persistence import ConnectionPool
 
 # Import detailed logging system
 from .detailed_logging import (
@@ -290,9 +291,12 @@ class EnhancedVectorStore:
         enable_gpu: bool = False,
         document_index_path: str | None = None,
         entity_index_path: str | None = None,
+        connection_pool: Optional[ConnectionPool] = None,
     ):
         """Initialize enhanced vector store with comprehensive configuration"""
         vector_logger.info("=== INITIALIZING ENHANCED VECTOR STORE ===")
+
+        self.connection_pool = connection_pool
         
         self.storage_path = Path(storage_path)
         self.storage_path.mkdir(parents=True, exist_ok=True)
@@ -917,12 +921,12 @@ class EnhancedVectorStore:
 
 
 def create_enhanced_vector_store(
-    service_container: Any,
-    service_config: Optional[Dict[str, Any]] | None = None,
+    connection_pool: ConnectionPool,
+    config: Optional[Dict[str, Any]] | None = None,
 ) -> "EnhancedVectorStore":
     """Factory function used by :class:`ServiceContainer`."""
 
-    cfg = service_config or {}
+    cfg = config or {}
     return EnhancedVectorStore(
         storage_path=cfg.get("STORAGE_PATH", "./storage/vectors"),
         embedding_model=cfg.get("embedding_model_name", "sentence-transformers/all-MiniLM-L6-v2"),
@@ -930,6 +934,7 @@ def create_enhanced_vector_store(
         enable_gpu=cfg.get("ENABLE_GPU_FAISS", False),
         document_index_path=cfg.get("DOCUMENT_INDEX_PATH"),
         entity_index_path=cfg.get("ENTITY_INDEX_PATH"),
+        connection_pool=connection_pool,
     )
 
     # ------------------------------------------------------------------

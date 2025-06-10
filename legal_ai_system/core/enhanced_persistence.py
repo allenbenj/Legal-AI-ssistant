@@ -780,16 +780,13 @@ class CacheManager:
 
 class EnhancedPersistenceManager:
     """Central persistence manager coordinating all data operations."""
-    
-    def __init__(self, database_url: Optional[str], redis_url: Optional[str], 
-                 config: Optional[Dict[str,Any]] = None): # Added config
+
+    def __init__(self, connection_pool: ConnectionPool,
+                 config: Optional[Dict[str, Any]] = None):
         self.config = config or {}
-        min_pg = self.config.get("min_pg_connections", 5)
-        max_pg = self.config.get("max_pg_connections", 20)
-        max_rd = self.config.get("max_redis_connections", 10)
         cache_ttl = self.config.get("cache_default_ttl_seconds", 3600)
 
-        self.connection_pool = ConnectionPool(database_url, redis_url, min_pg, max_pg, max_rd)
+        self.connection_pool = connection_pool
         self.entity_repo = EntityRepository(self.connection_pool)
         self.workflow_repo = WorkflowRepository(self.connection_pool)
         self.cache_manager = CacheManager(self.connection_pool, default_ttl_seconds=cache_ttl)
@@ -986,14 +983,12 @@ class EnhancedPersistenceManager:
         return await self.health_check()
 
 # Factory function for service container
-def create_enhanced_persistence_manager(config: Dict[str, Any]) -> EnhancedPersistenceManager:
-    db_url = config.get("database_url") # e.g., from ConfigurationManager: get_db_url("postgresql_primary")
-    redis_url = config.get("redis_url") # e.g., from ConfigurationManager: get_redis_url("cache_primary")
-    
-    if not db_url:
-        persistence_logger.warning("DATABASE_URL not provided for EnhancedPersistenceManager. PostgreSQL features will be unavailable.")
-    if not redis_url:
-        persistence_logger.warning("REDIS_URL not provided for EnhancedPersistenceManager. Redis caching features will be unavailable.")
+def create_enhanced_persistence_manager(
+    connection_pool: ConnectionPool, config: Dict[str, Any]
+) -> EnhancedPersistenceManager:
+    """Factory for :class:`EnhancedPersistenceManager`."""
 
-
-    return EnhancedPersistenceManager(db_url, redis_url, config=config.get("persistence_config"))
+    return EnhancedPersistenceManager(
+        connection_pool,
+        config=config.get("persistence_config"),
+    )

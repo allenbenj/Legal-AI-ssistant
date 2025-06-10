@@ -18,6 +18,7 @@ import hashlib
 
 # Import detailed logging
 from ..core.detailed_logging import get_detailed_logger, LogCategory, detailed_log_function
+from ..core.enhanced_persistence import ConnectionPool
 
 # Initialize loggers
 kg_logger = get_detailed_logger("Knowledge_Graph_Manager", LogCategory.KNOWLEDGE_GRAPH)
@@ -121,7 +122,12 @@ class KnowledgeGraphManager:
     """
     
     @detailed_log_function(LogCategory.KNOWLEDGE_GRAPH)
-    def __init__(self, storage_dir: str = "./storage/knowledge_graph", service_config: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self,
+        storage_dir: str = "./storage/knowledge_graph",
+        service_config: Optional[Dict[str, Any]] = None,
+        connection_pool: Optional[ConnectionPool] = None,
+    ):
         """Initialize knowledge graph manager."""
         kg_logger.info("=== INITIALIZING KNOWLEDGE GRAPH MANAGER ===")
         
@@ -129,6 +135,7 @@ class KnowledgeGraphManager:
         self.storage_dir.mkdir(parents=True, exist_ok=True)
         
         self.config = service_config or {}
+        self.connection_pool = connection_pool
         
         # Storage components
         self.entities: Dict[str, Entity] = {}
@@ -629,6 +636,11 @@ class KnowledgeGraphManager:
         return health
 
 # Service container factory function
-def create_knowledge_graph_manager(config: Optional[Dict[str, Any]] = None) -> KnowledgeGraphManager:
+def create_knowledge_graph_manager(
+    connection_pool: ConnectionPool,
+    config: Optional[Dict[str, Any]] = None,
+) -> KnowledgeGraphManager:
     """Factory function for service container integration."""
-    return KnowledgeGraphManager(service_config=config or {})
+    return KnowledgeGraphManager(
+        service_config=config or {}, connection_pool=connection_pool
+    )
