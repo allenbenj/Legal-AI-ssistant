@@ -40,14 +40,6 @@ if not hasattr(sys.modules["spacy.tokens"], "Doc"):
     sys.modules["spacy.tokens"].SpanGroup = object
 if not hasattr(sys.modules["spacy.language"], "Language"):
     sys.modules["spacy.language"].Language = object
-svc_mod = sys.modules.setdefault(
-    "legal_ai_system.services.service_container", ModuleType("service_container")
-)
-
-class ServiceContainer:  # minimal stub
-    pass
-
-svc_mod.ServiceContainer = ServiceContainer
 
 try:
     from legal_ai_system.services.realtime_analysis_workflow import (
@@ -59,7 +51,7 @@ except Exception:  # pragma: no cover - optional dependency may be missing
 
 
 class DummyWorkflow(RealTimeAnalysisWorkflow):
-    def __init__(self):
+    def __init__(self, queue=None):
         # Set minimal attributes without calling super().__init__
         self.processing_lock = asyncio.Semaphore(1)
         self.logger = MagicMock()
@@ -69,6 +61,7 @@ class DummyWorkflow(RealTimeAnalysisWorkflow):
         self.progress_callbacks = []
         self.update_callbacks = []
         self.enable_real_time_sync = False
+        self.task_queue = queue
 
         self.document_processor = SimpleNamespace(
             process=AsyncMock(return_value=SimpleNamespace(data=SimpleNamespace(content="txt", success=True)))
@@ -158,4 +151,15 @@ async def test_process_document_realtime_uses_provided_document_id() -> None:
     )
 
     assert result.document_id == "custom_id"
+
+
+@pytest.mark.asyncio
+async def test_process_document_realtime_enqueues_job() -> None:
+    queue = SimpleNamespace(enqueue=MagicMock(return_value=SimpleNamespace(id="j1")))
+    wf = DummyWorkflow(queue=queue)
+
+    job = await wf.process_document_realtime("sample.txt")
+
+    queue.enqueue.assert_called_once()
+    assert job == queue.enqueue.return_value
 
