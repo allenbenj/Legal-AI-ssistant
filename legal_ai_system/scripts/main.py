@@ -94,6 +94,7 @@ try:
         RealTimeAnalysisResult,
         RealTimeAnalysisWorkflow,
     )
+    from legal_ai_system.config.settings import settings
 
     SERVICES_AVAILABLE = True
 except ImportError as e:
@@ -139,6 +140,10 @@ except ImportError as e:
 
     RealTimeAnalysisWorkflow = None  # type: ignore
     RealTimeAnalysisResult = None  # type: ignore
+    class _SettingsFallback:
+        frontend_dist_path = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+
+    settings = _SettingsFallback()
 
 
 # Initialize logger for this module
@@ -1310,18 +1315,21 @@ async def process_document_background_task(  # Renamed
             )
 
 
-# Serve frontend if configured (example, adjust path as needed)
-# This should ideally be done only if not in a containerized environment where a reverse proxy handles this.
-# Ensure the path is correct relative to where main.py is located.
-# If main.py is in legal_ai_system/main.py, and frontend is in legal_ai_system/frontend/dist
-# then the path should be relative like "../frontend/dist" or absolute.
-# For robustness, use settings to define this path.
-# frontend_dist_path = Path(__file__).parent / "frontend" / "dist"
-# if frontend_dist_path.exists():
-#    app.mount("/", StaticFiles(directory=str(frontend_dist_path), html=True), name="static_frontend")
-#    main_api_logger.info(f"Serving static frontend from: {frontend_dist_path}")
-# else:
-#    main_api_logger.warning(f"Frontend 'dist' directory not found at {frontend_dist_path}. Frontend will not be served by this API.")
+# Serve compiled frontend if available
+frontend_dist_path = Path(settings.frontend_dist_path)
+if frontend_dist_path.exists():
+    app.mount(
+        "/",
+        StaticFiles(directory=str(frontend_dist_path), html=True),
+        name="static_frontend",
+    )
+    main_api_logger.info(
+        f"Serving static frontend from: {frontend_dist_path}"
+    )
+else:
+    main_api_logger.warning(
+        f"Frontend 'dist' directory not found at {frontend_dist_path}. Frontend will not be served by this API."
+    )
 
 
 if __name__ == "__main__":

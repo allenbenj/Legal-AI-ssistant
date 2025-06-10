@@ -161,6 +161,9 @@ class LegalAISettings(BaseSettings):
     documents_dir: Optional[Path] = Field(default=None, env="DOCUMENTS_DIR")
     models_dir: Optional[Path] = Field(default=None, env="MODELS_DIR")
     logs_dir: Optional[Path] = Field(default=None, env="LOGS_DIR")
+    frontend_dist_path: Optional[Path] = Field(
+        default=None, env="FRONTEND_DIST_PATH"
+    )
 
     # Auto-create directories
     def __init__(self, **data: Any):
@@ -174,6 +177,8 @@ class LegalAISettings(BaseSettings):
             self.models_dir = self.base_dir / "models"
         if self.logs_dir is None:
             self.logs_dir = self.base_dir / "logs"
+        if self.frontend_dist_path is None:
+            self.frontend_dist_path = self.base_dir / "frontend" / "dist"
 
         # Set path defaults that depend on other fields
         if self.faiss_index_path is None:
