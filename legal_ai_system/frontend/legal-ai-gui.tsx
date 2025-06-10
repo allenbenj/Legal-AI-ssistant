@@ -541,22 +541,7 @@ function WorkflowDesigner() {
       </div>
 
       {/* Workflow Settings */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-lg font-semibold mb-4">Workflow Settings</h3>
-        <div className="space-y-4">
-          <input className="border rounded p-2 w-full" placeholder="Workflow name" value={name} onChange={e => setName(e.target.value)} />
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={enableNER} onChange={e => setEnableNER(e.target.checked)} /> Enable NER
-          </label>
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={enableLLM} onChange={e => setEnableLLM(e.target.checked)} /> Enable LLM Extraction
-          </label>
-          <label className="block">Confidence Threshold: {confidence.toFixed(2)}</label>
-          <input type="range" min="0" max="1" step="0.05" value={confidence} onChange={e => setConfidence(parseFloat(e.target.value))} className="w-full" />
-          <button onClick={saveWorkflow} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2">
-            <Save className="w-4 h-4" />
-            Save Workflow
-          </button>
+
         </div>
       </div>
 
