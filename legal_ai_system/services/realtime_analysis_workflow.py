@@ -149,58 +149,8 @@ class RealTimeAnalysisWorkflow:
             RealTimeAnalysisResult with comprehensive analysis
         """
         async with self.processing_lock:
-            doc_result = await self.document_processor.process(document_path)
-            rewrite_result = await self.document_rewriter.rewrite_text(
-                self._extract_text_from_result(doc_result.data)
-            )
-            legal_doc = self._create_legal_document(
-                doc_result.data, document_path, document_id, rewrite_result.corrected_text
-            )
-            ontology_result = await self.ontology_extractor.process(legal_doc)
-            hybrid_result = await self.hybrid_extractor.extract_from_document(legal_doc)
 
-            graph_updates = await self._process_entities_realtime(
-                hybrid_result, ontology_result, document_id
-            )
-            vector_updates = await self._update_vector_store_realtime(
-                hybrid_result, rewrite_result.corrected_text, document_id
-            )
-            memory_updates = await self._integrate_with_memory(
-                hybrid_result, ontology_result, document_path
-            )
-            validation_results = await self._validate_extraction_quality(
-                hybrid_result, ontology_result, graph_updates
-            )
-            confidence_scores = self._calculate_confidence_scores(
-                hybrid_result, ontology_result, validation_results
-            )
-            sync_status = await self._get_sync_status()
 
-        total_time = time.time() - start_time
-        result = RealTimeAnalysisResult(
-            document_path=document_path,
-            document_id=document_id,
-            document_processing=doc_result,
-            ontology_extraction=ontology_result,
-            hybrid_extraction=hybrid_result,
-            graph_updates=graph_updates,
-            vector_updates=vector_updates,
-            memory_updates=memory_updates,
-            processing_times={"total": total_time},
-            total_processing_time=total_time,
-            confidence_scores=confidence_scores,
-            validation_results=validation_results,
-            sync_status=sync_status,
-        )
-
-        await self._update_performance_stats(result)
-        if (
-            self.auto_optimization_threshold
-            and self.documents_processed % self.auto_optimization_threshold == 0
-        ):
-            await self._auto_optimize_system()
-
-        return result
 
 
     async def _process_entities_realtime(

@@ -4,20 +4,8 @@ import asyncio
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Iterable, List, Sequence
 
-from ..workflow_engine.merge import MergeStrategy, ListMerge
+from ..workflow_engine.merge import ListMerge, MergeStrategy
 
-class MergeStrategy:
-    """Basic merge strategy interface."""
-
-    def merge(self, results: Sequence[Any]) -> Any:  # pragma: no cover - simple
-        raise NotImplementedError
-
-
-class ListMerge(MergeStrategy):
-    """Default merge strategy returning a list of results."""
-
-    def merge(self, results: Sequence[Any]) -> List[Any]:  # pragma: no cover
-        return list(results)
 
 
 @dataclass
@@ -38,7 +26,6 @@ class LegalWorkflowBuilder:
 
     def add_step(self, func: Callable[[Any], Awaitable[Any] | Any]) -> None:
         """Add a sequential processing step."""
-
         self._steps.append(func)
 
     def add_parallel_processing(
@@ -48,7 +35,6 @@ class LegalWorkflowBuilder:
         merge_strategy: MergeStrategy | None = None,
     ) -> None:
         """Add a set of functions to run in parallel and merge their results."""
-
         strategy = merge_strategy or ListMerge()
         self._steps.append(_ParallelStep(list(funcs), strategy))
 
