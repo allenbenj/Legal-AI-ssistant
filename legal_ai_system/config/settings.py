@@ -1,5 +1,6 @@
-"""Re-export configuration settings for external use.
+"""Re-export configuration settings for external use."""
 
+from ..core.settings import (
     LegalAISettings,
     settings,
     get_db_url,
