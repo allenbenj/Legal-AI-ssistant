@@ -246,9 +246,7 @@ async def lifespan(app: FastAPI):
                     # Assuming encryption_password might not be directly in settings for security reasons
                     # but fetched from a secure store or env var by SecurityManager itself.
                     # For allowed_directories, they should be part of the app's config.
-                    allowed_dirs_list = sec_config.get(
-                        "allowed_directories", allowed_dirs_list
-                    )
+                    allowed_dirs_list = sec_config.allowed_directories or allowed_dirs_list
                     # encryption_pwd might be handled internally by SecurityManager based on env vars
 
             security_manager_instance = SecurityManager(

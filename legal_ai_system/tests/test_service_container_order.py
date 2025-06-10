@@ -1,7 +1,9 @@
 import asyncio
+import importlib
 import pytest
 
-from legal_ai_system.services.service_container import ServiceContainer
+module = importlib.import_module("legal_ai_system.services.service_container")
+ServiceContainer = importlib.reload(module).ServiceContainer
 
 class DummyA:
     def __init__(self):
