@@ -59,6 +59,16 @@ tual environment and run the tests:
 python legal_ai_system/scripts/setup_environment_task.py
 ```
 
+## Running Tests
+
+Install the development dependencies before executing the test suite. Run
+`pip install -e .[dev]` or use the installation script above. Missing packages
+such as `pytest-mock` will cause test failures.
+
+```bash
+pytest
+```
+
 ### Start Task
 
 
