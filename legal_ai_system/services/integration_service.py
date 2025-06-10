@@ -10,11 +10,14 @@ This service is typically used by the API layer (e.g., FastAPI).
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+import hashlib
+import json
 
 # import logging # Replaced by detailed_logging
 from typing import Any, Dict, Optional
 
 from legal_ai_system.services.memory_manager import MemoryManager
+from legal_ai_system.core.enhanced_persistence import EnhancedPersistenceManager
 
 from legal_ai_system.core.detailed_logging import (
     LogCategory,
@@ -53,11 +56,80 @@ class LegalAIIntegrationService:
         self.service_container = service_container
         # Cached service references (may be None if not yet registered)
         self.security_manager: Optional[SecurityManager] = None
+        self.memory_manager: Optional[MemoryManager] = None
+        self.workflow_orchestrator: Optional[WorkflowOrchestrator] = None
+        self.llm_manager: Optional[Any] = None
+        self.persistence_manager: Optional[EnhancedPersistenceManager] = None
+
         # Example: self.realtime_workflow: Optional[RealTimeAnalysisWorkflow] = None
 
         integration_service_logger.info(
             "LegalAIIntegrationService initialized successfully."
         )
+
+    async def create_document_record(
+        self,
+        document_id: str,
+        filename: str,
+        file_path: Path,
+        user_id: str,
+        options: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Persist metadata for an uploaded document."""
+        if not self.persistence_manager:
+            self.persistence_manager = await self.service_container.get_service(
+                "persistence_manager"
+            )
+        persistence = self.persistence_manager
+        if not persistence:
+            integration_service_logger.warning(
+                "PersistenceManager unavailable; document record not stored"
+            )
+            return
+
+        file_type = file_path.suffix.lstrip(".")
+        try:
+            file_size = file_path.stat().st_size
+            file_hash = hashlib.sha256(file_path.read_bytes()).hexdigest()
+        except Exception as e:  # pragma: no cover - file stat error
+            integration_service_logger.error(
+                "Failed to compute file metadata.", exception=e
+            )
+            file_size = 0
+            file_hash = None
+
+        try:
+            async with persistence.connection_pool.get_pg_connection() as conn:
+                await conn.execute(
+                    """
+                    INSERT INTO documents (
+                        document_id, filename, file_path, file_size,
+                        file_type, file_hash, processing_status,
+                        created_at, updated_at, source, custom_metadata
+                    ) VALUES (
+                        $1, $2, $3, $4, $5, $6,
+                        'pending', NOW(), NOW(), $7, $8
+                    )
+                    ON CONFLICT (document_id) DO NOTHING
+                    """,
+                    document_id,
+                    filename,
+                    str(file_path),
+                    file_size,
+                    file_type,
+                    file_hash,
+                    "upload",
+                    json.dumps(options or {}),
+                )
+            integration_service_logger.debug(
+                "Document record created.", parameters={"document_id": document_id}
+            )
+        except Exception as e:  # pragma: no cover - db failure
+            integration_service_logger.error(
+                "Failed to store document record.",
+                parameters={"document_id": document_id},
+                exception=e,
+            )
 
     @detailed_log_function(LogCategory.API)
     async def handle_document_upload(
@@ -134,6 +206,14 @@ class LegalAIIntegrationService:
                 "upload_timestamp": datetime.now(timezone.utc).isoformat(),
                 "processing_options": options,
             }
+
+            await self.create_document_record(
+                document_id,
+                filename,
+                file_path,
+                user.user_id,
+                options,
+            )
 
             if self.memory_manager:
                 await self.memory_manager.create_session(
