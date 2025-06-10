@@ -25,9 +25,12 @@ pip install --upgrade pip
 ```
 
 ## Installing Dependencies
-Install all required packages from the project requirements file:
+Install all required packages from the project requirements file. Some packages
+need `packaging` below version 25, so install that first to avoid resolver
+errors:
 
 ```bash
+pip install "packaging<25"
 pip install -r requirements.txt
 ```
 
