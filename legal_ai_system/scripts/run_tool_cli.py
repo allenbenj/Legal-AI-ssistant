@@ -18,10 +18,11 @@ app = typer.Typer(help="Execute any registered Legal AI System tool")
 
 @app.command()
 def run(
-    name: str, args: List[str] = typer.Argument([], help="Arguments for the tool")
+    name: str,
+    args: List[str] = typer.Argument(None, help="Arguments for the tool"),
 ) -> None:
     """Run the specified tool with optional positional arguments."""
-    result = run_tool(name, *args)
+    result = run_tool(name, *(args or []))
     typer.echo(result)
 
 

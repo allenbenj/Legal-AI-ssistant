@@ -394,7 +394,8 @@ class KnowledgeBaseAgent(BaseAgent):
                         source_document=document_id,
                     )
             except Exception as exc:
-                logger.error("graph_persistence_failed", error=str(exc))
+                # Log the failure without passing unexpected keyword args
+                logger.error("graph_persistence_failed %s", exc)
     
     def _find_existing_entity(self, entity_name: str, entity_type: str) -> Optional[str]:
         """Find existing entity by name or alias with similarity matching."""
