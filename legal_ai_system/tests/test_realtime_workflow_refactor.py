@@ -34,6 +34,11 @@ sys.modules["aioredis.exceptions"] = exc
 sys.modules["sklearn.metrics.pairwise"].cosine_similarity = lambda *a, **k: []
 if not hasattr(sys.modules["numpy"], "array"):
     sys.modules["numpy"].array = lambda *a, **k: a
+if not hasattr(sys.modules["numpy"], "ndarray"):
+    class _FakeNdarray(list):
+        ndim = 1
+
+    sys.modules["numpy"].ndarray = _FakeNdarray
 if not hasattr(sys.modules["spacy.tokens"], "Doc"):
     sys.modules["spacy.tokens"].Doc = object
     sys.modules["spacy.tokens"].Span = object
@@ -152,6 +157,15 @@ async def test_process_document_realtime_uses_provided_document_id() -> None:
     )
 
     assert result.document_id == "custom_id"
+
+
+@pytest.mark.asyncio
+async def test_process_document_realtime_updates_graph_and_vectors() -> None:
+    wf = DummyWorkflow()
+    await wf.process_document_realtime("sample.txt")
+
+    wf._process_entities_realtime.assert_awaited()
+    wf._update_vector_store_realtime.assert_awaited()
 
 
 
