@@ -73,6 +73,9 @@ rich>=13.0.0
 pybreaker>=1.3.0
 prometheus_client>=0.17.1
 
+# LRU caching
+cachetools>=6.0.0
+
 # Configuration and Environment
 python-dotenv>=1.0.0
 toml>=0.10.2
