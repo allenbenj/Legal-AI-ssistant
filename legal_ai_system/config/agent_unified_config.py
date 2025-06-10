@@ -14,6 +14,7 @@ from ..core.agent_unified_config import (
 )
 
 from ..agents.document_processor_agent import DocumentProcessorAgent
+from ..agents.document_processor_agent_v2 import DocumentProcessorAgentV2
 from ..agents.document_rewriter_agent import DocumentRewriterAgent
 from ..agents.ontology_extraction_agent import OntologyExtractionAgent
 from ..utils.hybrid_extractor import HybridLegalExtractor
@@ -22,6 +23,7 @@ from ..core.optimized_vector_store import OptimizedVectorStore
 from ..utils.reviewable_memory import ReviewableMemory
 
     "DocumentProcessorAgent": DocumentProcessorAgent,
+    "DocumentProcessorAgentV2": DocumentProcessorAgentV2,
     "DocumentRewriterAgent": DocumentRewriterAgent,
     "OntologyExtractionAgent": OntologyExtractionAgent,
     "HybridLegalExtractor": HybridLegalExtractor,
