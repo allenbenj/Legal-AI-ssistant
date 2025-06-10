@@ -925,6 +925,53 @@ class KnowledgeGraphTab:
                 )
 
 
+class WorkflowDesignerTab:
+    """Workflow Designer Tab - Configure and save analysis workflows"""
+
+    @staticmethod
+    def render():
+        st.header("🧩 Workflow Designer")
+        api_client = SessionManager.get_api_client()
+
+        workflows = api_client.get_workflows()
+
+        workflow_names = [w.get("name", str(w.get("id"))) for w in workflows]
+        selection = st.selectbox("Select Workflow", ["Create New"] + workflow_names)
+        current = None
+        if selection != "Create New" and selection in workflow_names:
+            current = workflows[workflow_names.index(selection)]
+
+        name = st.text_input("Name", value=current.get("name", "") if current else "")
+        enable_ner = st.checkbox("Enable NER", value=current.get("enable_ner", True) if current else True)
+        enable_llm = st.checkbox(
+            "Enable LLM Extraction",
+            value=current.get("enable_llm_extraction", True) if current else True,
+        )
+        confidence = st.slider(
+            "Confidence Threshold",
+            0.0,
+            1.0,
+            current.get("confidence_threshold", 0.7) if current else 0.7,
+            0.05,
+        )
+
+        if st.button("Save Workflow"):
+            payload = {
+                "name": name,
+                "enable_ner": enable_ner,
+                "enable_llm_extraction": enable_llm,
+                "confidence_threshold": confidence,
+            }
+            if current and current.get("id"):
+                result = api_client.update_workflow(current["id"], payload)
+            else:
+                result = api_client.create_workflow(payload)
+            if result.get("status") != "ERROR":
+                ErrorHandler.display_success("Workflow saved")
+            else:
+                ErrorHandler.display_error("Failed to save workflow", result.get("message"))
+
+
 class SettingsLogsTab:
     """Settings & Logs Tab - Application configuration and system monitoring"""
 
@@ -1420,6 +1467,7 @@ def main():
     tab_options = {
         "📊 Analysis Dashboard": "dashboard",
         "📄 Document Processor": "processor",
+        "🧩 Workflow Designer": "workflows",
         "🧠 Memory Brain": "memory",
         "⚠️ Violation Review": "violations",
         "🕸️ Knowledge Graph": "graph",
@@ -1467,6 +1515,8 @@ def main():
         ViolationReviewTab.render()
     elif tab_key == "graph":
         KnowledgeGraphTab.render()
+    elif tab_key == "workflows":
+        WorkflowDesignerTab.render()
     elif tab_key == "settings":
         SettingsLogsTab.render()
 
