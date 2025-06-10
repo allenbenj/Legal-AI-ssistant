@@ -8,7 +8,6 @@ core services and agents within the Legal AI System.
 
 import asyncio
 from typing import Dict, Any, Optional, Callable, Awaitable, List, TYPE_CHECKING
-from dataclasses import asdict
 from enum import Enum
 from datetime import datetime, timezone
 import os
@@ -462,18 +461,6 @@ class ServiceContainer:
             parameters={"task_name": getattr(coro, "__name__", "unnamed_coro")},
         )
 
-    def get_active_workflow_config(self) -> WorkflowConfig:
-        """Return the currently active workflow configuration."""
-        return self._active_workflow_config
-
-    def update_workflow_config(self, new_config: Dict[str, Any]) -> None:
-        """Update the workflow configuration and propagate to the workflow instance."""
-        for key, value in new_config.items():
-            setattr(self._active_workflow_config, key, value)
-        if "realtime_analysis_workflow" in self._services:
-            workflow = self._services["realtime_analysis_workflow"]
-            if hasattr(workflow, "update_config"):
-                workflow.update_config(**new_config)
 
 
 # Global factory function to create and populate the service container
@@ -874,11 +861,11 @@ async def create_service_container(
 
     # Register workflow with active configuration
     workflow_conf_dict = config_manager_service.get("workflow_config", {})
-    container.update_workflow_config(workflow_conf_dict)
+    await container.update_workflow_config(workflow_conf_dict)
     await container.register_service(
         "realtime_analysis_workflow",
         factory=lambda sc: RealTimeAnalysisWorkflow(
-            sc, **asdict(sc.get_active_workflow_config())
+            sc, **sc.get_active_workflow_config()
         ),
         is_async_factory=False,
     )
