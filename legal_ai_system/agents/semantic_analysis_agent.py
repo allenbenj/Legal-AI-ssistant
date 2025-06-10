@@ -301,7 +301,30 @@ Ensure high-quality analysis with confidence ≥{min_confidence}. Focus on legal
         
         doc_type = result.content_classification.get('document_type', 'unknown')
         self.analysis_stats["document_types_analyzed"][doc_type] = self.analysis_stats["document_types_analyzed"].get(doc_type, 0) + 1
-        # ... similar for practice_areas_seen
+        # Determine practice areas from classification or topics
+        practice_areas = set()
+        classification = result.content_classification
+        if isinstance(classification, dict):
+            for key in ("practice_areas", "practice_area", "area_of_law"):
+                if key in classification:
+                    value = classification[key]
+                    if isinstance(value, str):
+                        practice_areas.add(value)
+                    elif isinstance(value, list):
+                        practice_areas.update(str(v) for v in value if isinstance(v, (str, int)))
+        if not practice_areas:
+            for topic in result.key_topics:
+                if not isinstance(topic, dict):
+                    continue
+                for key in ("practice_area", "category", "area_of_law"):
+                    if key in topic:
+                        value = topic[key]
+                        if isinstance(value, str):
+                            practice_areas.add(value)
+                        elif isinstance(value, list):
+                            practice_areas.update(str(v) for v in value if isinstance(v, (str, int)))
+        for area in practice_areas:
+            self.analysis_stats["practice_areas_seen"][area] = self.analysis_stats["practice_areas_seen"].get(area, 0) + 1
 
     async def get_analysis_statistics(self) -> Dict[str, Any]: # This is a public method for stats
         """Get current semantic analysis performance statistics."""
