@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Plus, Edit } from "lucide-react";
+import useLoadingState from "../hooks/useLoadingState";
+import TableSkeleton from "./skeletons/TableSkeleton";
 
 export interface WorkflowNode {
   id: string;
@@ -20,17 +22,19 @@ export interface Workflow {
 }
 
 const WorkflowDesigner: React.FC = () => {
-  const [workflows, setWorkflows] = useState<Workflow[]>([]);
+  const { isLoading, error, data: workflows, executeAsync } =
+    useLoadingState<Workflow[]>();
   const [selected, setSelected] = useState<Workflow | null>(null);
 
   useEffect(() => {
-    fetch("/api/v1/workflows")
-      .then((res) => res.json())
-      .then((data: Workflow[]) => {
-        if (Array.isArray(data)) {
-          setWorkflows(data);
+    executeAsync(() =>
+      fetch("/api/v1/workflows").then((res) => {
+        if (!res.ok) {
+          throw new Error("Failed to load workflows");
         }
-      });
+        return res.json();
+      })
+    );
   }, []);
 
   const editWorkflow = (wf: Workflow) => {
@@ -59,24 +63,44 @@ const WorkflowDesigner: React.FC = () => {
           <h3 className="text-lg font-semibold">Saved Workflows</h3>
         </div>
         <div className="p-6 space-y-4">
-          {workflows.map((workflow) => (
-            <div
-              key={workflow.id}
-              className="border rounded-lg p-4 flex items-center justify-between"
-            >
-              <div>
-                <div className="font-medium">{workflow.name}</div>
-              </div>
-              <div className="flex items-center gap-3">
-                <button
-                  className="p-2 hover:bg-gray-100 rounded"
-                  onClick={() => editWorkflow(workflow)}
-                >
-                  <Edit className="w-4 h-4" />
-                </button>
-              </div>
+          {isLoading && <TableSkeleton rows={3} columns={2} />}
+          {error && (
+            <div className="text-red-600 space-x-2">
+              <span>Error loading workflows</span>
+              <button
+                className="underline"
+                onClick={() =>
+                  executeAsync(() =>
+                    fetch("/api/v1/workflows").then((res) => {
+                      if (!res.ok) throw new Error("Failed to load workflows");
+                      return res.json();
+                    })
+                  )
+                }
+              >
+                Retry
+              </button>
             </div>
-          ))}
+          )}
+          {workflows &&
+            workflows.map((workflow) => (
+              <div
+                key={workflow.id}
+                className="border rounded-lg p-4 flex items-center justify-between"
+              >
+                <div>
+                  <div className="font-medium">{workflow.name}</div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    className="p-2 hover:bg-gray-100 rounded"
+                    onClick={() => editWorkflow(workflow)}
+                  >
+                    <Edit className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
         </div>
       </div>
     </div>
