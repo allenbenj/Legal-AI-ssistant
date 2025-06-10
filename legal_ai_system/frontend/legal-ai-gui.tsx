@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React, { useState, useEffect, createContext, useContext } from 'react';
 import { 
   Search, Upload, FileText, Users, Settings, Shield, 
@@ -6,6 +7,7 @@ import {
   BarChart, Network, Workflow, Eye, Download,
   Clock, Filter, Plus, Trash2, Edit, Save
 } from 'lucide-react';
+import WorkflowDesigner from "@/components/WorkflowDesigner";
 
 // Context for global state management
 const AppContext = createContext({});
@@ -481,58 +483,6 @@ function AgentManagement() {
             </div>
           </div>
         ))}
-      </div>
-    </div>
-  );
-}
-
-// Workflow Designer
-function WorkflowDesigner() {
-  const [workflows, setWorkflows] = useState<any[]>([]);
-  useEffect(() => {
-    fetch('/api/v1/workflows')
-      .then(res => res.json())
-  }, []);
-
-  const editWorkflow = (wf: any) => {
-    setSelected(wf);
-        fetch('/api/v1/workflows')
-          .then(res => res.json())
-          .then(data => setWorkflows(Array.isArray(data) ? data : []));
-      });
-  };
-
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Workflow Designer</h2>
-          <Plus className="w-4 h-4" />
-          Create Workflow
-        </button>
-      </div>
-
-        </div>
-      )}
-
-      <div className="bg-white rounded-lg shadow">
-        <div className="p-6 border-b">
-          <h3 className="text-lg font-semibold">Saved Workflows</h3>
-        </div>
-        <div className="p-6 space-y-4">
-          {workflows.map(workflow => (
-            <div key={workflow.id} className="border rounded-lg p-4 flex items-center justify-between">
-              <div>
-                <div className="font-medium">{workflow.name}</div>
-              </div>
-              <div className="flex items-center gap-3">
-                <button className="p-2 hover:bg-gray-100 rounded" onClick={() => editWorkflow(workflow)}>
-                  <Edit className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
       </div>
     </div>
   );

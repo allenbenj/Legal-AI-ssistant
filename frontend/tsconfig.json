@@ -11,9 +11,11 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "strict": true,
-    "baseUrl": "./",
+    "noEmit": true,
+    "baseUrl": "./src",
     "paths": {
-      "legal-ai-gui": ["../legal_ai_system/frontend/legal-ai-gui.tsx"]
+      "@/*": ["*"],
+      "legal-ai-gui": ["../../legal_ai_system/frontend/legal-ai-gui.tsx"]
     }
   },
   "include": [
