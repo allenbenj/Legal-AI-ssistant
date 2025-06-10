@@ -84,6 +84,10 @@ class DocumentContentType(Enum):
     JPG = "image/jpeg"
     TIFF = "image/tiff"
     BMP = "image/bmp"
+    MP3 = "audio/mpeg"
+    WAV = "audio/wav"
+    MP4 = "video/mp4"
+    MOV = "video/quicktime"
     UNKNOWN = "application/octet-stream"
 
     @classmethod
@@ -108,6 +112,10 @@ class DocumentContentType(Enum):
             ".tiff": cls.TIFF,
             ".tif": cls.TIFF,
             ".bmp": cls.BMP,
+            ".mp3": cls.MP3,
+            ".wav": cls.WAV,
+            ".mp4": cls.MP4,
+            ".mov": cls.MOV,
         }
         return ext_map.get(ext.lower(), cls.UNKNOWN)
 
@@ -125,6 +133,16 @@ class DocumentContentType(Enum):
             return cls.XLSX
         if "presentation" in mime:
             return cls.PPTX
+        if "audio" in mime:
+            if "mpeg" in mime:
+                return cls.MP3
+            if "wav" in mime:
+                return cls.WAV
+        if "video" in mime:
+            if "mp4" in mime:
+                return cls.MP4
+            if "quicktime" in mime:
+                return cls.MOV
         return cls.UNKNOWN
 
 
@@ -307,6 +325,26 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
                 "strategy": ProcessingStrategy.OCR_IF_NEEDED,
                 "handler_method": "_process_image_async",
                 "deps": ["pytesseract", "PIL"],
+            },
+            DocumentContentType.MP3: {
+                "strategy": ProcessingStrategy.METADATA_ONLY,
+                "handler_method": "_process_audio_async",
+                "deps": ["pydub"],
+            },
+            DocumentContentType.WAV: {
+                "strategy": ProcessingStrategy.METADATA_ONLY,
+                "handler_method": "_process_audio_async",
+                "deps": ["pydub"],
+            },
+            DocumentContentType.MP4: {
+                "strategy": ProcessingStrategy.METADATA_ONLY,
+                "handler_method": "_process_video_async",
+                "deps": ["moviepy"],
+            },
+            DocumentContentType.MOV: {
+                "strategy": ProcessingStrategy.METADATA_ONLY,
+                "handler_method": "_process_video_async",
+                "deps": ["moviepy"],
             },
         }
 
