@@ -6,18 +6,16 @@ import asyncio
 from typing import TYPE_CHECKING
 
 try:  # pragma: no cover - optional dependency
-    from langgraph.graph import BaseNode as LangGraphBaseNode
+    from langgraph.graph import BaseNode
 except Exception:  # ImportError or other issues if langgraph not installed
-    class LangGraphBaseNode:
+    class BaseNode:
         """Minimal stand-in for :class:`langgraph.graph.BaseNode`."""
 
         pass
 
-BaseNode = LangGraphBaseNode
-
 
 if TYPE_CHECKING:  # pragma: no cover - hint for type checkers
-    from langgraph.graph import BaseNode as LangGraphBaseNode
+    from langgraph.graph import BaseNode as _RealBaseNode
 from ..core.unified_services import get_service_container, register_core_services
 from ..services.integration_service import LegalAIIntegrationService
 
