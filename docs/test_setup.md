@@ -24,4 +24,13 @@ pip install -e .[dev]
 pytest
 ```
 
-The command above sets up a virtual environment, installs dependencies, and executes the test suite.
+The commands above create a virtual environment, install all development
+dependencies, and execute the test suite. To automate these steps, you can run
+the helper script:
+
+```bash
+./scripts/run_tests.sh
+```
+
+`run_tests.sh` ensures `.venv` exists, installs the required packages, and then
+invokes `pytest`.
