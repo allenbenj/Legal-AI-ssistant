@@ -24,8 +24,7 @@ from dataclasses import dataclass, field, asdict, fields
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from queue import Empty as QueueEmpty # For synchronous queue if used by worker (not used in async version)
-from typing import Dict, List, Any, Optional, Tuple, Union, Deque
+from typing import Deque, Dict, List, Any, Optional
 
 import tenacity # For retries
 
@@ -212,9 +211,14 @@ class VectorStore:
             raise ConfigurationError("Invalid EmbeddingProviderVS instance provided.", config_key="embedding_provider")
         self.embedding_provider = embedding_provider
         if self.embedding_provider.dimension is None:
-             msg = "Injected embedding provider must be initialized and have a valid 'dimension' attribute."
-             vector_store_logger.critical(msg)
-             raise ConfigurationError(msg, config_key="embedding_provider.dimension (must be pre-initialized)")
+            msg = (
+                "Injected embedding provider must be initialized and have a valid "
+                "'dimension' attribute."
+            )
+            vector_store_logger.critical(msg)
+            raise ConfigurationError(
+                msg, config_key="embedding_provider.dimension (must be pre-initialized)"
+            )
         self.dimension: int = self.embedding_provider.dimension
         
         self.state = VectorStoreState.UNINITIALIZED
@@ -262,16 +266,20 @@ class VectorStore:
         vector_store_logger.info("VectorStore initialization started.")
         self.storage_path.mkdir(parents=True, exist_ok=True) # Ensure storage path exists
         try:
-            if self.embedding_provider.dimension is None: # Double check, should be set
-                 await self.embedding_provider.initialize()
-                 if self.embedding_provider.dimension is None:
-                    raise VectorStoreError("Embedding provider dimension is None after initialization attempt.")
-            self.dimension = self.embedding_provider.dimension # Re-affirm
-            vector_store_logger.info(f"Using embedding provider '{self.embedding_provider.model_name}' dim: {self.dimension}.")
+            if self.embedding_provider.dimension is None:  # Double check, should be set
+                await self.embedding_provider.initialize()
+                if self.embedding_provider.dimension is None:
+                    raise VectorStoreError(
+                        "Embedding provider dimension is None after initialization attempt."
+                    )
+            self.dimension = self.embedding_provider.dimension  # Re-affirm
+            vector_store_logger.info(
+                f"Using embedding provider '{self.embedding_provider.model_name}' dim: {self.dimension}."
+            )
 
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, self._initialize_metadata_storage_sync)
-            await loop.run_in_executor(None, self._initialize_faiss_indexes_sync) # Creates empty shells
+            await loop.run_in_executor(None, self._initialize_faiss_indexes_sync)  # Creates empty shells
             await self._load_all_existing_data_async() # Loads from disk into shells
 
             self._start_background_optimization_task()
@@ -309,7 +317,9 @@ class VectorStore:
         if self.dimension is None: raise ConfigurationError("Dimension not set for FAISS index.", config_key="dimension")
 
         def create_index(index_type_enum: IndexType, dim: int, purpose: str) -> faiss.Index:
-            self.logger.debug(f"Creating FAISS index of type {index_type_enum.value} for {purpose} with dim {dim}")
+            vs_index_logger.debug(
+                f"Creating FAISS index of type {index_type_enum.value} for {purpose} with dim {dim}"
+            )
             if index_type_enum == IndexType.FLAT: return faiss.IndexFlatL2(dim)
             if index_type_enum == IndexType.HNSW:
                 index = faiss.IndexHNSWFlat(dim, int(self.config.get(f"hnsw_m_{purpose}", 32)), faiss.METRIC_L2)
@@ -321,8 +331,8 @@ class VectorStore:
             # If N is unknown at init, use a reasonable default or make it configurable.
             current_vector_count = self.stats.total_vectors if self.stats.total_vectors > self.ivf_training_threshold else self.ivf_training_threshold
             nlist = max(1, int(self.ivf_nlist_factor * np.sqrt(current_vector_count))) 
-            nlist = int(self.config.get(f"ivf_nlist_{purpose}", nlist)) # Allow override
-            self.logger.debug(f"Calculated nlist={nlist} for {purpose} index (IVF type).")
+            nlist = int(self.config.get(f"ivf_nlist_{purpose}", nlist))  # Allow override
+            vs_index_logger.debug(f"Calculated nlist={nlist} for {purpose} index (IVF type).")
 
             quantizer = faiss.IndexFlatL2(dim) # Common quantizer for IVF types
             if index_type_enum == IndexType.IVF:
@@ -334,7 +344,9 @@ class VectorStore:
             if possible_ms: m_pq = possible_ms[-1] # Prefer larger m (more subquantizers) from sensible options
             m_pq = int(self.config.get(f"pq_m_{purpose}", m_pq))
             if dim % m_pq != 0:
-                self.logger.error(f"Dimension {dim} not divisible by m_pq {m_pq} for {index_type_enum.value} on {purpose}. This will fail.")
+                vs_index_logger.error(
+                    f"Dimension {dim} not divisible by m_pq {m_pq} for {index_type_enum.value} on {purpose}. This will fail."
+                )
                 raise ConfigurationError(f"FAISS PQ m ({m_pq}) must be a divisor of dimension ({dim}).", config_key=f"pq_m_{purpose}")
 
             nbits_pq = int(self.config.get(f"pq_nbits_{purpose}", 8))
@@ -353,11 +365,11 @@ class VectorStore:
                 if self.enable_gpu:
                     try:
                         vs_index_logger.info("Attempting to use GPU for FAISS indexes.")
-                        gpu_resource = faiss.StandardGpuResources() # This can raise if no CUDA
+                        gpu_resource = faiss.StandardGpuResources()  # type: ignore[attr-defined]
                         if self.document_index and self.index_type in self.GPU_SUPPORTED_INDEX_TYPES :
-                            self.document_index = faiss.index_cpu_to_gpu(gpu_resource, 0, self.document_index)
+                            self.document_index = faiss.index_cpu_to_gpu(gpu_resource, 0, self.document_index)  # type: ignore[attr-defined]
                         if self.entity_index and self.index_type in self.GPU_SUPPORTED_INDEX_TYPES: # Assuming same type for entity index
-                            self.entity_index = faiss.index_cpu_to_gpu(gpu_resource, 0, self.entity_index)
+                            self.entity_index = faiss.index_cpu_to_gpu(gpu_resource, 0, self.entity_index)  # type: ignore[attr-defined]
                         vs_index_logger.info("GPU acceleration successfully enabled for FAISS indexes.")
                     except Exception as gpu_e:
                         vs_index_logger.warning("Failed to move FAISS indexes to GPU. Using CPU.", exception=gpu_e)
@@ -391,13 +403,19 @@ class VectorStore:
             if doc_index_path.exists():
                 try:
                     self.document_index = faiss.read_index(str(doc_index_path))
-                    if self.enable_gpu: # If GPU was intended, try to move loaded index to GPU
+                    if self.enable_gpu:  # If GPU was intended, try to move loaded index to GPU
                         try:
-                            gpu_resource = faiss.StandardGpuResources()
-                            self.document_index = faiss.index_cpu_to_gpu(gpu_resource, 0, self.document_index)
+                            gpu_resource = faiss.StandardGpuResources()  # type: ignore[attr-defined]
+                            self.document_index = faiss.index_cpu_to_gpu(gpu_resource, 0, self.document_index)  # type: ignore[attr-defined]
                         except Exception as gpu_e:
-                            vs_index_logger.warning(f"Failed to move loaded document index to GPU: {gpu_e}. Using CPU.")
-                    vs_index_logger.info("Document FAISS index loaded.", parameters={'path': str(doc_index_path), 'vectors': self.document_index.ntotal})
+                            vs_index_logger.warning(
+                                f"Failed to move loaded document index to GPU: {gpu_e}. Using CPU."
+                            )
+                    vectors = self.document_index.ntotal if self.document_index else 0
+                    vs_index_logger.info(
+                        "Document FAISS index loaded.",
+                        parameters={"path": str(doc_index_path), "vectors": vectors},
+                    )
                 except Exception as e:
                     vs_index_logger.warning(f"Failed to load document FAISS index from '{doc_index_path}'. Re-initializing empty.", exception=e)
                     self._initialize_faiss_indexes_sync() # Re-init if load fails to prevent None index
@@ -410,16 +428,23 @@ class VectorStore:
                     self.entity_index = faiss.read_index(str(entity_index_path))
                     if self.enable_gpu:
                         try:
-                            gpu_resource = faiss.StandardGpuResources()
-                            self.entity_index = faiss.index_cpu_to_gpu(gpu_resource, 0, self.entity_index)
+                            gpu_resource = faiss.StandardGpuResources()  # type: ignore[attr-defined]
+                            self.entity_index = faiss.index_cpu_to_gpu(gpu_resource, 0, self.entity_index)  # type: ignore[attr-defined]
                         except Exception as gpu_e:
                             vs_index_logger.warning(f"Failed to move loaded entity index to GPU: {gpu_e}. Using CPU.")
-                    vs_index_logger.info("Entity FAISS index loaded.", parameters={'path': str(entity_index_path), 'vectors': self.entity_index.ntotal})
+                    ent_vectors = self.entity_index.ntotal if self.entity_index else 0
+                    vs_index_logger.info(
+                        "Entity FAISS index loaded.",
+                        parameters={"path": str(entity_index_path), "vectors": ent_vectors},
+                    )
                 except Exception as e:
                     vs_index_logger.warning(f"Failed to load entity FAISS index from '{entity_index_path}'. Re-initializing empty.", exception=e)
                     # Re-init only entity index if document index was fine
-                    if not self.document_index: self._initialize_faiss_indexes_sync() 
-                    else: self.entity_index = self._initialize_faiss_indexes_sync().entity_index # Conceptual, fix this direct access # TODO: Problematic re-init. _initialize_faiss_indexes_sync modifies instance attributes and does not return self. A call to self._initialize_faiss_indexes_sync() would re-init both. If only entity_index needs re-init, a dedicated method or direct re-instantiation of self.entity_index is better.
+                    if not self.document_index:
+                        self._initialize_faiss_indexes_sync()
+                    else:
+                        # _initialize_faiss_indexes_sync updates instance attributes in-place
+                        self._initialize_faiss_indexes_sync()
 
 
     def _load_metadata_mem_cache_sync(self):
@@ -463,7 +488,8 @@ class VectorStore:
                 vs_index_logger.info(f"Processing optimization task: {task_type}")
                 async with self._async_lock: # Ensure optimization logic has exclusive access
                     if task_type == "OPTIMIZE_INDEX_PERFORMANCE":
-                        await self.optimize_performance(
+                        await self.optimize_performance(  # type: ignore[attr-defined]
+
                             full_reindex=task_data.get('full_reindex', False),
                             compact_storage=task_data.get('compact_storage', True)
                         )
@@ -1109,6 +1135,15 @@ class VectorStore:
             self.stats.disk_usage_mb = self.stats.index_disk_size_mb + self.stats.metadata_db_size_mb
         except Exception as e:
             vs_perf_logger.warning(f"Could not update disk usage stats: {str(e)}")
+
+    def _get_current_stats_summary(self) -> Dict[str, Any]:
+        """Return a lightweight summary of current index statistics."""
+        return {
+            "total_vectors": self.stats.total_vectors,
+            "index_disk_size_mb": self.stats.index_disk_size_mb,
+            "metadata_db_size_mb": self.stats.metadata_db_size_mb,
+            "optimization_runs": self.stats.optimization_runs_count,
+        }
             
     # --- Service Lifecycle Methods ---
     async def close(self):
@@ -1156,7 +1191,7 @@ class VectorStore:
         status_label = "healthy" if is_ready else self.state.value
         
         # Try a small, quick test search if ready (optional, can be intensive)
-        test_search_ok = None
+        test_search_ok = None  # Placeholder for optional search test
         # if is_ready and self.stats.total_vectors > 0:
         #     try:
         #         test_query_vec = np.random.rand(1, self.dimension).astype('float32')
