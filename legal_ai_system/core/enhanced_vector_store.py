@@ -442,7 +442,7 @@ class EnhancedVectorStore:
         vector_logger.trace("Loading existing data from storage")
         
         # Load document index
-        doc_index_path = self.storage_path / "document_index.faiss"
+        doc_index_path = self.document_index_path
         if doc_index_path.exists():
             try:
                 self.document_index = faiss.read_index(str(doc_index_path))
@@ -454,7 +454,7 @@ class EnhancedVectorStore:
                 vector_logger.warning("Failed to load document index", exception=e)
         
         # Load entity index
-        entity_index_path = self.storage_path / "entity_index.faiss"
+        entity_index_path = self.entity_index_path
         if entity_index_path.exists():
             try:
                 self.entity_index = faiss.read_index(str(entity_index_path))
