@@ -15,6 +15,8 @@ The project defines several specialized agents under `legal_ai_system/agents`:
 
 - **DocumentProcessorAgent** – extracts text and metadata from a variety of file types.  See `document_processor_agent.py` lines 1‑8.
 - Handles PDFs, DOCX, HTML, and image formats using optional dependencies for parsing.  Returns structured content for downstream agents.
+- **DocumentProcessorAgentV2** – advanced processor returning a `MultiModalDocument`. See `document_processor_agent_v2.py` lines 25-132.
+- Supports `process_video_depositions`, `process_legal_forms`, and `process_contract_redlines` for specialized legal content.
 - **DocumentRewriterAgent** – performs lightweight spelling correction on extracted text.  See `document_rewriter_agent.py` lines 1‑7.
 - Uses `pyspellchecker` to clean common OCR mistakes before analysis.
 - **OntologyExtractionAgent** – extracts legal entities and relationships using ontology‑driven patterns.  See `ontology_extraction_agent.py` lines 1‑7.
@@ -45,16 +47,6 @@ The project defines several specialized agents under `legal_ai_system/agents`:
 - **LegalAuditAgent / EthicsReviewAgent / LEOConductAgent** – lightweight review agents for GUI violation review.  See `legal_agents.py` lines 1‑32.
 - Provide quick client-side checks within the GUI when deeper analysis is not required.
 
-### KnowledgeGraphReasoningAgent Usage
-
-After the KnowledgeBaseAgent stores entities, invoke the `KnowledgeGraphReasoningAgent` to infer links:
-
-```python
-reasoner = KnowledgeGraphReasoningAgent(services)
-result = await reasoner.infer("What cases cite both A and B?")
-```
-
-The agent performs multi-hop traversals and link prediction to reveal cross-document relationships.
 
 ## Services
 
@@ -87,6 +79,18 @@ During processing:
 `IntegrationService` exposes methods such as `handle_document_upload` to initiate the workflow and to interact with `SecurityManager` and other services.  Each step saves intermediate results through the `MemoryManager` so users can review and retry processing.
 
 LangGraph based workflows use `AnalysisNode` and `SummaryNode` (see `agents/agent_nodes.py`) which internally retrieve the integration service via the service container to run analysis or summarization.  This allows complex graphs of tasks to be executed with consistent resource management.
+
+### Typed Workflow Engine
+
+The project includes a lightweight typed workflow engine located in
+`legal_ai_system.workflows`.  Agents implement the generic protocol
+`AgentCapability[InputModel, OutputModel]` from
+`legal_ai_system.core.agent_types`.  The `LegalWorkflowBuilder` class
+assembles agents while verifying that the output type of one agent
+matches the input type of the next.  Calling
+`LegalWorkflowBuilder.build()` produces an `AgentWorkflow` object from
+`legal_ai_system.workflows.agent_workflow` which can process batches or
+streams asynchronously.
 
 Overall, the ServiceContainer acts as the hub connecting agents and services, enabling workflows like `RealTimeAnalysisWorkflow` and integration via APIs or GUI components.
 

@@ -1,0 +1,5 @@
+[
+  { "id": 1, "name": "contract_agreement.pdf", "status": "processing", "progress": 65 },
+  { "id": 2, "name": "witness_statement.docx", "status": "completed", "progress": 100 },
+  { "id": 3, "name": "evidence_photos.zip", "status": "queued", "progress": 0 }
+]
