@@ -51,6 +51,14 @@ tual environment and run the tests:
 ```bash
 python legal_ai_system/scripts/setup_environment_task.py
 ```
+
+### Start Task
+
+Launch the lightweight linkage check to verify your environment:
+
+```bash
+python legal_ai_system/scripts/start_linkage_check.py
+```
 ### Example: Build a Workflow
 
 ```python
