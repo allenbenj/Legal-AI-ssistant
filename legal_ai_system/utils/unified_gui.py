@@ -6,7 +6,6 @@ violation review, knowledge graph visualization, settings, and analysis dashboar
 
 import os
 import sys
-from pathlib import Path
 
 # Add parent directory to path for imports
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -17,7 +16,6 @@ import json
 import logging
 from dataclasses import asdict
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
 
 import pandas as pd
 import plotly.express as px
@@ -32,7 +30,6 @@ from ..agents.legal_agents import (
 
 # Import shared components
 from ..core.shared_components import (
-    APIClient,
     DataValidator,
     DataVisualization,
     ErrorHandler,
@@ -198,7 +195,10 @@ class DocumentProcessorTab:
                                 document_id, processing_options
                             )
                         else:
-                            process_result = {"status": "ERROR", "message": "Invalid document ID"}
+                            process_result = {
+                                "status": "ERROR",
+                                "message": "Invalid document ID",
+                            }
                         if process_result.get("status") != "ERROR":
                             ErrorHandler.display_success(
                                 "Processing started successfully!"
@@ -273,7 +273,7 @@ class MemoryBrainTab:
             "Manage AI memory, visualize memory associations, and analyze memory usage patterns."
         )
 
-        api_client = SessionManager.get_api_client()
+        SessionManager.get_api_client()
 
         # Memory overview metrics
         st.subheader("Memory Overview")
@@ -312,7 +312,7 @@ class MemoryBrainTab:
             confidence_filter = st.slider("Minimum Confidence", 0.0, 1.0, 0.5, 0.05)
 
         with col3:
-            date_range = st.date_input(
+            _date_range = st.date_input(
                 "Date Range",
                 value=[datetime.now() - timedelta(days=30), datetime.now()],
                 max_value=datetime.now(),
@@ -337,7 +337,7 @@ class MemoryBrainTab:
             df = pd.DataFrame(filtered_entries)
 
             # Create interactive table
-            selected_entries = st.dataframe(
+            st.dataframe(
                 df[
                     [
                         "id",
@@ -452,7 +452,7 @@ class ViolationReviewTab:
             "Review detected violations, manage approval workflows, and track compliance issues."
         )
 
-        api_client = SessionManager.get_api_client()
+        SessionManager.get_api_client()
         db = ViolationReviewDB()
 
         # Violation metrics
@@ -719,7 +719,7 @@ class KnowledgeGraphTab:
             "Visualize and edit knowledge graphs based on document content with interactive relationship mapping."
         )
 
-        api_client = SessionManager.get_api_client()
+        SessionManager.get_api_client()
 
         # Graph controls
         st.subheader("Graph Controls")
@@ -736,14 +736,14 @@ class KnowledgeGraphTab:
                 st.session_state.graph_query = graph_query
 
         with col2:
-            graph_layout = st.selectbox(
+            _graph_layout = st.selectbox(
                 "Layout Algorithm",
                 ["Force-directed", "Hierarchical", "Circular", "Grid"],
                 help="Choose how nodes are positioned",
             )
 
         with col3:
-            max_nodes = st.slider(
+            _max_nodes = st.slider(
                 "Max Nodes", 10, 100, 50, help="Limit displayed nodes for performance"
             )
 
@@ -1076,7 +1076,7 @@ class SettingsLogsTab:
             )
 
         with col3:
-            log_hours = st.selectbox(
+            _log_hours = st.selectbox(
                 "Time Range",
                 ["Last Hour", "Last 6 Hours", "Last 24 Hours", "Last 7 Days"],
             )
