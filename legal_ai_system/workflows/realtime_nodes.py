@@ -13,6 +13,7 @@ from ..services.realtime_nodes import (
     MemoryIntegrationNode,
     ValidationNode,
 )
+from .nodes import HumanReviewNode, ProgressTrackingNode
 
 __all__ = [
     "LegalWorkflowNode",
@@ -24,4 +25,6 @@ __all__ = [
     "VectorStoreUpdateNode",
     "MemoryIntegrationNode",
     "ValidationNode",
+    "HumanReviewNode",
+    "ProgressTrackingNode",
 ]

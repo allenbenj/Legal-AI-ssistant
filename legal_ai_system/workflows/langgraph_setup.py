@@ -34,6 +34,9 @@ if TYPE_CHECKING:  # pragma: no cover - hint for type checkers
     from langgraph.graph import END as _RealEND
 
 from ..agents.agent_nodes import AnalysisNode, SummaryNode
+from .nodes import HumanReviewNode, ProgressTrackingNode
+from ..utils.reviewable_memory import ReviewableMemory
+from ..api.websocket_manager import ConnectionManager
 
 
 def build_graph(topic: str) -> StateGraph:
@@ -41,11 +44,17 @@ def build_graph(topic: str) -> StateGraph:
     graph = StateGraph()
 
     graph.add_node("analysis", AnalysisNode(topic))
+    review_memory = ReviewableMemory()
+    graph.add_node("human_review", HumanReviewNode(review_memory))
+    manager = ConnectionManager()
     graph.add_node("summary", SummaryNode())
+    graph.add_node("progress", ProgressTrackingNode(manager))
 
     graph.set_entry_point("analysis")
-    graph.add_edge("analysis", "summary")
-    graph.add_edge("summary", END)
+    graph.add_edge("analysis", "human_review")
+    graph.add_edge("human_review", "summary")
+    graph.add_edge("summary", "progress")
+    graph.add_edge("progress", END)
 
     return graph
 

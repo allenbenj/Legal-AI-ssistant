@@ -69,7 +69,19 @@ sys.modules["legal_ai_system.utils.user_repository"].UserRepository = object
 
 svc_mod = sys.modules["legal_ai_system.services.service_container"]
 class ServiceContainer:
-    pass
+    def __init__(self):
+        self.registry = {}
+        self._initialization_order = []
+        self._service_states = {}
+
+    async def register_service(self, name: str, factory):
+        self.registry[name] = factory
+        self._service_states[name] = SimpleNamespace(name="REGISTERED")
+
+    async def initialize_all_services(self):
+        for name in self.registry:
+            self._initialization_order.append(name)
+            self._service_states[name].name = "INITIALIZED"
 svc_mod.ServiceContainer = ServiceContainer
 
 sys.modules["legal_ai_system.services.workflow_orchestrator"].WorkflowOrchestrator = object
