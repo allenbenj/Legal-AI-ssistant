@@ -5,17 +5,15 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
-class BaseNode:  # pragma: no cover - fallback when langgraph is missing
-    """Minimal stand-in for :class:`langgraph.graph.BaseNode`."""
-
-    pass
-
-
 try:  # pragma: no cover - optional dependency
     from langgraph.graph import BaseNode as LangGraphBaseNode
-    BaseNode = LangGraphBaseNode  # type: ignore[assignment]
 except Exception:  # ImportError or other issues if langgraph not installed
-    pass
+    class LangGraphBaseNode:
+        """Minimal stand-in for :class:`langgraph.graph.BaseNode`."""
+
+        pass
+
+BaseNode = LangGraphBaseNode
 
 
 if TYPE_CHECKING:  # pragma: no cover - hint for type checkers
