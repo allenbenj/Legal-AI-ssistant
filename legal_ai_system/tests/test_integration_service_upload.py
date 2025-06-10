@@ -74,6 +74,7 @@ sec_mod.User = User
 sys.modules["legal_ai_system.utils.user_repository"].UserRepository = object
 
 
+
 import pytest
 
 @pytest.fixture(autouse=True, scope="module")
