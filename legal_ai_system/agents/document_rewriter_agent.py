@@ -12,7 +12,13 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from pyspellchecker import SpellChecker
+try:
+    # The SpellChecker class is provided by the ``pyspellchecker`` package
+    # but lives in the ``spellchecker`` module once installed.
+    from spellchecker import SpellChecker
+except ModuleNotFoundError as e:  # pragma: no cover - handled at runtime
+    SpellChecker = None  # type: ignore[assignment]
+    _SPELLCHECKER_IMPORT_ERROR = e
 
 from ..core.base_agent import BaseAgent
 
@@ -37,10 +43,18 @@ class DocumentRewriterAgent(BaseAgent):
     def __init__(self, service_container: Any, **config: Any) -> None:
         super().__init__(service_container, name="DocumentRewriterAgent", agent_type="rewrite")
 
+        if SpellChecker is None:
+            raise ImportError(
+                "SpellChecker requires the 'pyspellchecker' package. "
+                "Install it to use DocumentRewriterAgent"
+            ) from _SPELLCHECKER_IMPORT_ERROR
+
         self.spell_checker = SpellChecker(language=config.get("language", "en"))
         self.config.update(config)
 
-        self.logger.info("DocumentRewriterAgent initialized", parameters={"language": self.spell_checker.language})
+        self.logger.info(
+            "DocumentRewriterAgent initialized", parameters={"language": self.spell_checker.language}
+        )
 
     async def rewrite_text(self, text: str, metadata: Optional[Dict[str, Any]] = None) -> DocumentRewriteResult:
         """Public helper that rewrites text and returns :class:`DocumentRewriteResult`."""
@@ -52,12 +66,14 @@ class DocumentRewriterAgent(BaseAgent):
 
     async def _process_task(self, task_data: str, metadata: Dict[str, Any]) -> Dict[str, Any]:
         start_time = datetime.now(timezone.utc)
+        if metadata:
+            self.logger.debug("Rewrite task metadata", parameters=metadata)
 
         text = task_data or ""
         corrections: List[Dict[str, str]] = []
         corrected_tokens: List[str] = []
 
-        # Simple tokenisation preserving punctuation
+        # Simple tokenization preserving punctuation
         tokens = re.findall(r"\w+|\W+", text, re.UNICODE)
 
         for token in tokens:
@@ -70,7 +86,7 @@ class DocumentRewriterAgent(BaseAgent):
                 suggestion = self.spell_checker.correction(lower)
                 if suggestion and suggestion != lower:
                     corrected_word = suggestion
-                    # Preserve capitalisation if token was capitalised
+                    # Preserve capitalization if token was capitalized
                     if token[0].isupper():
                         corrected_word = suggestion.capitalize()
 
