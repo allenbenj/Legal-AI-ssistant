@@ -40,6 +40,17 @@ if TYPE_CHECKING:  # pragma: no cover - hint for type checkers
     from langgraph.graph import END as _RealEND
 
 from ..agents.agent_nodes import AnalysisNode, SummaryNode
+from .nodes import HumanReviewNode, ProgressTrackingNode
+from ..utils.reviewable_memory import ReviewableMemory
+from ..api.websocket_manager import ConnectionManager
+
+
+def _uppercase(text: str) -> str:
+    return text.upper()
+
+
+def _merge_text(results: list[str]) -> str:
+    return "\n".join(results)
 
 
 def build_graph(topic: str) -> StateGraph:
@@ -48,27 +59,14 @@ def build_graph(topic: str) -> StateGraph:
     graph = StateGraph()
 
     graph.add_node("analysis", AnalysisNode(topic))
+    review_memory = ReviewableMemory()
+    graph.add_node("human_review", HumanReviewNode(review_memory))
+    manager = ConnectionManager()
     graph.add_node("summary", SummaryNode())
     graph.add_node("echo", lambda x: x)
     graph.add_node("combine", lambda items: " ".join(items))
     graph.add_node("final", lambda x: x)
 
-    graph.set_entry_point("analysis")
-
-    # Execute analysis result through summary and echo in parallel then combine
-    graph.add_parallel_nodes("analysis", ["summary", "echo"], "combine")
-
-    # Route based on length of combined output
-    graph.add_conditional_edges(
-        "combine",
-        [
-            (lambda v: len(v) > 200, "summary"),
-            (lambda v: len(v) <= 200, "final"),
-        ],
-    )
-
-    graph.add_edge("summary", "final")
-    graph.add_edge("final", END)
 
     return graph
 

@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import asyncio
 import time
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
+import uuid
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
@@ -21,6 +23,7 @@ from ..core.detailed_logging import (
     LogCategory,
     detailed_log_function,
 )
+from .metrics_exporter import MetricsExporter, metrics_exporter
 
 
 try:  # Avoid heavy imports during tests
@@ -84,6 +87,7 @@ class RealTimeAnalysisWorkflow:
     """Master workflow for real-time legal document analysis."""
 
 
+
         # Performance tracking
         self.documents_processed = 0
         self.processing_times: List[float] = []
@@ -100,6 +104,15 @@ class RealTimeAnalysisWorkflow:
         self.processing_lock = asyncio.Semaphore(self.max_concurrent_documents)
         self.optimization_lock = asyncio.Lock()
 
+        # Placeholders for components initialized elsewhere
+        self.document_processor = None
+        self.document_rewriter = None
+        self.hybrid_extractor = None
+        self.ontology_extractor = None
+        self.graph_manager = None
+        self.vector_store = None
+        self.reviewable_memory = None
+
     async def initialize(self):
         """Initialize the real-time analysis workflow."""
         self.logger.info("Initializing real-time analysis workflow...")
@@ -114,33 +127,25 @@ class RealTimeAnalysisWorkflow:
 
         self.logger.info("Real-time analysis workflow initialized")
 
-    async def process_document_realtime(
-        self, document_path: str, **kwargs
-    ) -> RealTimeAnalysisResult:
-        """
-        Process a document through the complete real-time analysis pipeline.
+    async def process_document_realtime(self, document_path: str, **kwargs):
+        """Enqueue a document for real-time processing."""
+        document_id = kwargs.get("document_id") or f"doc_rt_{uuid.uuid4().hex}"
+        kwargs["document_id"] = document_id
 
-        Args:
-            document_path: Path to document to process
-            **kwargs: Additional processing options
+        task_queue = getattr(self, "task_queue", None)
+        if task_queue:
+            job = task_queue.enqueue(self._run_realtime_pipeline, document_path, **kwargs)
+            await self._notify_progress("queued", 0.0)
+            return job
 
-        Returns:
-            RealTimeAnalysisResult with comprehensive analysis
-        """
-        start_time = time.time()
+        return await self._run_realtime_pipeline(document_path, **kwargs)
 
-        async with self.processing_lock:
-            # This method is largely a placeholder in the test environment.
-            # A real implementation would orchestrate the various node
-            # services to process the document, update the knowledge graph,
-            # and manage reviewable memory. We return a minimal result so
-            # that the module remains functional and flake8 compliant.
-            await asyncio.sleep(0)  # simulate async processing
+
 
         document_id = kwargs.get("document_id") or f"doc_rt_{uuid.uuid4().hex}"
 
         total_processing_time = time.time() - start_time
-        return RealTimeAnalysisResult(
+
             document_path=document_path,
             document_id=document_id,
             document_processing=None,
@@ -155,6 +160,8 @@ class RealTimeAnalysisWorkflow:
             validation_results={},
             sync_status={},
         )
+        await self._notify_progress("completed", 1.0)
+        return result
 
 
 
