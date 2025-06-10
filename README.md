@@ -53,9 +53,13 @@ python legal_ai_system/scripts/setup_environment_task.py
 ```
 ### Example: Build a Workflow
 
-
-
+```python
+# Create the default workflow and process a PDF
 workflow = builder.build()
 result = workflow.run("sample.pdf")
 print(result)
 ```
+
+You can customize the workflow builder to enable or disable specific agents.
+See the documents in the `docs/` folder for architecture details and advanced
+usage.
