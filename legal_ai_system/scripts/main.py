@@ -84,11 +84,13 @@ from strawberry.fastapi import GraphQLRouter  # type: ignore
 from strawberry.types import Info  # type: ignore
 
 
+try:
     from legal_ai_system.core.detailed_logging import (
         LogCategory,
         get_detailed_logger,
     )
-
+    from legal_ai_system.services.service_container import ServiceContainer
+    from legal_ai_system.services.security_manager import SecurityManager
 
     SERVICES_AVAILABLE = True
 except ImportError as e:
@@ -187,10 +189,7 @@ def load_workflow_configs() -> Dict[str, WorkflowConfig]:
     if WORKFLOW_CONFIGS_FILE.exists():
         try:
             data = json.loads(WORKFLOW_CONFIGS_FILE.read_text())
-            return {
-                cfg["id"]: WorkflowConfig(**cfg)
-                for cfg in data
-            }
+            return {cfg["id"]: WorkflowConfig(**cfg) for cfg in data}
         except Exception as e:
             main_api_logger.error(
                 "Failed to load workflow configurations.", exception=e
@@ -208,43 +207,6 @@ def save_workflow_configs(configs: Dict[str, WorkflowConfig]) -> None:
             default=str,
         )
 
-# Workflow configuration storage
-WORKFLOW_CONFIG_FILE = Path(settings.data_dir) / "workflow_configs.json"
-workflow_configs: Dict[str, "WorkflowConfig"] = {}
-
-
-def load_workflow_configs() -> None:
-    """Load workflow presets from disk if available."""
-    if WORKFLOW_CONFIG_FILE.exists():
-        try:
-            data = json.load(open(WORKFLOW_CONFIG_FILE, "r"))
-            for item in data:
-                workflow_configs[item["id"]] = WorkflowConfig(**item)
-            main_api_logger.info(
-                "Loaded workflow configurations",
-                parameters={"count": len(workflow_configs)},
-            )
-        except Exception as e:  # pragma: no cover - startup resilience
-            main_api_logger.error(
-                "Failed to load workflow configurations.", exception=e
-            )
-
-
-def save_workflow_configs() -> None:
-    """Persist workflow presets to disk."""
-    try:
-        WORKFLOW_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-        with open(WORKFLOW_CONFIG_FILE, "w") as f:
-            json.dump(
-                [cfg.model_dump() for cfg in workflow_configs.values()],
-                f,
-                default=str,
-                indent=2,
-            )
-    except Exception as e:  # pragma: no cover - I/O failure shouldn't crash
-        main_api_logger.error(
-            "Failed to save workflow configurations.", exception=e
-        )
 
 # Workflow configuration storage
 WORKFLOW_CONFIG_FILE = Path(settings.data_dir) / "workflow_configs.json"
@@ -280,9 +242,8 @@ def save_workflow_configs() -> None:
                 indent=2,
             )
     except Exception as e:  # pragma: no cover - I/O failure shouldn't crash
-        main_api_logger.error(
-            "Failed to save workflow configurations.", exception=e
-        )
+        main_api_logger.error("Failed to save workflow configurations.", exception=e)
+
 
 # Workflow configuration storage
 WORKFLOW_CONFIG_FILE = Path(settings.data_dir) / "workflow_configs.json"
@@ -318,9 +279,44 @@ def save_workflow_configs() -> None:
                 indent=2,
             )
     except Exception as e:  # pragma: no cover - I/O failure shouldn't crash
-        main_api_logger.error(
-            "Failed to save workflow configurations.", exception=e
-        )
+        main_api_logger.error("Failed to save workflow configurations.", exception=e)
+
+
+# Workflow configuration storage
+WORKFLOW_CONFIG_FILE = Path(settings.data_dir) / "workflow_configs.json"
+workflow_configs: Dict[str, "WorkflowConfig"] = {}
+
+
+def load_workflow_configs() -> None:
+    """Load workflow presets from disk if available."""
+    if WORKFLOW_CONFIG_FILE.exists():
+        try:
+            data = json.load(open(WORKFLOW_CONFIG_FILE, "r"))
+            for item in data:
+                workflow_configs[item["id"]] = WorkflowConfig(**item)
+            main_api_logger.info(
+                "Loaded workflow configurations",
+                parameters={"count": len(workflow_configs)},
+            )
+        except Exception as e:  # pragma: no cover - startup resilience
+            main_api_logger.error(
+                "Failed to load workflow configurations.", exception=e
+            )
+
+
+def save_workflow_configs() -> None:
+    """Persist workflow presets to disk."""
+    try:
+        WORKFLOW_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(WORKFLOW_CONFIG_FILE, "w") as f:
+            json.dump(
+                [cfg.model_dump() for cfg in workflow_configs.values()],
+                f,
+                default=str,
+                indent=2,
+            )
+    except Exception as e:  # pragma: no cover - I/O failure shouldn't crash
+        main_api_logger.error("Failed to save workflow configurations.", exception=e)
 
 
 @asynccontextmanager
@@ -1263,6 +1259,7 @@ async def get_document_status_rest(  # Renamed
 
 # ----- Workflow Config Endpoints -----
 
+
 @app.get("/api/v1/workflows", response_model=List[WorkflowConfig])
 async def list_workflow_configs():
     """List all saved workflow presets."""
@@ -1295,9 +1292,7 @@ async def update_workflow_config(config_id: str, update: WorkflowConfigUpdate):
     return existing
 
 
-@app.delete(
-    "/api/v1/workflows/{config_id}", status_code=status.HTTP_204_NO_CONTENT
-)
+@app.delete("/api/v1/workflows/{config_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_workflow_config(config_id: str):
     if config_id in workflow_configs:
         del workflow_configs[config_id]
@@ -1308,6 +1303,7 @@ async def delete_workflow_config(config_id: str):
 
 # ----- Workflow Config Endpoints -----
 
+
 @app.get("/api/v1/workflows", response_model=List[WorkflowConfig])
 async def list_workflow_configs():
     """List all saved workflow presets."""
@@ -1340,9 +1336,7 @@ async def update_workflow_config(config_id: str, update: WorkflowConfigUpdate):
     return existing
 
 
-@app.delete(
-    "/api/v1/workflows/{config_id}", status_code=status.HTTP_204_NO_CONTENT
-)
+@app.delete("/api/v1/workflows/{config_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_workflow_config(config_id: str):
     if config_id in workflow_configs:
         del workflow_configs[config_id]
@@ -1353,6 +1347,7 @@ async def delete_workflow_config(config_id: str):
 
 # ----- Workflow Config Endpoints -----
 
+
 @app.get("/api/v1/workflows", response_model=List[WorkflowConfig])
 async def list_workflow_configs():
     """List all saved workflow presets."""
@@ -1385,9 +1380,7 @@ async def update_workflow_config(config_id: str, update: WorkflowConfigUpdate):
     return existing
 
 
-@app.delete(
-    "/api/v1/workflows/{config_id}", status_code=status.HTTP_204_NO_CONTENT
-)
+@app.delete("/api/v1/workflows/{config_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_workflow_config(config_id: str):
     if config_id in workflow_configs:
         del workflow_configs[config_id]
@@ -1514,6 +1507,7 @@ async def submit_review_decision_rest(  # Renamed
 
 # --- Workflow Preset Endpoints ---
 
+
 @app.post("/api/v1/workflows", response_model=WorkflowConfig)
 async def create_workflow_preset(config: WorkflowConfig):
     workflow_configs[config.id] = config
@@ -1571,7 +1565,9 @@ async def websocket_endpoint_route(websocket: WebSocket, client_id: str):
             if msg_type == "subscribe":
                 topic = message.get("topic")
                 if topic:
-                    await websocket_manager_instance.subscribe_to_topic(client_id, topic)
+                    await websocket_manager_instance.subscribe_to_topic(
+                        client_id, topic
+                    )
             elif msg_type == "unsubscribe":
                 topic = message.get("topic")
                 if topic:
@@ -1628,12 +1624,23 @@ async def process_document_background_task(  # Renamed
         "stage": "Initializing",
     }
 
-        # Define progress callback for WebSocket
+    try:
+        from legal_ai_system.services.realtime_analysis_workflow import (
+            RealTimeAnalysisWorkflow,
+        )
+
+        if service_container_instance:
+            workflow = await service_container_instance.get_service(
+                "realtime_analysis_workflow"
+            )
+        else:
+            workflow = RealTimeAnalysisWorkflow()
+
         async def ws_progress_callback(
             stage: str,
             progress_percent: float,
             details: Optional[Dict[str, Any]] = None,
-        ):
+        ) -> None:
             global_processing_states[document_id].update(
                 {
                     "status": "processing",
@@ -1647,24 +1654,26 @@ async def process_document_background_task(  # Renamed
                     {
                         "type": "processing_progress",
                         "document_id": document_id,
-                        "progress": progress_percent,  # Send as 0-100
+                        "progress": progress_percent,
                         "stage": stage,
                         "details": details or {},
                     },
                     f"document_updates_{document_id}",
                 )
 
-        workflow.register_progress_callback(
-            ws_progress_callback
-        )  # Assuming workflow supports this
+        workflow.register_progress_callback(ws_progress_callback)
 
-        # Execute the workflow
+        analysis_result = await workflow.process_document_realtime(
+            document_file_path,
+            **processing_request_model.model_dump(),
+        )
+
         global_processing_states[document_id].update(
             {
                 "status": "completed",
                 "progress": 1.0,
                 "stage": "Complete",
-                "result_summary": {  # Example summary
+                "result_summary": {
                     "entities_found": (
                         len(analysis_result.hybrid_extraction.validated_entities)
                         if analysis_result.hybrid_extraction
@@ -1680,7 +1689,7 @@ async def process_document_background_task(  # Renamed
                 {
                     "type": "processing_complete",
                     "document_id": document_id,
-                    "result": analysis_result.to_dict(),  # Send full or summarized result
+                    "result": analysis_result.to_dict(),
                 },
                 f"document_updates_{document_id}",
             )
