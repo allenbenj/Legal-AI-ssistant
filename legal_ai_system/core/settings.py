@@ -239,6 +239,8 @@ class LegalAISettings(BaseSettings):
         self.violations_db_path = self.data_dir / "databases/violations.db"
         self.tag_history_path = self.data_dir / "tag_history.json"
         self.test_data_dir = self.base_dir / "tests/data"
+        if self.frontend_dist_path is None:
+            self.frontend_dist_path = (self.base_dir.parent / "frontend" / "dist").resolve()
 
     # =================== LLM PROVIDERS ===================
     # Primary LLM
@@ -416,6 +418,11 @@ class LegalAISettings(BaseSettings):
     # Debugging
     enable_agent_debugging: bool = Field(default=False, env="AGENT_DEBUG")
     save_intermediate_results: bool = Field(default=False, env="SAVE_INTERMEDIATE")
+
+    # =================== FRONTEND ===================
+    frontend_dist_path: Optional[Path] = Field(
+        default=None, env="FRONTEND_DIST_PATH"
+    )
 
     class Config:
         env_file = [".env", ".env.local", ".env.production"]

@@ -77,6 +77,7 @@ from pydantic import BaseModel
 from pydantic import Field as PydanticField  # Alias Field
 from strawberry.fastapi import GraphQLRouter  # type: ignore
 from strawberry.types import Info  # type: ignore
+from config.settings import settings
 
 # Attempt to import core services, with fallbacks for standalone running or partial setup
 try:
@@ -1310,18 +1311,23 @@ async def process_document_background_task(  # Renamed
             )
 
 
-# Serve frontend if configured (example, adjust path as needed)
-# This should ideally be done only if not in a containerized environment where a reverse proxy handles this.
-# Ensure the path is correct relative to where main.py is located.
-# If main.py is in legal_ai_system/main.py, and frontend is in legal_ai_system/frontend/dist
-# then the path should be relative like "../frontend/dist" or absolute.
-# For robustness, use settings to define this path.
-# frontend_dist_path = Path(__file__).parent / "frontend" / "dist"
-# if frontend_dist_path.exists():
-#    app.mount("/", StaticFiles(directory=str(frontend_dist_path), html=True), name="static_frontend")
-#    main_api_logger.info(f"Serving static frontend from: {frontend_dist_path}")
-# else:
-#    main_api_logger.warning(f"Frontend 'dist' directory not found at {frontend_dist_path}. Frontend will not be served by this API.")
+# Serve static frontend assets if configured. A reverse proxy is recommended for
+# production deployments, but this allows quick local testing.
+frontend_dist_path = settings.frontend_dist_path
+if frontend_dist_path and Path(frontend_dist_path).exists():
+    app.mount(
+        "/",
+        StaticFiles(directory=str(frontend_dist_path), html=True),
+        name="static_frontend",
+    )
+    main_api_logger.info(
+        "Serving static frontend", parameters={"path": str(frontend_dist_path)}
+    )
+else:
+    main_api_logger.warning(
+        "Frontend 'dist' directory not found; skipping static mount.",
+        parameters={"path": str(frontend_dist_path)},
+    )
 
 
 if __name__ == "__main__":
