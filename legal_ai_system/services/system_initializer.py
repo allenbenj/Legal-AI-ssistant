@@ -4,12 +4,18 @@
 #Ensures all required system components are properly initialized before use.
 
 
-import os
+import sys
 import sqlite3
-import logging # Using standard logging for basic setup
+import logging  # Using standard logging for basic setup
 from pathlib import Path
-from typing import Dict, Any, List # Added List
+from typing import Dict, Any, List, Callable
 from datetime import datetime
+
+from ..core.detailed_logging import (
+    get_detailed_logger,
+    LogCategory,
+    detailed_log_function,
+)
 
 # Determine project root dynamically - legal_ai_system/
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -17,8 +23,8 @@ LOGS_DIR_INIT = PROJECT_ROOT / "logs"
 STORAGE_DIR_INIT = PROJECT_ROOT / "storage"
 DATABASES_DIR_INIT = STORAGE_DIR_INIT / "databases"
 
-# Basic logger for this module
-initializer_logger = logging.getLogger("SystemInitializer")
+# Basic logger for this module using detailed logging
+initializer_logger = get_detailed_logger("SystemInitializer", LogCategory.SYSTEM)
 
 def setup_basic_logging(log_level: int = logging.INFO) -> str: # Added log_level param
     """Setup basic Python logging for early system stages and this script."""
@@ -575,4 +581,4 @@ if __name__ == "__main__":
         for issue in health_results['issues_found']:
             print(f"    - {issue}")
     elif health_results['overall_status'] == "HEALTHY":
-         print("\n  ✅ System appears healthy and ready for further setup/use.")
+        print("\n  ✅ System appears healthy and ready for further setup/use.")
