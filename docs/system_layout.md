@@ -75,3 +75,17 @@ During processing:
 LangGraph based workflows use `AnalysisNode` and `SummaryNode` (see `agents/agent_nodes.py`) which internally retrieve the integration service via the service container to run analysis or summarization.  This allows complex graphs of tasks to be executed with consistent resource management.
 
 Overall, the ServiceContainer acts as the hub connecting agents and services, enabling workflows like `RealTimeAnalysisWorkflow` and integration via APIs or GUI components.
+
+### `handle_document_upload` response
+
+The `IntegrationService.handle_document_upload` method returns a small JSON
+object acknowledging that processing has started.  The fields are:
+
+- `document_id` – the identifier stored in the `MemoryManager`
+- `filename` – the stored filename on disk
+- `size_bytes` – byte size of the uploaded file
+- `status` – always `processing_initiated` when the workflow is queued
+- `message` – human readable confirmation
+
+If the `SecurityManager` or workflow orchestrator are unavailable the method
+raises `ServiceLayerError`.

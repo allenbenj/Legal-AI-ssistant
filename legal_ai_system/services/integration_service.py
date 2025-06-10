@@ -14,6 +14,8 @@ from pathlib import Path
 # import logging # Replaced by detailed_logging
 from typing import Any, Dict, Optional
 
+from legal_ai_system.services.memory_manager import MemoryManager
+
 from legal_ai_system.core.detailed_logging import (
     LogCategory,
     detailed_log_function,
@@ -28,6 +30,7 @@ from legal_ai_system.services.security_manager import (
 )
 from legal_ai_system.services.security_manager import User as AuthUser
 from legal_ai_system.services.service_container import ServiceContainer
+from legal_ai_system.services.workflow_orchestrator import WorkflowOrchestrator
 
 # Initialize logger for this module
 integration_service_logger = get_detailed_logger("IntegrationService", LogCategory.API)
@@ -50,6 +53,8 @@ class LegalAIIntegrationService:
         self.service_container = service_container
         # Services are retrieved lazily since `get_service` is async
         self.security_manager: Optional[SecurityManager] = None
+        self.memory_manager: Optional[MemoryManager] = None
+        self.workflow_orchestrator: Optional[WorkflowOrchestrator] = None
         # Example: self.realtime_workflow: Optional[RealTimeAnalysisWorkflow] = None
 
         integration_service_logger.info(
@@ -64,9 +69,21 @@ class LegalAIIntegrationService:
         user: AuthUser,  # Pass authenticated user object
         options: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """
-        Handles document upload, initial validation, and storage.
-        Triggers background processing via a workflow.
+        """Handle a document upload and start background processing.
+
+        Returns a dictionary with the following keys::
+
+            {
+                "document_id": str,
+                "filename": str,
+                "size_bytes": int,
+                "status": str,
+                "message": str,
+            }
+
+        Raises:
+            ServiceLayerError: if security checks, storage or workflow
+            initialization fails.
         """
         integration_service_logger.info(
             "Handling document upload.",
@@ -106,50 +123,46 @@ class LegalAIIntegrationService:
                 parameters={"path": str(file_path)},
             )
 
-            # TODO: Add metadata to a persistent document registry (e.g., using EnhancedPersistenceManager)
-            # For now, we'll generate a conceptual document_id
+            if not self.memory_manager:
+                self.memory_manager = await self.service_container.get_service(
+                    "memory_manager"
+                )
             document_id = f"doc_serv_{uuid.uuid4().hex}"
 
-            # Trigger background processing using an orchestrator/workflow service
-            orchestrator = await self.service_container.get_service(
-                "ultimate_orchestrator"
-            )  # Or "realtime_analysis_workflow"
-            if not orchestrator:
-                raise ServiceLayerError("Workflow orchestrator service not available.")
-
-            # The orchestrator's execute_workflow should be an async task
-            # FastAPI's BackgroundTasks would be used in the API endpoint layer, not here.
-            # This service method itself might be called by a BackgroundTask.
-            # We are just initiating the call to the workflow here.
-
-            # Construct task_data and metadata for the workflow
             workflow_metadata = {
-                "document_id": document_id,  # The conceptual ID for tracking
+                "document_id": document_id,
                 "original_filename": filename,
                 "user_id": user.user_id,
                 "upload_timestamp": datetime.now(timezone.utc).isoformat(),
                 "processing_options": options,
             }
 
-            integration_service_logger.debug(
-                "Prepared workflow metadata",
-                parameters=workflow_metadata,
+            if self.memory_manager:
+                await self.memory_manager.create_session(
+                    session_id=document_id,
+                    session_name=filename,
+                    metadata=workflow_metadata,
+                )
+            else:
+                integration_service_logger.warning(
+                    "MemoryManager unavailable; metadata not persisted"
+                )
+
+            orchestrator = self.workflow_orchestrator
+            if not orchestrator:
+                orchestrator = await self.service_container.get_service(
+                    "workflow_orchestrator"
+                )
+                self.workflow_orchestrator = orchestrator
+            if not orchestrator:
+                raise ServiceLayerError("Workflow orchestrator service not available.")
+
+            self.service_container.add_background_task(
+                orchestrator.execute_workflow_instance(
+                    document_path_str=str(file_path),
+                    custom_metadata=workflow_metadata,
+                )
             )
-
-            # The workflow will handle its own background execution if designed that way (e.g. LangGraph)
-            # Or, if orchestrator.execute_workflow_instance is a long blocking call, it should be
-            # launched as a separate task by the API layer.
-            # For now, let's assume the workflow handles its own asynchronicity or the API layer does.
-            # Here, we're just setting up to call it.
-            # In a real scenario, we wouldn't await the full workflow here if it's long.
-            # We'd return an ack and the workflow runs in bg.
-            # This function's role is to prepare and initiate.
-
-            # Example: If the workflow needs to be explicitly run in background from here:
-            # task = asyncio.create_task(
-            #    orchestrator.execute_workflow_instance(document_path_str=str(file_path), custom_metadata=workflow_metadata)
-            # )
-            # self.service_container.add_background_task(task) # If container manages tasks
 
             integration_service_logger.info(
                 "Document processing initiated via workflow.",
