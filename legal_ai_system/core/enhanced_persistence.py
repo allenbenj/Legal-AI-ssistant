@@ -53,6 +53,20 @@ class EntityRecord:
             self.source_documents = []
 
 @dataclass
+class RelationshipRecord:
+    """Database relationship record."""
+
+    relationship_id: str
+    source_entity_id: str
+    target_entity_id: str
+    relationship_type: str
+    created_by: str
+    attributes: Dict[str, Any] = field(default_factory=dict)
+    confidence_score: float = 1.0
+    source_document: Optional[str] = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+@dataclass
 class WorkflowRecord:
     """Database workflow record with state tracking."""
     workflow_id: str # Should be unique, consider UUID
@@ -534,6 +548,107 @@ class EntityRepository:
             raise DatabaseError(f"Unexpected error batch creating entities", cause=e)
 
 
+class RelationshipRepository:
+    """Repository for relationship persistence."""
+
+    def __init__(self, connection_pool: ConnectionPool):
+        self.pool = connection_pool
+        self.transaction_manager = TransactionManager(connection_pool)
+        self.logger = persistence_logger.getChild("RelationshipRepository")
+
+    @detailed_log_function(LogCategory.DATABASE)
+    async def create_relationship(self, relationship: RelationshipRecord) -> str:
+        """Create a relationship entry."""
+        self.logger.info(
+            "Creating relationship.",
+            parameters={
+                "src": relationship.source_entity_id,
+                "tgt": relationship.target_entity_id,
+                "type": relationship.relationship_type,
+            },
+        )
+        try:
+            async with self.transaction_manager.transaction() as conn:
+                if not relationship.relationship_id:
+                    relationship.relationship_id = str(uuid.uuid4())
+
+                await conn.execute(
+                    """
+                    INSERT INTO relationships (
+                        relationship_id, source_entity_id, target_entity_id,
+                        relationship_type, attributes, confidence_score,
+                        source_document, created_at, created_by
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                    """,
+                    relationship.relationship_id,
+                    relationship.source_entity_id,
+                    relationship.target_entity_id,
+                    relationship.relationship_type,
+                    json.dumps(relationship.attributes),
+                    relationship.confidence_score,
+                    relationship.source_document,
+                    relationship.created_at,
+                    relationship.created_by,
+                )
+
+                self.logger.info(
+                    "Relationship created.",
+                    parameters={"relationship_id": relationship.relationship_id},
+                )
+                return relationship.relationship_id
+        except asyncpg.PostgresError as e:
+            self.logger.error("Database error creating relationship.", exception=e)
+            raise DatabaseError(
+                f"Failed to create relationship: {str(e)}",
+                database_type="postgresql",
+                cause=e,
+            )
+        except Exception as e:
+            self.logger.error("Unexpected error creating relationship.", exception=e)
+            raise DatabaseError("Unexpected error creating relationship", cause=e)
+
+    @detailed_log_function(LogCategory.DATABASE)
+    async def get_relationships_for_entity(self, entity_id: str) -> List[RelationshipRecord]:
+        """Retrieve all relationships for a given entity."""
+        self.logger.debug("Fetching relationships for entity.", parameters={"entity_id": entity_id})
+        try:
+            async with self.pool.get_pg_connection() as conn:
+                rows = await conn.fetch(
+                    """
+                    SELECT * FROM relationships
+                    WHERE source_entity_id = $1 OR target_entity_id = $1
+                    """,
+                    entity_id,
+                )
+
+                relationships = [
+                    RelationshipRecord(
+                        relationship_id=r["relationship_id"],
+                        source_entity_id=r["source_entity_id"],
+                        target_entity_id=r["target_entity_id"],
+                        relationship_type=r["relationship_type"],
+                        attributes=json.loads(r["attributes"]) if isinstance(r["attributes"], str) else r["attributes"],
+                        confidence_score=r["confidence_score"],
+                        source_document=r["source_document"],
+                        created_at=r["created_at"],
+                        created_by=r["created_by"],
+                    )
+                    for r in rows
+                ]
+
+                return relationships
+        except asyncpg.PostgresError as e:
+            self.logger.error("Database error fetching relationships.", exception=e)
+            raise DatabaseError(
+                f"Failed to fetch relationships for entity {entity_id}: {str(e)}",
+                database_type="postgresql",
+                cause=e,
+            )
+        except Exception as e:
+            self.logger.error("Unexpected error fetching relationships.", exception=e)
+            raise DatabaseError("Unexpected error fetching relationships", cause=e)
+
+
 class WorkflowRepository:
     """Repository for workflow state persistence with ACID guarantees."""
     
@@ -781,22 +896,12 @@ class CacheManager:
 
 class EnhancedPersistenceManager:
     """Central persistence manager coordinating all data operations."""
-    
-    def __init__(
-        self,
-        database_url: Optional[str],
-        redis_url: Optional[str],
-        config: Optional[Dict[str, Any]] = None,
-        metrics_exporter: Optional[Any] = None,
-    ):
         self.config = config or {}
-        min_pg = self.config.get("min_pg_connections", 5)
-        max_pg = self.config.get("max_pg_connections", 20)
-        max_rd = self.config.get("max_redis_connections", 10)
         cache_ttl = self.config.get("cache_default_ttl_seconds", 3600)
 
-        self.connection_pool = ConnectionPool(database_url, redis_url, min_pg, max_pg, max_rd)
+        self.connection_pool = connection_pool
         self.entity_repo = EntityRepository(self.connection_pool)
+        self.relationship_repo = RelationshipRepository(self.connection_pool)
         self.workflow_repo = WorkflowRepository(self.connection_pool)
         self.cache_manager = CacheManager(self.connection_pool, default_ttl_seconds=cache_ttl)
         self.metrics = metrics_exporter
@@ -876,6 +981,28 @@ class EnhancedPersistenceManager:
                 """)
                 await conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_log_entity_id ON entity_audit_log(entity_id);")
                 await conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_log_action ON entity_audit_log(action);")
+
+                await conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS relationships (
+                        relationship_id TEXT PRIMARY KEY,
+                        source_entity_id TEXT REFERENCES entities(entity_id) ON DELETE CASCADE,
+                        target_entity_id TEXT REFERENCES entities(entity_id) ON DELETE CASCADE,
+                        relationship_type TEXT NOT NULL,
+                        attributes JSONB DEFAULT '{}'::jsonb,
+                        confidence_score REAL DEFAULT 1.0,
+                        source_document TEXT,
+                        created_at TIMESTAMPTZ DEFAULT NOW(),
+                        created_by TEXT NOT NULL
+                    );
+                    """
+                )
+                await conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_relationship_type ON relationships(relationship_type);"
+                )
+                await conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_relationship_src_tgt ON relationships(source_entity_id, target_entity_id);"
+                )
 
                 await conn.execute("""
                     CREATE TABLE IF NOT EXISTS workflows (
@@ -1003,21 +1130,5 @@ class EnhancedPersistenceManager:
 
 # Factory function for service container
 def create_enhanced_persistence_manager(
-    service_container: Any, config: Dict[str, Any]
-) -> EnhancedPersistenceManager:
-    db_url = config.get("database_url") # e.g., from ConfigurationManager: get_db_url("postgresql_primary")
-    redis_url = config.get("redis_url") # e.g., from ConfigurationManager: get_redis_url("cache_primary")
-    
-    if not db_url:
-        persistence_logger.warning("DATABASE_URL not provided for EnhancedPersistenceManager. PostgreSQL features will be unavailable.")
-    if not redis_url:
-        persistence_logger.warning("REDIS_URL not provided for EnhancedPersistenceManager. Redis caching features will be unavailable.")
 
-
-    metrics = _get_service_sync(service_container, "metrics_exporter")
-    return EnhancedPersistenceManager(
-        db_url,
-        redis_url,
-        config=config.get("persistence_config"),
-        metrics_exporter=metrics,
     )
