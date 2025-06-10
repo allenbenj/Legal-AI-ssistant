@@ -266,52 +266,7 @@ class LegalAIIntegrationService:
                 exception=e,
             )
 
-    @detailed_log_function(LogCategory.API)
-    async def handle_document_upload(
-        self,
-        file_content: bytes,
-        filename: str,
-        user: AuthUser,  # Pass authenticated user object
-        options: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
-        """Handle a document upload and start background processing.
 
-        Returns a dictionary with the following keys::
-
-            {
-                "document_id": str,
-                "filename": str,
-                "size_bytes": int,
-                "status": str,
-                "message": str,
-            }
-
-        Raises:
-            ServiceLayerError: if security checks, storage or workflow
-            initialization fails.
-        """
-        integration_service_logger.info(
-            "Handling document upload.",
-            parameters={"filename": filename, "user_id": user.user_id},
-        )
-        options = options or {}
-
-        if not self.security_manager:
-            self.security_manager = await self.service_container.get_service(
-                "security_manager"
-            )
-        if not self.security_manager:
-            raise ServiceLayerError(
-                "SecurityManager not available for document upload."
-            )
-
-        try:
-            file_path, unique_filename = await self._save_uploaded_file(
-                file_content, filename
-            )
-            document_id, workflow_metadata = await self._create_document_metadata(
-                file_path, filename, user, options
-            )
             await self._launch_workflow(file_path, workflow_metadata)
 
             return {
