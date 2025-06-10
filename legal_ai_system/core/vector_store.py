@@ -420,6 +420,16 @@ class VectorStore:
             )  # Creates empty shells
             await self._load_all_existing_data_async()  # Loads from disk into shells
 
+            # Recovery: if caches failed to load but index files exist, reload
+            if not self.metadata_mem_cache and (
+                self.document_index_path.exists() or self.entity_index_path.exists()
+            ):
+                vector_store_logger.warning(
+                    "Caches empty after initial load; attempting recovery from disk."
+                )
+                await loop.run_in_executor(None, self._load_metadata_mem_cache_sync)
+                await loop.run_in_executor(None, self._load_id_mapping_cache_sync)
+
             self._start_background_optimization_task()
             self._start_periodic_save_task()
 
@@ -1024,6 +1034,7 @@ class VectorStore:
                     ),
                 )
                 conn.commit()
+            # Update memory cache only after metadata is safely written
             self.metadata_mem_cache[metadata.vector_id] = metadata
         except sqlite3.Error as e:
             vs_index_logger.error(
