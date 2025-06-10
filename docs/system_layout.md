@@ -60,7 +60,7 @@ Key services registered with the container include:
 
 ## Workflows and Connections
 
-`RealTimeAnalysisWorkflow` assembles several agents and managers to process a document.  Its constructor creates a `DocumentProcessorAgent`, `DocumentRewriterAgent`, `OntologyExtractionAgent`, `HybridLegalExtractor`, `RealTimeGraphManager`, `OptimizedVectorStore` and `ReviewableMemory`.  Source: `services/realtime_analysis_workflow.py` lines 92‑109.  The workflow coordinates extraction, enrichment, and persistence in a single asynchronous pipeline.
+`RealTimeAnalysisWorkflow` assembles several agents and managers to process a document.  Its constructor creates a `DocumentProcessorAgent`, `DocumentRewriterAgent`, `OntologyExtractionAgent`, `HybridLegalExtractor`, `RealTimeGraphManager`, `EnhancedVectorStore` and `ReviewableMemory`.  Source: `services/realtime_analysis_workflow.py` lines 92‑109.  The workflow coordinates extraction, enrichment, and persistence in a single asynchronous pipeline.
 
 During processing:
 
