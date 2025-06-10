@@ -12,7 +12,7 @@ import {
   DashboardErrorBoundary,
   DocumentProcessingErrorBoundary,
 } from '../../frontend/src/components/AsyncErrorBoundary';
-import { Button } from '../../frontend/src/design-system';
+
 
 
 
