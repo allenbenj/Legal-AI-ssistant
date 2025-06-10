@@ -833,6 +833,7 @@ async def create_service_container(
             "KnowledgeBaseAgent",
             None,
         ),
+        # Knowledge graph reasoning support
         "knowledge_graph_reasoning_agent": KnowledgeGraphReasoningAgent,
         "legal_reasoning_engine": LegalReasoningEngine,
     }
