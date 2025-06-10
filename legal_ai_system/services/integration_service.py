@@ -14,7 +14,7 @@ import hashlib
 import json
 
 # import logging # Replaced by detailed_logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from legal_ai_system.services.memory_manager import MemoryManager
 from legal_ai_system.core.enhanced_persistence import EnhancedPersistenceManager
@@ -67,6 +67,123 @@ class LegalAIIntegrationService:
         integration_service_logger.info(
             "LegalAIIntegrationService initialized successfully."
         )
+
+    async def _save_uploaded_file(
+        self, file_content: bytes, filename: str
+    ) -> Tuple[Path, str]:
+        """Save uploaded bytes to disk and return the resulting path."""
+        upload_dir = Path("./storage/documents/uploads_service")
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        safe_filename = "".join(
+            c if c.isalnum() or c in [".", "-", "_"] else "_" for c in filename
+        )
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")
+        unique_filename = f"{timestamp}_{uuid.uuid4().hex[:8]}_{safe_filename}"
+        file_path = upload_dir / unique_filename
+
+        try:
+            with open(file_path, "wb") as f:
+                f.write(file_content)
+            integration_service_logger.info(
+                "File saved to temporary upload location.",
+                parameters={"path": str(file_path)},
+            )
+        except Exception as e:  # pragma: no cover - file write error
+            integration_service_logger.error(
+                "Failed to save uploaded file.",
+                parameters={"filename": filename},
+                exception=e,
+            )
+            raise ServiceLayerError("Failed to save uploaded file.") from e
+
+        return file_path, unique_filename
+
+    async def _create_document_metadata(
+        self,
+        file_path: Path,
+        filename: str,
+        user: AuthUser,
+        options: Dict[str, Any],
+    ) -> Tuple[str, Dict[str, Any]]:
+        """Persist document metadata and create session."""
+        try:
+            if not self.memory_manager:
+                self.memory_manager = await self.service_container.get_service(
+                    "memory_manager"
+                )
+            document_id = f"doc_serv_{uuid.uuid4().hex}"
+            workflow_metadata = {
+                "document_id": document_id,
+                "original_filename": filename,
+                "user_id": user.user_id,
+                "upload_timestamp": datetime.now(timezone.utc).isoformat(),
+                "processing_options": options,
+            }
+
+            await self.create_document_record(
+                document_id,
+                filename,
+                file_path,
+                user.user_id,
+                options,
+            )
+
+            if self.memory_manager:
+                await self.memory_manager.create_session(
+                    session_id=document_id,
+                    session_name=filename,
+                    metadata=workflow_metadata,
+                )
+            else:
+                integration_service_logger.warning(
+                    "MemoryManager unavailable; metadata not persisted"
+                )
+            return document_id, workflow_metadata
+        except Exception as e:
+            integration_service_logger.error(
+                "Failed to create document metadata.",
+                parameters={"filename": filename},
+                exception=e,
+            )
+            raise ServiceLayerError("Failed to create document metadata.") from e
+
+    async def _launch_workflow(
+        self, file_path: Path, workflow_metadata: Dict[str, Any]
+    ) -> None:
+        """Start document workflow execution."""
+        try:
+            orchestrator = self.workflow_orchestrator
+            if not orchestrator:
+                orchestrator = await self.service_container.get_service(
+                    "workflow_orchestrator"
+                )
+                self.workflow_orchestrator = orchestrator
+            if not orchestrator:
+                raise ServiceLayerError("Workflow orchestrator service not available.")
+
+            self.service_container.add_background_task(
+                orchestrator.execute_workflow_instance(
+                    document_path_str=str(file_path),
+                    custom_metadata=workflow_metadata,
+                )
+            )
+
+            integration_service_logger.info(
+                "Document processing initiated via workflow.",
+                parameters={
+                    "doc_id": workflow_metadata.get("document_id"),
+                    "workflow_service": type(orchestrator).__name__,
+                },
+            )
+        except ServiceLayerError:
+            raise
+        except Exception as e:
+            integration_service_logger.error(
+                "Failed to launch workflow.",
+                parameters={"document_id": workflow_metadata.get("document_id")},
+                exception=e,
+            )
+            raise ServiceLayerError("Failed to launch workflow.") from e
 
     async def create_document_record(
         self,
@@ -149,170 +266,7 @@ class LegalAIIntegrationService:
                 exception=e,
             )
 
-    async def _save_uploaded_file(
-        self, file_content: bytes, filename: str
-    ) -> tuple[Path, str]:
-        """Save the uploaded file to disk and return path and unique name."""
-        upload_dir = Path("./storage/documents/uploads_service")
-        upload_dir.mkdir(parents=True, exist_ok=True)
 
-        safe_filename = "".join(
-            c if c.isalnum() or c in [".", "-", "_"] else "_" for c in filename
-        )
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")
-        unique_filename = f"{timestamp}_{uuid.uuid4().hex[:8]}_{safe_filename}"
-        file_path = upload_dir / unique_filename
-
-        try:
-            with open(file_path, "wb") as f:
-                f.write(file_content)
-            integration_service_logger.info(
-                "File saved to temporary upload location.",
-                parameters={"path": str(file_path)},
-            )
-            return file_path, unique_filename
-        except Exception as e:  # pragma: no cover - file write failure
-            integration_service_logger.error(
-                "Failed to save uploaded file.",
-                parameters={"filename": filename},
-                exception=e,
-            )
-            raise ServiceLayerError(f"File save failed: {e}", cause=e)
-
-    async def _create_document_metadata(
-        self,
-        filename: str,
-        file_path: Path,
-        user: AuthUser,
-        options: Dict[str, Any],
-    ) -> tuple[str, Dict[str, Any]]:
-        """Create document metadata records and memory session."""
-        if not self.memory_manager:
-            self.memory_manager = await self.service_container.get_service(
-                "memory_manager"
-            )
-
-        document_id = f"doc_serv_{uuid.uuid4().hex}"
-        workflow_metadata = {
-            "document_id": document_id,
-            "original_filename": filename,
-            "user_id": user.user_id,
-            "upload_timestamp": datetime.now(timezone.utc).isoformat(),
-            "processing_options": options,
-        }
-
-        try:
-            await self.create_document_record(
-                document_id,
-                filename,
-                file_path,
-                user.user_id,
-                options,
-            )
-
-            if self.memory_manager:
-                await self.memory_manager.create_session(
-                    session_id=document_id,
-                    session_name=filename,
-                    metadata=workflow_metadata,
-                )
-            else:
-                integration_service_logger.warning(
-                    "MemoryManager unavailable; metadata not persisted"
-                )
-            return document_id, workflow_metadata
-        except Exception as e:  # pragma: no cover - metadata failure
-            integration_service_logger.error(
-                "Failed to create document metadata.",
-                parameters={"filename": filename, "document_id": document_id},
-                exception=e,
-            )
-            raise ServiceLayerError(
-                f"Document metadata creation failed: {e}", cause=e
-            )
-
-    async def _launch_workflow(
-        self, file_path: Path, workflow_metadata: Dict[str, Any]
-    ) -> None:
-        """Launch the document processing workflow."""
-        orchestrator = self.workflow_orchestrator
-        if not orchestrator:
-            orchestrator = await self.service_container.get_service(
-                "workflow_orchestrator"
-            )
-            self.workflow_orchestrator = orchestrator
-
-        if not orchestrator:
-            raise ServiceLayerError("Workflow orchestrator service not available.")
-
-        try:
-            self.service_container.add_background_task(
-                orchestrator.execute_workflow_instance(
-                    document_path_str=str(file_path),
-                    custom_metadata=workflow_metadata,
-                )
-            )
-            integration_service_logger.info(
-                "Document processing initiated via workflow.",
-                parameters={
-                    "doc_id": workflow_metadata.get("document_id"),
-                    "workflow_service": type(orchestrator).__name__,
-                },
-            )
-        except Exception as e:  # pragma: no cover - workflow failure
-            integration_service_logger.error(
-                "Failed to launch workflow.",
-                parameters={"document_id": workflow_metadata.get("document_id")},
-                exception=e,
-            )
-            raise ServiceLayerError(f"Workflow launch failed: {e}", cause=e)
-
-    @detailed_log_function(LogCategory.API)
-    async def handle_document_upload(
-        self,
-        file_content: bytes,
-        filename: str,
-        user: AuthUser,  # Pass authenticated user object
-        options: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
-        """Handle a document upload and start background processing.
-
-        Returns a dictionary with the following keys::
-
-            {
-                "document_id": str,
-                "filename": str,
-                "size_bytes": int,
-                "status": str,
-                "message": str,
-            }
-
-        Raises:
-            ServiceLayerError: if security checks, storage or workflow
-            initialization fails.
-        """
-        integration_service_logger.info(
-            "Handling document upload.",
-            parameters={"filename": filename, "user_id": user.user_id},
-        )
-        options = options or {}
-
-        if not self.security_manager:
-            self.security_manager = await self.service_container.get_service(
-                "security_manager"
-            )
-        if not self.security_manager:
-            raise ServiceLayerError(
-                "SecurityManager not available for document upload."
-            )
-
-        try:
-            file_path, unique_filename = await self._save_uploaded_file(
-                file_content, filename
-            )
-            document_id, workflow_metadata = await self._create_document_metadata(
-                filename, file_path, user, options
-            )
             await self._launch_workflow(file_path, workflow_metadata)
 
             return {
@@ -322,6 +276,7 @@ class LegalAIIntegrationService:
                 "status": "processing_initiated",
                 "message": "Document accepted and processing started.",
             }
+
         except ServiceLayerError:
             raise
         except Exception as e:
