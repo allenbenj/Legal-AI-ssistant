@@ -667,7 +667,7 @@ async def create_service_container(
         service_config=kg_conf,
     )
 
-    from ..core.vector_store import create_vector_store  # Standard one
+    from ..core.enhanced_vector_store import create_enhanced_vector_store  # Unified implementation
 
     vs_conf = {  # Fetch from config_manager
         "STORAGE_PATH": str(
@@ -681,7 +681,7 @@ async def create_service_container(
     # EmbeddingProvider instance can be fetched from EmbeddingManager if VectorStore is designed to take it
     # embedding_provider_instance = await container.get_service("embedding_manager").get_provider_instance() # Conceptual
     await container.register_service(
-        "vector_store", factory=create_vector_store, service_config=vs_conf
+        "vector_store", factory=create_enhanced_vector_store, service_config=vs_conf
     )
 
     from ..core.optimized_vector_store import (

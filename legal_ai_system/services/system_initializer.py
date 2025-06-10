@@ -204,6 +204,7 @@ def _create_agent_memory_db_schema(db_path: Path):
 def _create_vector_store_db_schema(db_path: Path):
     schema = """
         CREATE TABLE IF NOT EXISTS vector_metadata (
+            faiss_id INTEGER,
             vector_id TEXT PRIMARY KEY,
             document_id TEXT NOT NULL,
             content_hash TEXT NOT NULL,
@@ -222,6 +223,7 @@ def _create_vector_store_db_schema(db_path: Path):
         );
         CREATE INDEX IF NOT EXISTS idx_vs_meta_doc_id ON vector_metadata(document_id);
         CREATE INDEX IF NOT EXISTS idx_vs_meta_hash ON vector_metadata(content_hash);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_vs_meta_faiss_id ON vector_metadata(faiss_id);
     """
     _execute_schema(db_path, schema)
 
