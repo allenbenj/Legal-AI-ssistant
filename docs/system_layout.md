@@ -75,6 +75,20 @@ During processing:
 
 LangGraph based workflows use `AnalysisNode` and `SummaryNode` (see `agents/agent_nodes.py`) which internally retrieve the integration service via the service container to run analysis or summarization.  This allows complex graphs of tasks to be executed with consistent resource management.
 
+### Typed Workflow Engine
+
+For simpler pipelines the project provides a typed workflow engine located under
+`legal_ai_system/workflows`.  The core class `AgentWorkflow` combines agents that
+implement the `AgentCapability` protocol from
+`legal_ai_system.core.agent_types`.  A fluent builder,
+`LegalWorkflowBuilder`, helps assemble these workflows while preserving input
+and output types.  See `legal_ai_system/workflows/agent_workflow.py` for the
+generic workflow implementation and `legal_ai_system/workflows/builder.py` for
+the builder utilities.
+
+Typed workflows can run batches or asynchronous streams of documents, enabling
+unit tested pipelines outside the full real-time analysis system.
+
 Overall, the ServiceContainer acts as the hub connecting agents and services, enabling workflows like `RealTimeAnalysisWorkflow` and integration via APIs or GUI components.
 
 ### `handle_document_upload` response

@@ -27,10 +27,19 @@ Alternatively, run the helper script to automate the setup and validation:
 ```bash
 python scripts/setup_environment_task.py
 ```
+### Example: Build a Workflow
 
+```python
+from legal_ai_system.workflows.builder import LegalWorkflowBuilder
+from legal_ai_system.agents import DocumentProcessorAgent, SemanticAnalysisAgent
 
-npm install
-npm run build
+builder = (
+    LegalWorkflowBuilder()
+    .add(DocumentProcessorAgent())
+    .add(SemanticAnalysisAgent())
+)
+
+workflow = builder.build()
+result = workflow.run("sample.pdf")
+print(result)
 ```
-
-
