@@ -100,8 +100,6 @@ try:
         AccessLevel,
         SecurityManager,
     )
-    from legal_ai_system.services.security_manager import User as AuthUser
-    from legal_ai_system.services.service_container import ServiceContainer
 
     SERVICES_AVAILABLE = True
 except ImportError as e:
@@ -144,9 +142,6 @@ except ImportError as e:
             self.access_level = access_level
             self.last_login = last_login
             self.is_active = is_active
-
-    RealTimeAnalysisWorkflow = None  # type: ignore
-    RealTimeAnalysisResult = None  # type: ignore
 
     class _SettingsFallback:
         frontend_dist_path = (
@@ -1010,14 +1005,21 @@ async def process_document_rest(  # Renamed
             possible_files[0]
         )  # Take the first match for simplicity
 
-    if not RealTimeAnalysisWorkflow or not service_container_instance:
+    if not service_container_instance:
         main_api_logger.error(
-            "Processing cannot start: RealTimeAnalysisWorkflow or ServiceContainer not available."
+            "Processing cannot start: ServiceContainer not available."
         )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Processing service is not configured.",
         )
+
+    workflow = await service_container_instance.get_service(
+        "realtime_analysis_workflow"
+    )
+    await service_container_instance.update_workflow_config(
+        processing_request.model_dump()
+    )
 
     # user_id_for_task = current_user.user_id
     user_id_for_task = "mock_user_for_processing"  # Placeholder if auth is off
@@ -1326,9 +1328,9 @@ async def process_document_background_task(  # Renamed
         "stage": "Initializing",
     }
 
-    if not service_container_instance or not RealTimeAnalysisWorkflow:
+    if not service_container_instance:
         main_api_logger.critical(
-            "Cannot process document: ServiceContainer or RealTimeAnalysisWorkflow not available."
+            "Cannot process document: ServiceContainer not available."
         )
         global_processing_states[document_id].update(
             {"status": "failed", "error": "System not configured for processing."}
@@ -1350,13 +1352,15 @@ async def process_document_background_task(  # Renamed
         )  # Convert Pydantic model to dict
         workflow_config["user_id"] = requesting_user_id  # Add user context
 
-        # Instantiate workflow from service container or directly
-        # workflow = service_container_instance.get_service("realtime_analysis_workflow")
-        # For now, direct instantiation:
-        workflow = RealTimeAnalysisWorkflow(
-            service_container_instance, **workflow_config
+        workflow = await service_container_instance.get_service(
+            "realtime_analysis_workflow"
         )
-        await workflow.initialize()  # If workflow has async init
+        await service_container_instance.update_workflow_config(workflow_config)
+        if hasattr(workflow, "initialize") and getattr(
+            service_container_instance._service_states.get("realtime_analysis_workflow"),
+            None,
+        ) != ServiceLifecycleState.INITIALIZED:
+            await workflow.initialize()
 
         # Define progress callback for WebSocket
         async def ws_progress_callback(
@@ -1391,8 +1395,7 @@ async def process_document_background_task(  # Renamed
         # Execute the workflow
         analysis_result: RealTimeAnalysisResult = (
             await workflow.process_document_realtime(
-                document_path=document_file_path,  # Use the actual file path
-                document_id_override=document_id,  # Pass the conceptual ID
+                document_path=document_file_path,
                 # other options from processing_request_model can be passed if workflow accepts them
             )
         )
