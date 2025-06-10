@@ -60,7 +60,6 @@ python legal_ai_system/scripts/setup_environment_task.py
 ```
 
 
-
 ### Start Task
 
 
