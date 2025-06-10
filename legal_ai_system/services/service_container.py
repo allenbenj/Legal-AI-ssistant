@@ -769,9 +769,14 @@ async def create_service_container(
     # For now, let's assume workflows will get agent *classes* or factories.
     # Or, if agents are simple enough to be singletons:
     from ..agents.document_processor_agent import DocumentProcessorAgent
+    from ..agents.document_processor_agent_v2 import DocumentProcessorAgentV2
     from ..agents.document_rewriter_agent import DocumentRewriterAgent
     from ..agents.ontology_extraction_agent import OntologyExtractionAgent
     from ..agents.entity_extraction_agent import StreamlinedEntityExtractionAgent
+    from ..agents.legal_reasoning_engine import LegalReasoningEngine
+    from ..agents.knowledge_graph_reasoning_agent import (
+        KnowledgeGraphReasoningAgent,
+    )
 
     # Example: await container.register_service("document_processor_agent", instance=DocumentProcessorAgent(container))
     # This needs careful thought: are agents services or instantiated by workflows?
@@ -780,6 +785,7 @@ async def create_service_container(
 
     agent_classes = {
         "document_processor_agent": DocumentProcessorAgent,
+        "document_processor_agent_v2": DocumentProcessorAgentV2,
         "ontology_extraction_agent": OntologyExtractionAgent,
         "streamlined_entity_extraction_agent": StreamlinedEntityExtractionAgent,
         # ... Add all other agent classes from agents/__init__.py
@@ -829,6 +835,8 @@ async def create_service_container(
             "KnowledgeBaseAgent",
             None,
         ),
+        "knowledge_graph_reasoning_agent": KnowledgeGraphReasoningAgent,
+        "legal_reasoning_engine": LegalReasoningEngine,
     }
     for name, agent_cls in agent_classes.items():
         if agent_cls:  # Check if import was successful
@@ -842,6 +850,30 @@ async def create_service_container(
                 is_async_factory=False,
             )
 
+    # Register simple LangGraph node classes for builder workflows
+    from ..agents.agent_nodes import AnalysisNode, SummaryNode
+    workflow_topic = config_manager_service.get("workflow_builder_topic", "default")
+    await container.register_service(
+        "analysis_node",
+        factory=lambda sc, t=workflow_topic: AnalysisNode(t),
+        is_async_factory=False,
+    )
+    await container.register_service(
+        "summary_node",
+        factory=lambda sc: SummaryNode(),
+        is_async_factory=False,
+    )
+
+    # Register orchestrator which coordinates both realtime and builder workflows
+    from .workflow_orchestrator import WorkflowOrchestrator
+    await container.register_service(
+        "workflow_orchestrator",
+        factory=lambda sc, topic=workflow_topic: WorkflowOrchestrator(
+            sc, workflow_topic=topic
+        ),
+        is_async_factory=False,
+    )
+
     # Register workflow with active configuration
     workflow_conf_dict = config_manager_service.get("workflow_config", {})
     container.update_workflow_config(workflow_conf_dict)
@@ -849,6 +881,33 @@ async def create_service_container(
         "realtime_analysis_workflow",
         factory=lambda sc: RealTimeAnalysisWorkflow(
             sc, **asdict(sc.get_active_workflow_config())
+        ),
+        is_async_factory=False,
+    )
+
+    # Register LangGraph nodes and builder for the orchestrator
+    from ..agents.agent_nodes import AnalysisNode, SummaryNode
+    from ..workflows.langgraph_setup import build_graph
+    from .workflow_orchestrator import WorkflowOrchestrator
+
+    await container.register_service(
+        "analysis_node_factory",
+        factory=lambda sc, topic="default": AnalysisNode(topic),
+        is_async_factory=False,
+    )
+    await container.register_service(
+        "summary_node_factory",
+        factory=lambda sc: SummaryNode(),
+        is_async_factory=False,
+    )
+    await container.register_service(
+        "langgraph_builder",
+        instance=build_graph,
+    )
+    await container.register_service(
+        "workflow_orchestrator",
+        factory=lambda sc: WorkflowOrchestrator(
+            sc, workflow_config=WorkflowConfig(**sc.get_active_workflow_config())
         ),
         is_async_factory=False,
     )
