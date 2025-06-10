@@ -9,10 +9,11 @@ authentication, authorization, audit logging, and PII detection.
 import re
 import hashlib
 import secrets
+import asyncio
 # import logging # Replaced by detailed_logging
-from typing import Any, Dict, List, Optional, Set, Union # Added Set, Union
-from dataclasses import dataclass, field # Added field
-from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional, Union
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import json
 import uuid
@@ -22,7 +23,7 @@ from enum import Enum
 from ..core.detailed_logging import get_detailed_logger, LogCategory, detailed_log_function
 # Import constants from the config module
 from ..core.constants import Constants
-from ..persistence.repositories.user_repository import UserRepository 
+from ..utils.user_repository import UserRepository
 # Import exceptions for specific error types if needed
 # from .unified_exceptions import SecurityError # Example
 
@@ -67,10 +68,10 @@ class User:
 @dataclass
 class AuditLogEntry:
     """Audit log entry for compliance tracking."""
-    entry_id: str = field(default_factory=lambda: str(uuid.uuid4())) # Added entry_id
     timestamp: datetime
-    user_id: str # Should be 'unknown' if action is pre-auth or system
+    user_id: str  # Should be 'unknown' if action is pre-auth or system
     action: str
+    entry_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     resource: Optional[str] = None # Made optional
     details: Dict[str, Any] = field(default_factory=dict) # Ensure default is factory
     ip_address: Optional[str] = None
@@ -144,7 +145,10 @@ class InputValidator:
 
     @staticmethod
     @detailed_log_function(LogCategory.SECURITY)
-    def validate_json(json_string: str, max_size: int = Constants.Size.MAX_JSON_PAYLOAD_BYTES) -> Dict[str, Any]:
+    def validate_json(
+        json_string: str,
+        max_size: int = Constants.Size.MAX_JSON_PAYLOAD_BYTES,
+    ) -> Union[Dict[str, Any], List[Any]]:
         """Safely validate and parse JSON with size limits."""
         InputValidator.logger.debug("Validating JSON input.", parameters={'string_length': len(json_string), 'max_size_bytes': max_size})
         if len(json_string.encode('utf-8')) > max_size: # Check byte size for UTF-8
@@ -201,10 +205,12 @@ class InputValidator:
                 raise ValueError(msg)
             
             # Further check against common traversal patterns for robustness, though resolve() helps
-            if ".." in str(resolved_path.relative_to(Path(allowed_dirs[0]).resolve())): # Check relative path after confirming it's inside
-                 msg = "Path traversal components ('..') detected within allowed structure."
-                 InputValidator.logger.error(msg)
-                 raise ValueError(msg)
+            if ".." in str(
+                resolved_path.relative_to(Path(allowed_dirs[0]).resolve())
+            ):  # Check relative path after confirming it's inside
+                msg = "Path traversal components ('..') detected within allowed structure."
+                InputValidator.logger.error(msg)
+                raise ValueError(msg)
 
             InputValidator.logger.info("File path validation successful.", parameters={'resolved_path': str(resolved_path)})
             return resolved_path
@@ -349,8 +355,14 @@ class AuthenticationManager:
         await self._log_audit_async(user_id, "user_created", details={'username': username, 'access_level': access_level.value})
         return user_id
 
+    def create_user(
+        self, username: str, email: str, password: str, access_level: AccessLevel = AccessLevel.READ
+    ) -> str:
+        """Synchronous wrapper for ``create_user_async``."""
+        return asyncio.run(self.create_user_async(username, email, password, access_level))
+
     @detailed_log_function(LogCategory.SECURITY)
-    async def authenticate_async(self, username: str, password: str, 
+    async def authenticate_async(self, username: str, password: str,
                                 ip_address: Optional[str] = None, user_agent: Optional[str] = None) -> Optional[str]:
         log_details = {'username': username, 'ip': ip_address, 'ua': user_agent}
         user_obj: Optional[User] = self._user_cache.get(username, None) # Try username as cache key first
@@ -385,6 +397,12 @@ class AuthenticationManager:
         await self._log_audit_async(user_obj.user_id, "login_successful", details=log_details)
         return session_token
 
+    def authenticate(
+        self, username: str, password: str, ip_address: Optional[str] = None, user_agent: Optional[str] = None
+    ) -> Optional[str]:
+        """Synchronous wrapper for ``authenticate_async``."""
+        return asyncio.run(self.authenticate_async(username, password, ip_address, user_agent))
+
     @detailed_log_function(LogCategory.SECURITY)
     async def validate_session_async(self, session_token: str) -> Optional[User]:
         session_data = self._session_cache.get(session_token)
@@ -414,9 +432,18 @@ class AuthenticationManager:
                     if user: self._user_cache[user.user_id] = user
                 if user and user.is_active: return user
         return None
+
+    def validate_session(self, session_token: str) -> Optional[User]:
+        """Synchronous wrapper for ``validate_session_async``."""
+        return asyncio.run(self.validate_session_async(session_token))
+
+    def check_permission(self, user: User, required_level: AccessLevel) -> bool:
+        """Check if ``user`` meets ``required_level``."""
+        levels = list(AccessLevel)
+        return levels.index(user.access_level) >= levels.index(required_level)
     
-    async def _log_audit_async(self, user_id: str, action: str, resource: Optional[str] = None, 
-                               details: Optional[Dict[str, Any]] = None, 
+    async def _log_audit_async(self, user_id: str, action: str, resource: Optional[str] = None,
+                               details: Optional[Dict[str, Any]] = None,
                                ip_address: Optional[str] = None, user_agent: Optional[str] = None, status: str = "success"):
         # ... (buffering logic as before) ...
         # This method now needs to be async if _flush_audit_logs_async is async
@@ -428,6 +455,29 @@ class AuthenticationManager:
         self.audit_log_buffer.append(entry)
         if len(self.audit_log_buffer) >= self.config.get("audit_log_batch_size", 10): # Configurable batch size
             await self._flush_audit_logs_async()
+
+    def _log_audit(
+        self,
+        user_id: str,
+        action: str,
+        resource: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+        status: str = "success",
+    ) -> None:
+        """Synchronous wrapper for ``_log_audit_async``."""
+        asyncio.run(
+            self._log_audit_async(
+                user_id,
+                action,
+                resource=resource,
+                details=details,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                status=status,
+            )
+        )
 
     async def _flush_audit_logs_async(self): # Make sure this is called on shutdown too
         if not self.audit_log_buffer: return
@@ -569,9 +619,16 @@ class SecurityManager:
                 else: # Assume the dict itself is the entity or wrap it
                     parsed_data = [parsed_data] 
             
-            if not isinstance(parsed_data, list): # Final check
-                 SecurityManager.logger.error("Parsed LLM data is not a list of entities.", parameters={'parsed_type': type(parsed_data).__name__})
-                 return {"entities": [], "error": "Parsed data is not in expected list format.", "success": False}
+            if not isinstance(parsed_data, list):  # Final check
+                SecurityManager.logger.error(
+                    "Parsed LLM data is not a list of entities.",
+                    parameters={"parsed_type": type(parsed_data).__name__},
+                )
+                return {
+                    "entities": [],
+                    "error": "Parsed data is not in expected list format.",
+                    "success": False,
+                }
 
             SecurityManager.logger.info("LLM response parsed successfully.", parameters={'num_entities_parsed': len(parsed_data)})
             return {"entities": parsed_data, "success": True}
@@ -588,17 +645,21 @@ class SecurityManager:
     @detailed_log_function(LogCategory.SECURITY)
     def get_security_metrics(self) -> Dict[str, Any]:
         """Get security metrics for monitoring."""
-        auth_metrics = self.auth_manager # Assuming auth_manager has a method for its stats
-        
         # Example: Count recent audit logs for specific actions
-        recent_failed_logins = sum(1 for entry in self.auth_manager.audit_log 
-                                   if entry.action.startswith("login_failed") and 
-                                   (datetime.now(tz=datetime.timezone.utc) - entry.timestamp).total_seconds() < 3600*24) # Last 24h
+        recent_failed_logins = sum(
+            1
+            for entry in self.auth_manager.audit_log_buffer
+            if entry.action.startswith("login_failed")
+            and (
+                datetime.now(tz=datetime.timezone.utc) - entry.timestamp
+            ).total_seconds()
+            < 3600 * 24
+        )  # Last 24h
 
         metrics = {
-            "active_sessions_count": len(self.auth_manager.active_sessions),
-            "total_users_count": len(self.auth_manager.users),
-            "audit_log_total_entries": len(self.auth_manager.audit_log),
+            "active_sessions_count": len(self.auth_manager._session_cache),
+            "total_users_count": len(self.auth_manager._user_cache),
+            "audit_log_total_entries": len(self.auth_manager.audit_log_buffer),
             "failed_logins_last_24h": recent_failed_logins,
             "pii_detection_enabled": self.enable_pii_detection,
             "encryption_at_rest_enabled": self.enable_encryption_at_rest,

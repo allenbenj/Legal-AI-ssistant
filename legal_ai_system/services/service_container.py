@@ -500,7 +500,6 @@ async def create_service_container(
 
     # Register UserRepository
     from ..utils.user_repository import UserRepository
-
     if persistence_manager_service and persistence_manager_service.connection_pool:
         await container.register_service(
             "user_repository",
