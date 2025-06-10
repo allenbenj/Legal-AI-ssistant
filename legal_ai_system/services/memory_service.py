@@ -8,6 +8,8 @@ from typing import AsyncGenerator
 from ..core.unified_services import get_service_container, register_core_services
 from ..core.unified_memory_manager import UnifiedMemoryManager
 
+__all__ = ["memory_manager_context"]
+
 
 @asynccontextmanager
 async def memory_manager_context() -> AsyncGenerator[UnifiedMemoryManager, None]:
