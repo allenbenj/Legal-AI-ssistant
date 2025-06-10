@@ -159,53 +159,11 @@ class RealTimeAnalysisWorkflow:
         async with self.processing_lock:
             try:
                 self.logger.info(f"Starting real-time analysis for: {document_path}")
-                processing_times: Dict[str, float] = {}
 
-                builder = LegalWorkflowBuilder()
-                builder.register_node(DocumentProcessingNode())
-                builder.register_node(DocumentRewritingNode())
-                builder.register_node(HybridExtractionNode())
-                builder.register_node(OntologyExtractionNode())
-                builder.register_node(GraphBuildingNode())
-                builder.register_node(VectorStoreUpdateNode())
-                builder.register_node(MemoryIntegrationNode())
-                builder.register_node(ValidationNode())
-
-                context = {"workflow": self, "document_path": document_path, "document_id": document_id, "processing_times": processing_times, "kwargs": kwargs}
-
-                context = await builder.run(context)
-
-                total_time = time.time() - start_time
-
-                result = RealTimeAnalysisResult(
-                    document_path=document_path,
-                    document_id=document_id,
-                    document_processing=context.get("document_processing"),
-                    ontology_extraction=context.get("ontology_extraction"),
-                    hybrid_extraction=context.get("hybrid_extraction"),
-                    graph_updates=context.get("graph_updates", {}),
-                    vector_updates=context.get("vector_updates", {}),
-                    memory_updates=context.get("memory_updates", {}),
-                    processing_times=processing_times,
-                    total_processing_time=total_time,
-                    confidence_scores=context.get("confidence_scores", {}),
-                    validation_results=context.get("validation_results", {}),
-                    sync_status=await self._get_sync_status(),
-                )
-
-                await self._update_performance_stats(result)
-
-                if self.documents_processed % self.auto_optimization_threshold == 0:
-                    asyncio.create_task(self._auto_optimize_system())
-
-                await self._notify_progress("Analysis complete", 1.0)
-                await self._notify_update("document_processed", result.to_dict())
-
-                self.logger.info(f"Real-time analysis completed in {total_time:.2f}s")
-                return result
             except Exception as e:
                 self.logger.error(f"Real-time analysis failed for {document_path}: {e}")
                 raise
+
 
     async def _process_entities_realtime(
         self, hybrid_result, ontology_result, document_id: str
