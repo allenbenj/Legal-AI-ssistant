@@ -11,6 +11,14 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from ..utils.document_utils import extract_text
+try:  # pragma: no cover - optional dependency chain may be missing in tests
+    from ..workflows.advanced_langgraph import build_advanced_legal_workflow
+except Exception:  # fallback when imports fail
+    def build_advanced_legal_workflow(topic: str):  # type: ignore
+        raise RuntimeError("advanced workflow unavailable")
+
+# Backwards compatibility alias expected by tests
+build_graph = build_advanced_legal_workflow
 
 
 from ..core.detailed_logging import (
@@ -42,7 +50,8 @@ class WorkflowOrchestrator:
         self.config = config
         self.topic = topic
         self.builder_topic = builder_topic or topic
-        self.graph_builder = build_advanced_legal_workflow
+        # Graph builder can be patched in tests via the module-level `build_graph` alias
+        self.graph_builder = build_graph
         self._graph = None
 
         if workflow_config is None:
@@ -112,7 +121,7 @@ class WorkflowOrchestrator:
     def _create_builder_graph(self, topic: Optional[str] = None):
         """Return a LangGraph graph for the provided topic."""
         actual_topic = topic or self.builder_topic
-        return build_advanced_legal_workflow(actual_topic)
+        return build_graph(actual_topic)
 
     @detailed_log_function(LogCategory.SYSTEM)
     async def execute_workflow_instance(
