@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Union
+from dataclasses import dataclass, field
 
 from jose import jwt
 
@@ -80,60 +81,6 @@ except ImportError:  # pragma: no cover - optional web dependency
 from pydantic import BaseModel
 from pydantic import Field as PydanticField  # Alias Field
 from strawberry.fastapi import GraphQLRouter  # type: ignore
-from strawberry.types import Info  # type: ignore
-
-try:
-    from legal_ai_system.core.detailed_logging import (
-        DetailedLogger,
-        LogCategory,
-        get_detailed_logger,
-    )
-    from legal_ai_system.services.service_container import ServiceContainer
-    from legal_ai_system.services.security_manager import (
-        SecurityManager,
-        AccessLevel,
-        User as AuthUser,
-    )
-    SERVICES_AVAILABLE = True
-except Exception as e:  # pragma: no cover - degraded mode
-    print(
-        f"WARNING: Core services import failed in main.py: {e}. API will run in a limited mock mode.",
-        file=sys.stderr,
-    )
-    SERVICES_AVAILABLE = False
-    ServiceContainer = None  # type: ignore
-    SecurityManager = None  # type: ignore
-    import logging
-
-    class LogCategory(Enum):
-        API = "API"
-
-    class DetailedLogger(logging.Logger):
-        """Minimal fallback DetailedLogger."""
-
-        def __init__(self, name: str, category: LogCategory = LogCategory.API) -> None:
-            super().__init__(name)
-            self.category = category
-            self.logger = self
-
-    def get_detailed_logger(name: str, category: LogCategory) -> DetailedLogger:
-        return DetailedLogger(name, category)
-
-    class AccessLevel(Enum):
-        READ = "read"
-        WRITE = "write"
-        ADMIN = "admin"
-        SUPER_ADMIN = "super_admin"
-
-    @dataclass
-    class AuthUser:
-        user_id: str
-        username: str
-        email: str
-        access_level: AccessLevel
-        last_login: Optional[datetime] = None
-        is_active: bool = True
-
 
 
     class _SettingsFallback:
@@ -152,15 +99,13 @@ except Exception as e:  # pragma: no cover - degraded mode
         settings = _SettingsFallback()
 
 
-# Initialize logger for this module
-main_api_logger: DetailedLogger = get_detailed_logger("FastAPI_Main", LogCategory.API)
+
 
 # Global state (will be initialized in lifespan)
 service_container_instance: Optional["ServiceContainer"] = None
 security_manager_instance: Optional["SecurityManager"] = None
 websocket_manager_instance: Optional[ConnectionManager] = None
 realtime_publisher_instance: Optional[RealtimePublisher] = None
-
 
 
 def load_workflow_configs() -> None:
@@ -192,7 +137,7 @@ def save_workflow_configs() -> None:
                 indent=2,
             )
     except Exception as e:  # pragma: no cover - I/O failure shouldn't crash
-
+        main_api_logger.error("Failed to save workflow configurations.", exception=e)
 
 
 @asynccontextmanager
@@ -384,8 +329,6 @@ class ProcessingRequest(BaseModel):
     # Add other relevant options from RealTimeAnalysisWorkflow if user-configurable
 
 
-
-
 class WorkflowConfig(ProcessingRequest):
     """Preset configuration for a document processing workflow."""
 
@@ -438,13 +381,17 @@ class SystemHealthResponse(BaseModel):
     active_documents_count: int  # Renamed
     pending_reviews_count: int  # Renamed
     timestamp: str = PydanticField(
-        default_factory=lambda: datetime.datetime.now(tz=datetime.timezone.utc).isoformat()
+        default_factory=lambda: datetime.datetime.now(
+            tz=datetime.timezone.utc
+        ).isoformat()
     )
 
 
 # --- JWT Utilities & Auth Mock ---
 # In a real app, these would use SecurityManager
-def create_access_token(data: dict, expires_delta: Optional[datetime.timedelta] = None) -> str:
+def create_access_token(
+    data: dict, expires_delta: Optional[datetime.timedelta] = None
+) -> str:
     to_encode = data.copy()
     expire_time = datetime.datetime.now(tz=datetime.timezone.utc) + (
         expires_delta or datetime.timedelta(hours=Constants.Time.SESSION_TIMEOUT_HOURS)
@@ -803,7 +750,9 @@ async def upload_document_rest(  # Renamed to avoid conflict
         c if c.isalnum() or c in [".", "-", "_"] else "_"
         for c in file.filename or "unknown_file"
     )
-    timestamp = datetime.datetime.now(tz=datetime.timezone.utc).strftime("%Y%m%d%H%M%S%f")
+    timestamp = datetime.datetime.now(tz=datetime.timezone.utc).strftime(
+        "%Y%m%d%H%M%S%f"
+    )
     unique_filename = f"{timestamp}_{uuid.uuid4().hex[:8]}_{safe_filename}"
     file_path = upload_dir / unique_filename
 
@@ -972,9 +921,6 @@ async def get_document_status_rest(  # Renamed
     )
 
 
-
-
-
 # ----- Workflow Config Endpoints -----
 
 
@@ -1112,7 +1058,9 @@ async def submit_review_decision_rest(  # Renamed
                         "decision": review_request.decision,
                         # "user": current_user.username, # If auth is on
                         "user": "mock_reviewer",
-                        "timestamp": datetime.datetime.now(tz=datetime.timezone.utc).isoformat(),
+                        "timestamp": datetime.datetime.now(
+                            tz=datetime.timezone.utc
+                        ).isoformat(),
                     },
                     "calibration_updates",
                 )  # Specific topic for calibration
@@ -1133,8 +1081,6 @@ async def submit_review_decision_rest(  # Renamed
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Review processing failed: {str(e)}",
         )
-
-
 
 
 # --- WebSocket Endpoint ---
@@ -1174,7 +1120,8 @@ async def websocket_endpoint_route(websocket: WebSocket, client_id: str):
                     )
             elif msg_type == "ping":
                 await websocket_manager_instance.send_personal_message(
-                    {"type": "pong", "timestamp": datetime.datetime.now().isoformat()}, client_id
+                    {"type": "pong", "timestamp": datetime.datetime.now().isoformat()},
+                    client_id,
                 )
             # Add more message type handlers as needed
             else:
@@ -1215,8 +1162,9 @@ async def process_document_background_task(  # Renamed
             "user_id": requesting_user_id,
         },
     )
-
-
+    try:
+        # TODO: implement actual document processing here
+        pass
     except Exception as e:
         main_api_logger.error(
             f"Background processing failed for document.",
