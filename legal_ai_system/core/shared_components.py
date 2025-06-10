@@ -7,13 +7,10 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 import requests
-import json
 from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime, timedelta
 import logging
-from pathlib import Path
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -351,7 +348,8 @@ class UIComponents:
         if columns:
             df = df[columns] if all(col in df.columns for col in columns) else df
         
-        return st.dataframe(df, key=key, use_container_width=True)
+        st.dataframe(df, key=key, use_container_width=True)
+        return df
     
     @staticmethod
     def create_progress_bar(current: int, total: int, label: str = "Progress") -> None:
@@ -361,5 +359,3 @@ class UIComponents:
             st.progress(progress, text=f"{label}: {current}/{total} ({progress:.1%})")
         else:
             st.progress(0, text=f"{label}: No items")
-
-# Production data handlers - no mock data
