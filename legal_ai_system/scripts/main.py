@@ -14,13 +14,16 @@ import json
 import os
 import sys
 import uuid  # For generating IDs
+import logging
 
 # import logging # Replaced by detailed_logging
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union  # Added Union
+from typing import Any, Dict, List, Optional, Union, Set
+from collections import defaultdict
+from jose import jwt
 
 # third-party imports
 try:
@@ -77,14 +80,17 @@ from strawberry.types import Info  # type: ignore
 
 # Attempt to import core services, with fallbacks for standalone running or partial setup
 try:
-    from core.detailed_logging import LogCategory, get_detailed_logger
-    from core.security_manager import (
+    from legal_ai_system.core.detailed_logging import (
+        LogCategory,
+        get_detailed_logger,
+    )
+    from legal_ai_system.services.security_manager import (
         AccessLevel,
         SecurityManager,
+        User as AuthUser,
     )
-    from core.security_manager import User as AuthUser  # Alias User to AuthUser
-    from core.service_container import ServiceContainer  # Assume this is the new name
-    from workflows.realtime_analysis_workflow import (
+    from legal_ai_system.services.service_container import ServiceContainer
+    from legal_ai_system.services.realtime_analysis_workflow import (
         RealTimeAnalysisResult,
         RealTimeAnalysisWorkflow,
     )
@@ -139,8 +145,8 @@ except ImportError as e:
 main_api_logger = get_detailed_logger("FastAPI_Main", LogCategory.API)
 
 # Global state (will be initialized in lifespan)
-service_container_instance: Optional[ServiceContainer] = None  # Renamed
-security_manager_instance: Optional[SecurityManager] = None  # Renamed
+service_container_instance: Optional["ServiceContainer"] = None  # Renamed
+security_manager_instance: Optional["SecurityManager"] = None  # Renamed
 websocket_manager_instance: Optional["WebSocketManager"] = (
     None  # Renamed, forward declare WebSocketManager
 )
@@ -155,8 +161,10 @@ async def lifespan(app: FastAPI):
 
     if SERVICES_AVAILABLE and ServiceContainer is not None:
         try:
-            # Assuming get_service_container is now a factory or direct import from service_container.py
-            from core.service_container import create_service_container
+            # Factory function to build the service container
+            from legal_ai_system.services.service_container import (
+                create_service_container,
+            )
 
             service_container_instance = (
                 await create_service_container()
@@ -195,15 +203,19 @@ async def lifespan(app: FastAPI):
                     # encryption_pwd might be handled internally by SecurityManager based on env vars
 
             security_manager_instance = SecurityManager(
-                encryption_password=encryption_pwd,  # Placeholder
+                encryption_password=encryption_pwd,
                 allowed_directories=allowed_dirs_list,
             )
             # Example user creation (in real app, this would be managed or seeded)
             if (
-                not security_manager_instance.auth_manager.users
-            ):  # Create a demo user if none exist
+                security_manager_instance
+                and not security_manager_instance.auth_manager.users
+            ):
                 security_manager_instance.auth_manager.create_user(
-                    "demouser", "demo@example.com", "Password123!", AccessLevel.ADMIN
+                    "demouser",
+                    "demo@example.com",
+                    "Password123!",
+                    AccessLevel.ADMIN,
                 )
                 main_api_logger.info("Created default demo user.")
 
@@ -238,8 +250,8 @@ app = FastAPI(
     title="Legal AI System API",
     description="Comprehensive API for Legal AI document processing and analysis",
     version=(
-        Constants.Version.APP_VERSION if hasattr(Constants, "Version") else "2.0.1"
-    ),  # Get from constants
+        getattr(getattr(Constants, "Version", None), "APP_VERSION", "2.0.1")
+    ),
     lifespan=lifespan,
 )
 
