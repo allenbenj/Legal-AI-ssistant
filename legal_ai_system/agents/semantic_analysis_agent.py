@@ -23,6 +23,7 @@ from ..core.llm_providers import (
 from ..core.model_switcher import ModelSwitcher, TaskComplexity
 
 from ..core.agent_unified_config import create_agent_memory_mixin
+from ..utils.json_utils import extract_json_from_llm_response
 
 # Create memory mixin for agents
 MemoryMixin = create_agent_memory_mixin()
@@ -224,22 +225,11 @@ Ensure high-quality analysis with confidence ≥{min_confidence}. Focus on legal
 
     def _parse_semantic_response(self, response_content: str) -> Dict[str, Any]:
         """Parse LLM response into structured semantic analysis data."""
-        # ... (logic remains similar, ensure robust JSON parsing)
         try:
-            json_content = response_content  # Assume LLM returns clean JSON
-            # More robust: try to extract JSON from markdown blocks if present
-            if '```json' in response_content:
-                json_content = response_content.split('```json')[1].split('```')[0]
-            elif (
-                '```' in response_content
-                and response_content.strip().startswith('```')
-                and response_content.strip().endswith('```')
-            ):
-                json_content = response_content.strip()[3:-3]  # Remove triple backticks
-            
-            parsed_data = json.loads(json_content.strip())
-            
-            # Basic validation and normalization
+            parsed_data = extract_json_from_llm_response(response_content)
+            if not parsed_data:
+                raise ValueError("No JSON content found")
+
             validated_data = {
                 'document_summary': parsed_data.get('document_summary', ''),
                 'key_topics': self._validate_list_of_dicts(parsed_data.get('key_topics', [])),
@@ -250,13 +240,20 @@ Ensure high-quality analysis with confidence ≥{min_confidence}. Focus on legal
                 'analysis_notes': parsed_data.get('analysis_notes', '')
             }
             return validated_data
-            
-        except (json.JSONDecodeError, ValueError, TypeError) as e:
-            self.logger.warning(f"Failed to parse LLM semantic response. Content: {response_content[:200]}...", exception=e)
-            return { # Return default structure on error
-                'document_summary': 'Error: Could not parse LLM analysis.', 'key_topics': [], 'legal_concepts': [],
-                'content_classification': {}, 'semantic_metadata': {}, 'overall_confidence': 0.0,
-                'analysis_notes': f"Response parsing error: {str(e)}"
+
+        except (ValueError, TypeError) as e:
+            self.logger.warning(
+                f"Failed to parse LLM semantic response. Content: {response_content[:200]}...",
+                exception=e,
+            )
+            return {
+                'document_summary': 'Error: Could not parse LLM analysis.',
+                'key_topics': [],
+                'legal_concepts': [],
+                'content_classification': {},
+                'semantic_metadata': {},
+                'overall_confidence': 0.0,
+                'analysis_notes': f"Response parsing error: {str(e)}",
             }
 
     def _validate_list_of_dicts(self, data_list: Any) -> List[Dict[str, Any]]:
