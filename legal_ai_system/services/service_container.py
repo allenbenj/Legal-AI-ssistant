@@ -7,7 +7,7 @@ core services and agents within the Legal AI System.
 """
 
 import asyncio
-from typing import Dict, Any, Optional, Callable, Awaitable, List
+from typing import Dict, Any, Optional, Callable, Awaitable, List, TYPE_CHECKING
 from enum import Enum
 from datetime import datetime, timezone
 import os
@@ -20,8 +20,7 @@ project_root = Path(__file__).parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-# Use absolute imports with fallback
-try:
+if TYPE_CHECKING:
     from legal_ai_system.core.detailed_logging import (
         DetailedLogger,
         get_detailed_logger,
@@ -33,48 +32,61 @@ try:
         SystemInitializationError,
     )
     from legal_ai_system.services.security_manager import AuthenticationManager
-except ImportError:
-    # Fallback for relative imports
+else:
+    # Use absolute imports with fallback for runtime
     try:
-        from ..core.detailed_logging import (
+        from legal_ai_system.core.detailed_logging import (
             DetailedLogger,
             get_detailed_logger,
             LogCategory,
             detailed_log_function,
         )
-        from ..core.unified_exceptions import (
+        from legal_ai_system.core.unified_exceptions import (
             ConfigurationError,
             SystemInitializationError,
         )
-        from .security_manager import AuthenticationManager
+        from legal_ai_system.services.security_manager import AuthenticationManager
     except ImportError:
-        # Final fallback - create minimal classes
-
-        class LogCategory:
-            SYSTEM = "SYSTEM"
-
-        class DetailedLogger:
-            pass
-
-        def get_detailed_logger(name, category):
+        # Fallback for relative imports when running within package
+        try:
+            from ..core.detailed_logging import (
+                DetailedLogger,
+                get_detailed_logger,
+                LogCategory,
+                detailed_log_function,
+            )
+            from ..core.unified_exceptions import (
+                ConfigurationError,
+                SystemInitializationError,
+            )
+            from .security_manager import AuthenticationManager
+        except ImportError:
+            # Final fallback - create minimal classes to keep runtime working
             import logging
 
-            return logging.getLogger(name)
+            class LogCategory(Enum):
+                SYSTEM = "SYSTEM"
 
-        def detailed_log_function(category):
-            def decorator(func):
-                return func
+            class DetailedLogger(logging.Logger):
+                pass
 
-            return decorator
+            def get_detailed_logger(name: str, category: LogCategory) -> DetailedLogger:  # type: ignore
+                return logging.getLogger(name)  # type: ignore
 
-        class ConfigurationError(Exception):
-            pass
+            def detailed_log_function(category: LogCategory):
+                def decorator(func):
+                    return func
 
-        class SystemInitializationError(Exception):
-            pass
+                return decorator
 
-        class AuthenticationManager:
-            pass
+            class ConfigurationError(Exception):
+                pass
+
+            class SystemInitializationError(Exception):
+                pass
+
+            class AuthenticationManager:
+                pass
 
 
 # Initialize logger for this module
@@ -102,7 +114,8 @@ class ServiceContainer:
     def __init__(self):
         service_container_logger.info("Initializing ServiceContainer.")
         self._services: Dict[str, Any] = {}
-        self._service_factories: Dict[str, Callable[..., Any]] = {}
+        # Stores factory metadata for lazy service creation
+        self._service_factories: Dict[str, Dict[str, Any]] = {}
         self._service_states: Dict[str, ServiceLifecycleState] = {}
         self._initialization_order: List[str] = []  # To manage dependencies during init
         self._shutdown_order: List[str] = []  # Reverse of init order
@@ -531,13 +544,7 @@ async def create_service_container(
         else None
     )  # Get if registered
 
-    from .security_manager import SecurityManager  # Assuming in core
-
-    sec_config = config_manager_service.get_security_config()
     # Encryption password should be from a secure source (env var, secret manager)
-    enc_pass = os.getenv(
-        "LEGAL_AI_ENCRYPTION_PASSWORD_SECRET", "default_dev_password_CHANGE_ME_IN_PROD!"
-    )
     await container.register_service(
         "security_manager",
         instance=SecurityManager(
@@ -573,11 +580,8 @@ async def create_service_container(
 
     # ... (rest of service registrations) ...
 
-    # After all services are registered (or their factories)
-    await container.initialize_all_services()  # This will call initialize() on services
-    service_container_logger.info("=== CREATE SERVICE CONTAINER END ===")
-    return container
-    from .llm_providers import (
+    # After core services have been registered continue with LLM setup
+    from ..core.llm_providers import (
         LLMManager,
         LLMConfig,
         LLMProviderEnum,
@@ -602,7 +606,7 @@ async def create_service_container(
         ),
     )
 
-    from .model_switcher import ModelSwitcher  # Assuming in core
+    from ..core.model_switcher import ModelSwitcher
 
     llm_manager_service = await container.get_service("llm_manager")
     # ModelSwitcher needs API key if it's to create new configs for XAI/OpenAI
@@ -617,7 +621,7 @@ async def create_service_container(
         ),
     )
 
-    from .embedding_manager import EmbeddingManager  # Assuming in core
+    from ..core.embedding_manager import EmbeddingManager
 
     embed_conf = (
         config_manager_service.get_vector_store_config()
