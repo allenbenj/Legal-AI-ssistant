@@ -489,107 +489,32 @@ function AgentManagement() {
 // Workflow Designer
 function WorkflowDesigner() {
   const [workflows, setWorkflows] = useState<any[]>([]);
-  const [selected, setSelected] = useState<any>(null);
-  const [name, setName] = useState('');
-  const [enableNER, setEnableNER] = useState(true);
-  const [enableLLM, setEnableLLM] = useState(true);
-  const [confidence, setConfidence] = useState(0.7);
-
   useEffect(() => {
     fetch('/api/v1/workflows')
       .then(res => res.json())
-      .then(data => setWorkflows(Array.isArray(data) ? data : []))
-      .catch(() => setWorkflows([]));
   }, []);
 
   const editWorkflow = (wf: any) => {
     setSelected(wf);
-    setName(wf.name || '');
-    setEnableNER(wf.enable_ner ?? true);
-    setEnableLLM(wf.enable_llm_extraction ?? true);
-    setConfidence(wf.confidence_threshold ?? 0.7);
-  };
-
-  const saveWorkflow = () => {
-    const payload = {
-      name,
-      enable_ner: enableNER,
-      enable_llm_extraction: enableLLM,
-      confidence_threshold: confidence
-    };
-    const url = selected ? `/api/v1/workflows/${selected.id}` : '/api/v1/workflows';
-    const method = selected ? 'PUT' : 'POST';
-    fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-      .then(res => res.json())
-      .then(() => {
-        setSelected(null);
-        setName('');
         fetch('/api/v1/workflows')
           .then(res => res.json())
           .then(data => setWorkflows(Array.isArray(data) ? data : []));
       });
   };
 
-  // Available component choices. In a real app this would be fetched from the
-  // backend via ``AGENT_CLASS_REGISTRY``.
-  const componentOptions = {
-    document_processor: ['DocumentProcessorAgent'],
-    document_rewriter: ['DocumentRewriterAgent'],
-    ontology_extractor: ['OntologyExtractionAgent'],
-    hybrid_extractor: ['HybridLegalExtractor'],
-    graph_manager: ['RealTimeGraphManager'],
-    vector_store: ['OptimizedVectorStore'],
-    reviewable_memory: ['ReviewableMemory']
-  };
-
-  const [selectedComponents, setSelectedComponents] = useState({
-    document_processor: 'DocumentProcessorAgent',
-    document_rewriter: 'DocumentRewriterAgent',
-    ontology_extractor: 'OntologyExtractionAgent',
-    hybrid_extractor: 'HybridLegalExtractor',
-    graph_manager: 'RealTimeGraphManager',
-    vector_store: 'OptimizedVectorStore',
-    reviewable_memory: 'ReviewableMemory'
-  });
-
-  const handleSelectChange = (key: string, value: string) => {
-    setSelectedComponents(prev => ({ ...prev, [key]: value }));
-  };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">Workflow Designer</h2>
-        <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2" onClick={() => { setSelected(null); setName(''); }}>
           <Plus className="w-4 h-4" />
           Create Workflow
         </button>
       </div>
 
-      {/* Workflow Settings */}
-
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-          {Object.keys(componentOptions).map(key => (
-            <div key={key} className="flex flex-col">
-              <label className="text-sm font-medium mb-1 capitalize">
-                {key.replace(/_/g, ' ')}
-              </label>
-              <select
-                className="border rounded p-2"
-                value={selectedComponents[key]}
-                onChange={e => handleSelectChange(key, e.target.value)}
-              >
-                {componentOptions[key].map(opt => (
-                  <option key={opt} value={opt}>{opt}</option>
-                ))}
-              </select>
-            </div>
-          ))}
-        </div>
-      </div>
+      )}
 
-      {/* Saved Workflows */}
       <div className="bg-white rounded-lg shadow">
         <div className="p-6 border-b">
           <h3 className="text-lg font-semibold">Saved Workflows</h3>
