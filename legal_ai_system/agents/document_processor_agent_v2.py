@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Generic, TypeVar
+from typing import Any, Dict, List, Optional, Generic, TypeVar, cast
 
 from ..core.base_agent import BaseAgent, AgentError
 from ..core.detailed_logging import (
@@ -64,15 +64,14 @@ class DocumentProcessorAgentV2(BaseAgent, Generic[InputT, OutputT]):
 
         model = whisper.load_model("base")
         result = model.transcribe(str(audio_path))
-        segments: List[AudioSegment] = []
-        for seg in result.get("segments", []):
-            segments.append(
-                AudioSegment(
-                    start_ms=int(seg["start"] * 1000),
-                    end_ms=int(seg["end"] * 1000),
-                    transcript=seg["text"].strip(),
-                )
+        segments = [
+            AudioSegment(
+                start_ms=int(seg["start"] * 1000),
+                end_ms=int(seg["end"] * 1000),
+                transcript=seg["text"].strip(),
             )
+            for seg in result.get("segments", [])
+        ]
         return segments
 
     async def process_legal_forms(self, form_path: Path) -> StructuredForm:
@@ -97,8 +96,10 @@ class DocumentProcessorAgentV2(BaseAgent, Generic[InputT, OutputT]):
             except Exception as exc:  # pragma: no cover
                 raise AgentError("openpyxl required for Excel forms", self.name) from exc
 
+            from openpyxl.worksheet.worksheet import Worksheet  # type: ignore
+
             wb = openpyxl.load_workbook(form_path, data_only=True)
-            ws = wb.active
+            ws = cast(Worksheet, wb.active)
             fields = {
                 str(r[0]): str(r[1])
                 for r in ws.iter_rows(min_col=1, max_col=2, values_only=True)
@@ -118,11 +119,11 @@ class DocumentProcessorAgentV2(BaseAgent, Generic[InputT, OutputT]):
             raise AgentError("python-docx and lxml required for redline analysis", self.name) from exc
 
         doc = docx.Document(str(doc_path))
-        root = etree.XML(doc._part.blob)
+        root = etree.fromstring(doc._part.blob)
         ns = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
-        additions = [el.text for el in root.iter(ns + "ins") if el.text]
-        deletions = [el.text for el in root.iter(ns + "del") if el.text]
-        comments = [el.text for el in root.iter(ns + "comment") if el.text]
+        additions = [el.text for el in root.iter(f"{ns}ins") if el.text]
+        deletions = [el.text for el in root.iter(f"{ns}del") if el.text]
+        comments = [el.text for el in root.iter(f"{ns}comment") if el.text]
 
         return RedlineAnalysis(
             additions=additions,
