@@ -585,7 +585,7 @@ class SecurityManager:
             "pii_detected": pii_findings,
             "validated_document_path": str(validated_path),
             "processed_by_user_id": user.user_id,
-            "processing_timestamp": datetime.now(tz=datetime.timezone.utc).isoformat()
+            "processing_timestamp": datetime.now(tz=timezone.utc).isoformat()
         }
     
     @detailed_log_function(LogCategory.SECURITY)
@@ -651,7 +651,7 @@ class SecurityManager:
             for entry in self.auth_manager.audit_log_buffer
             if entry.action.startswith("login_failed")
             and (
-                datetime.now(tz=datetime.timezone.utc) - entry.timestamp
+                datetime.now(tz=timezone.utc) - entry.timestamp
             ).total_seconds()
             < 3600 * 24
         )  # Last 24h
@@ -695,5 +695,5 @@ class SecurityManager:
                 "authentication_manager": "active" if auth_healthy else "error"
             },
             "cryptography_available": CRYPTOGRAPHY_AVAILABLE,
-            "timestamp": datetime.now(tz=datetime.timezone.utc).isoformat()
+            "timestamp": datetime.now(tz=timezone.utc).isoformat()
         }
