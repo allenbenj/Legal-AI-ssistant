@@ -92,6 +92,8 @@ try:
         LogCategory,
         get_detailed_logger,
     )
+    from legal_ai_system.api.websocket_manager import ConnectionManager
+    from legal_ai_system.services.realtime_publisher import RealtimePublisher
 
     SERVICES_AVAILABLE = True
 except ImportError as e:
@@ -135,6 +137,35 @@ except ImportError as e:
             self.last_login = last_login
             self.is_active = is_active
 
+    class ConnectionManager:  # type: ignore
+        async def connect(self, websocket, client_id):
+            await websocket.accept()
+
+        def disconnect(self, client_id):
+            pass
+
+        async def broadcast_to_topic(self, message, topic):
+            pass
+
+        async def subscribe_to_topic(self, client_id, topic):
+            pass
+
+        async def unsubscribe_from_topic(self, client_id, topic):
+            pass
+
+        async def send_personal_message(self, message, client_id):
+            pass
+
+    class RealtimePublisher:  # type: ignore
+        def __init__(self, manager):
+            pass
+
+        def start_system_monitoring(self, interval: float = 1.0) -> None:
+            pass
+
+        def stop(self) -> None:
+            pass
+
     class _SettingsFallback:
         frontend_dist_path = (
             Path(__file__).resolve().parent.parent / "frontend" / "dist"
@@ -147,11 +178,10 @@ except ImportError as e:
 main_api_logger = get_detailed_logger("FastAPI_Main", LogCategory.API)
 
 # Global state (will be initialized in lifespan)
-service_container_instance: Optional["ServiceContainer"] = None  # Renamed
-security_manager_instance: Optional["SecurityManager"] = None  # Renamed
-websocket_manager_instance: Optional["WebSocketManager"] = (
-    None  # Renamed, forward declare WebSocketManager
-)
+service_container_instance: Optional["ServiceContainer"] = None
+security_manager_instance: Optional["SecurityManager"] = None
+websocket_manager_instance: Optional[ConnectionManager] = None
+realtime_publisher_instance: Optional[RealtimePublisher] = None
 
 # Workflow configuration storage
 workflow_configs: Dict[str, WorkflowConfig] = {}
@@ -301,7 +331,7 @@ def save_workflow_configs() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager for startup and shutdown."""
-    global service_container_instance, security_manager_instance, websocket_manager_instance
+    global service_container_instance, security_manager_instance, websocket_manager_instance, realtime_publisher_instance
 
     main_api_logger.info("🚀 Starting Legal AI System API lifespan...")
 
@@ -374,7 +404,9 @@ async def lifespan(app: FastAPI):
             "⚠️ SecurityManager not available. Authentication/Authorization will be bypassed."
         )
 
-    # monitoring_task = asyncio.create_task(system_monitor_task())
+    websocket_manager_instance = ConnectionManager()
+    realtime_publisher_instance = RealtimePublisher(websocket_manager_instance)
+    realtime_publisher_instance.start_system_monitoring()
 
     main_api_logger.info("✅ Legal AI System API started successfully via lifespan.")
 
@@ -389,6 +421,8 @@ async def lifespan(app: FastAPI):
     if service_container_instance and hasattr(service_container_instance, "shutdown"):
         await service_container_instance.shutdown()
         main_api_logger.info("Service container shut down.")
+    if realtime_publisher_instance:
+        realtime_publisher_instance.stop()
     main_api_logger.info("Legal AI System API shutdown complete.")
 
 
@@ -1517,62 +1551,60 @@ async def delete_workflow_preset(workflow_id: str):
 
 
 # --- WebSocket Endpoint ---
-@app.websocket(
-    "/ws/{user_id}"
-)  # Consider making user_id part of authenticated token if not already
-async def websocket_endpoint_route(websocket: WebSocket, user_id: str):  # Renamed
-    # user_id from path might be for initial connection, but real user_id should come from an auth token over WS
-    # For now, we'll use the path user_id.
+@app.websocket("/ws/{client_id}")
+async def websocket_endpoint_route(websocket: WebSocket, client_id: str):
+    # client_id from path might be for initial connection, but real user_id should come from an auth token over WS
+    # For now, we'll use the path provided client_id.
     if not websocket_manager_instance:
         main_api_logger.error(
-            "WebSocket connection attempt failed: WebSocketManager not initialized."
+            "WebSocket connection attempt failed: Connection manager not initialized."
         )
         await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
         return
 
-    await websocket_manager_instance.connect(websocket, user_id)
+    await websocket_manager_instance.connect(websocket, client_id)
     try:
         while True:
             data = await websocket.receive_text()
             message = json.loads(data)
             main_api_logger.debug(
                 "WebSocket message received.",
-                parameters={"user_id": user_id, "message_type": message.get("type")},
+                parameters={"user_id": client_id, "message_type": message.get("type")},
             )
 
             msg_type = message.get("type")
             if msg_type == "subscribe":
                 topic = message.get("topic")
                 if topic:
-                    await websocket_manager_instance.subscribe_to_topic(user_id, topic)
+                    await websocket_manager_instance.subscribe_to_topic(client_id, topic)
             elif msg_type == "unsubscribe":
                 topic = message.get("topic")
                 if topic:
                     await websocket_manager_instance.unsubscribe_from_topic(
-                        user_id, topic
+                        client_id, topic
                     )
             elif msg_type == "ping":
                 await websocket_manager_instance.send_personal_message(
-                    {"type": "pong", "timestamp": datetime.now().isoformat()}, user_id
+                    {"type": "pong", "timestamp": datetime.now().isoformat()}, client_id
                 )
             # Add more message type handlers as needed
             else:
                 main_api_logger.warning(
                     "Unknown WebSocket message type received.",
-                    parameters={"user_id": user_id, "message": message},
+                    parameters={"user_id": client_id, "message": message},
                 )
 
     except WebSocketDisconnect:
         main_api_logger.info(
-            f"WebSocket client disconnected.", parameters={"user_id": user_id}
+            f"WebSocket client disconnected.", parameters={"user_id": client_id}
         )
     except Exception as e:
         main_api_logger.error(
-            f"WebSocket error.", parameters={"user_id": user_id}, exception=e
+            f"WebSocket error.", parameters={"user_id": client_id}, exception=e
         )
     finally:
         if websocket_manager_instance:
-            websocket_manager_instance.disconnect(user_id)
+            websocket_manager_instance.disconnect(client_id)
 
 
 # --- Background Tasks ---
