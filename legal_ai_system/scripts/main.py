@@ -92,6 +92,7 @@ try:
         LogCategory,
         get_detailed_logger,
     )
+
     SERVICES_AVAILABLE = True
 except ImportError as e:
     # This fallback is for when main.py might be run before the full system is in place
@@ -1121,22 +1122,19 @@ async def process_document_rest(  # Renamed
             possible_files[0]
         )  # Take the first match for simplicity
 
-    workflow = await service_container_instance.get_service(
-        "realtime_analysis_workflow"
-    )
-    await service_container_instance.update_workflow_config(
-        processing_request.model_dump()
-    )
-
     # user_id_for_task = current_user.user_id
     user_id_for_task = "mock_user_for_processing"  # Placeholder if auth is off
 
+    if service_container_instance:
+        service_container_instance.update_workflow_config(
+            processing_request.model_dump()
+        )
     background_tasks.add_task(
-        process_document_background_task,  # Renamed
-        document_id,  # Pass the conceptual document_id
-        document_file_path_str,  # Pass the actual file path for processing
+        process_document_background_task,
+        document_id,
+        document_file_path_str,
         processing_request,
-        user_id_for_task,  # Pass user ID for auditing/context
+        user_id_for_task,
     )
 
     main_api_logger.info(

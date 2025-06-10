@@ -75,6 +75,19 @@ class RealTimeAnalysisResult:
         }
 
 
+@dataclass
+class WorkflowConfig:
+    """Configuration options for :class:`RealTimeAnalysisWorkflow`."""
+
+    enable_real_time_sync: bool = True
+    confidence_threshold: float = 0.75
+    enable_user_feedback: bool = True
+    parallel_processing: bool = True
+    max_concurrent_documents: int = 3
+    performance_monitoring: bool = True
+    auto_optimization_threshold: int = 100
+
+
 class RealTimeAnalysisWorkflow:
     """
     Master workflow for real-time legal document analysis.
@@ -109,23 +122,6 @@ class RealTimeAnalysisWorkflow:
         self.processing_lock = asyncio.Semaphore(self.max_concurrent_documents)
         self.optimization_lock = asyncio.Lock()
 
-    def _apply_config(self) -> None:
-        """Apply configuration dictionary to instance attributes."""
-        cfg = self.config
-        self.enable_real_time_sync = cfg.get("enable_real_time_sync", True)
-        self.confidence_threshold = cfg.get("confidence_threshold", 0.75)
-        self.enable_user_feedback = cfg.get("enable_user_feedback", True)
-        self.parallel_processing = cfg.get("parallel_processing", True)
-        self.max_concurrent_documents = cfg.get("max_concurrent_documents", 3)
-        self.performance_monitoring = cfg.get("performance_monitoring", True)
-        self.auto_optimization_threshold = cfg.get("auto_optimization_threshold", 100)
-
-        self.processing_lock = asyncio.Semaphore(self.max_concurrent_documents)
-
-    def update_config(self, **new_config: Any) -> None:
-        """Update workflow configuration in-place."""
-        self.config.update(new_config)
-        self._apply_config()
 
     async def initialize(self):
         """Initialize the real-time analysis workflow."""
