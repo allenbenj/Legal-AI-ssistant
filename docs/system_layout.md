@@ -15,6 +15,8 @@ The project defines several specialized agents under `legal_ai_system/agents`:
 
 - **DocumentProcessorAgent** – extracts text and metadata from a variety of file types.  See `document_processor_agent.py` lines 1‑8.
 - Handles PDFs, DOCX, HTML, and image formats using optional dependencies for parsing.  Returns structured content for downstream agents.
+- **DocumentProcessorAgentV2** – advanced processor returning a `MultiModalDocument`. See `document_processor_agent_v2.py` lines 25-132.
+- Supports `process_video_depositions`, `process_legal_forms`, and `process_contract_redlines` for specialized legal content.
 - **DocumentRewriterAgent** – performs lightweight spelling correction on extracted text.  See `document_rewriter_agent.py` lines 1‑7.
 - Uses `pyspellchecker` to clean common OCR mistakes before analysis.
 - **OntologyExtractionAgent** – extracts legal entities and relationships using ontology‑driven patterns.  See `ontology_extraction_agent.py` lines 1‑7.
@@ -34,6 +36,8 @@ The project defines several specialized agents under `legal_ai_system/agents`:
 - Generated tags are persisted to the vector store metadata with the originating document ID.
 - **KnowledgeBaseAgent** – resolves entities and structures data for the knowledge base.  See `knowledge_base_agent.py` lines 1‑8.
 - Persists resolved entities and relationships to the `KnowledgeGraphManager` using a circuit breaker for reliability.
+- **KnowledgeGraphReasoningAgent** – infers new relationships by traversing the knowledge graph.  See `knowledge_graph_reasoning_agent.py` lines 1‑8.
+- Provides multi-hop reasoning over entities and can answer cross-document legal queries.
 - **LegalAnalysisAgent** – performs IRAC analysis with contradiction detection.  See `legal_analysis_agent.py` lines 1‑9.
 - Runs deep reasoning and validates legal logic using LLM-based checks.
 - **NoteTakingAgent** – generates notes with legal context awareness.  See `note_taking_agent.py` lines 1‑5.
@@ -42,6 +46,7 @@ The project defines several specialized agents under `legal_ai_system/agents`:
 - Evaluates potential compliance or ethics issues for later review.
 - **LegalAuditAgent / EthicsReviewAgent / LEOConductAgent** – lightweight review agents for GUI violation review.  See `legal_agents.py` lines 1‑32.
 - Provide quick client-side checks within the GUI when deeper analysis is not required.
+
 
 ## Services
 
@@ -77,17 +82,6 @@ LangGraph based workflows use `AnalysisNode` and `SummaryNode` (see `agents/agen
 
 ### Typed Workflow Engine
 
-For simpler pipelines the project provides a typed workflow engine located under
-`legal_ai_system/workflows`.  The core class `AgentWorkflow` combines agents that
-implement the `AgentCapability` protocol from
-`legal_ai_system.core.agent_types`.  A fluent builder,
-`LegalWorkflowBuilder`, helps assemble these workflows while preserving input
-and output types.  See `legal_ai_system/workflows/agent_workflow.py` for the
-generic workflow implementation and `legal_ai_system/workflows/builder.py` for
-the builder utilities.
-
-Typed workflows can run batches or asynchronous streams of documents, enabling
-unit tested pipelines outside the full real-time analysis system.
 
 Overall, the ServiceContainer acts as the hub connecting agents and services, enabling workflows like `RealTimeAnalysisWorkflow` and integration via APIs or GUI components.
 

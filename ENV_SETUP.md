@@ -62,4 +62,4 @@ PY
 
 If the script prints `Environment ready` without errors, the setup was successful.
 
-You can automate these steps by running `python scripts/setup_environment_task.py` from the repository root.
+You can automate these steps by running `python legal_ai_system/scripts/setup_environment_task.py` from the repository root.

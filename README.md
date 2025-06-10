@@ -21,23 +21,24 @@ If you plan to use the optional **LexPredict** pipelines, also install `lexnlp`:
 pip install lexnlp
 ```
 
+### Optional Dependencies
+
+The system can optionally transcribe audio and perform speaker diarization. To
+enable these features, install additional libraries:
+
+```bash
+pip install ffmpeg-python openai-whisper whisperx pdfplumber pyannote.audio
+```
+
 For more detailed instructions see [ENV_SETUP.md](ENV_SETUP.md).
 
 Alternatively, run the helper script to automate the setup and validation:
 ```bash
-python scripts/setup_environment_task.py
+python legal_ai_system/scripts/setup_environment_task.py
 ```
 ### Example: Build a Workflow
 
-```python
-from legal_ai_system.workflows.builder import LegalWorkflowBuilder
-from legal_ai_system.agents import DocumentProcessorAgent, SemanticAnalysisAgent
 
-builder = (
-    LegalWorkflowBuilder()
-    .add(DocumentProcessorAgent())
-    .add(SemanticAnalysisAgent())
-)
 
 workflow = builder.build()
 result = workflow.run("sample.pdf")
