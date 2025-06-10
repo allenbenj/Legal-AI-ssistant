@@ -36,7 +36,7 @@ class WorkflowOrchestrator:
         **config: Any,
     ) -> None:
         """Initialize the orchestrator with optional workflow component config."""
-        from ..config.workflow_config import WorkflowConfig
+        from .workflow_config import WorkflowConfig
 
         self.service_container = service_container
         self.config = config

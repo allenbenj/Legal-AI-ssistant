@@ -30,6 +30,8 @@ try:  # Avoid heavy imports during tests
 except Exception:  # pragma: no cover - fallback for tests
 
 
+from .workflow_config import WorkflowConfig
+
 
 # Node classes are imported lazily by the workflow builder during tests.
 
@@ -75,19 +77,6 @@ class RealTimeAnalysisResult:
             "vector_updates": self.vector_updates,
             "memory_updates": self.memory_updates,
         }
-
-
-@dataclass
-class WorkflowConfig:
-    """Configuration options for :class:`RealTimeAnalysisWorkflow`."""
-
-    enable_real_time_sync: bool = True
-    confidence_threshold: float = 0.75
-    enable_user_feedback: bool = True
-    parallel_processing: bool = True
-    max_concurrent_documents: int = 3
-    performance_monitoring: bool = True
-    auto_optimization_threshold: int = 100
 
 
 class RealTimeAnalysisWorkflow:
