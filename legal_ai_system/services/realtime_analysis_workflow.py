@@ -12,7 +12,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
-from pathlib import Path
 
 from ..agents.document_processor_agent import DocumentProcessorAgent
 from ..agents.document_rewriter_agent import DocumentRewriterAgent
