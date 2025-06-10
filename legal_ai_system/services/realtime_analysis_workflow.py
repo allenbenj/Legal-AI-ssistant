@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
+from pathlib import Path
 
 from ..agents.document_processor_agent import DocumentProcessorAgent
 from ..agents.document_rewriter_agent import DocumentRewriterAgent
@@ -133,11 +134,6 @@ class RealTimeAnalysisWorkflow:
         await self.reviewable_memory.initialize()
 
         # Register callbacks between components
-        async def graph_update_callback(event_type: str, data: Dict[str, Any]) -> None:
-            """Forward graph updates to the workflow handler."""
-            await self._on_graph_update(event_type, data)
-
-        self.graph_manager.register_update_callback(graph_update_callback)
 
         self.logger.info("Real-time analysis workflow initialized")
 
