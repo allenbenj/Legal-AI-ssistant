@@ -21,6 +21,15 @@ If you plan to use the optional **LexPredict** pipelines, also install `lexnlp`:
 pip install lexnlp
 ```
 
+### Optional Dependencies
+
+The system can optionally transcribe audio and perform speaker diarization. To
+enable these features, install additional libraries:
+
+```bash
+pip install ffmpeg-python openai-whisper whisperx pdfplumber pyannote.audio
+```
+
 For more detailed instructions see [ENV_SETUP.md](ENV_SETUP.md).
 
 Alternatively, run the helper script to automate the setup and validation:
@@ -28,9 +37,44 @@ Alternatively, run the helper script to automate the setup and validation:
 python scripts/setup_environment_task.py
 ```
 
-
+```bash
 npm install
 npm run build
+```
+
+## Example: Building a Workflow
+
+Below is a minimal example using `LegalWorkflowBuilder` to create a typed
+workflow composed of two agents.  Each agent defines its input and output
+models so the builder can verify compatibility.
+
+```python
+from legal_ai_system.workflows.builder import LegalWorkflowBuilder
+from legal_ai_system.agents.entity_extraction_agent import EntityExtractionAgent
+from legal_ai_system.agents.text_correction_agent import TextCorrectionAgent
+from pydantic import BaseModel
+import asyncio
+
+
+class TextIn(BaseModel):
+    text: str
+
+
+class TextOut(BaseModel):
+    text: str
+
+
+async def main() -> None:
+    builder = LegalWorkflowBuilder[TextIn, TextOut]()
+    builder.add_agent(EntityExtractionAgent())
+    builder.add_agent(TextCorrectionAgent())
+    workflow = builder.build()
+    result = await workflow.process_batch([TextIn(text="Example")])
+    print(result[0].text)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
 
