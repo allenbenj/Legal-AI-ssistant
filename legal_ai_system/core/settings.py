@@ -6,7 +6,7 @@ Uses centralized constants to eliminate magic numbers.
 """
 
 from pathlib import Path
-from typing import List, Dict, Optional, Any, Union
+from typing import List, Optional, Any, Union
 try:
     from pydantic_settings import BaseSettings
     from pydantic import Field
@@ -81,8 +81,6 @@ except ImportError:
         }
 
 
-import os
-
 # Import centralized constants
 try:
     from .constants import Constants
@@ -138,7 +136,6 @@ class LegalAISettings(BaseSettings):
         # Set embedding dimension from constants if available
         if self.embedding_dim == 384:  # Default fallback value
             try:
-                from legal_ai_system.core.constants import Constants
                 self.embedding_dim = Constants.Performance.EMBEDDING_DIMENSION
             except Exception:
                 self.embedding_dim = 384  # Keep fallback
@@ -146,7 +143,6 @@ class LegalAISettings(BaseSettings):
 
         # Set values from constants if available
         try:
-            from legal_ai_system.core.constants import Constants
             if self.max_file_size_mb is None:
                 self.max_file_size_mb = Constants.Document.MAX_DOCUMENT_SIZE_MB
             if self.chunk_size is None:

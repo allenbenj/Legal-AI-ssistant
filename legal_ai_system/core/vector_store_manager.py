@@ -14,7 +14,7 @@ except Exception:  # pragma: no cover - optional dependency may be missing
 class VectorStoreManager:
     """Lightweight manager around :class:`VectorStore`."""
 
-    def __init__(self, store: Optional[VectorStore] = None) -> None:
+    def __init__(self, store: Optional["VectorStore"] = None) -> None:
         self.store = store
         self._initialized = False
 

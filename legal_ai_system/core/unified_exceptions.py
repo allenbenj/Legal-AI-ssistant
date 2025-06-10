@@ -99,6 +99,7 @@ class ErrorCategory(Enum):
     SECURITY = "security"  # Security and authentication errors
     PERFORMANCE = "performance"  # Performance and resource errors
     WORKFLOW = "workflow"  # Workflow orchestration errors
+    THIRD_PARTY = "third_party"  # External service errors
 
 
 class ErrorRecoveryStrategy(Enum):
@@ -391,6 +392,17 @@ class ServiceLayerError(LegalAIException):
     def __init__(self, message: str, **kwargs):
         kwargs.setdefault("category", ErrorCategory.SYSTEM)
         kwargs.setdefault("recovery_strategy", ErrorRecoveryStrategy.RETRY)
+        super().__init__(message, **kwargs)
+
+
+class ThirdPartyError(LegalAIException):
+    """Errors originating from external third-party services."""
+
+    def __init__(self, message: str, provider: Optional[str] = None, **kwargs):
+        kwargs.setdefault("category", ErrorCategory.THIRD_PARTY)
+        kwargs.setdefault("recovery_strategy", ErrorRecoveryStrategy.RETRY)
+        if provider:
+            kwargs.setdefault("technical_details", {}).update({"provider": provider})
         super().__init__(message, **kwargs)
 
 
