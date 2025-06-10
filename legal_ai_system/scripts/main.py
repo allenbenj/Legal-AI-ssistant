@@ -19,6 +19,7 @@ from collections import defaultdict
 # import logging # Replaced by detailed_logging
 from contextlib import asynccontextmanager
 import datetime
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Union
@@ -81,10 +82,20 @@ from pydantic import Field as PydanticField  # Alias Field
 from strawberry.fastapi import GraphQLRouter  # type: ignore
 from strawberry.types import Info  # type: ignore
 
-
-
-    # This fallback is for when main.py might be run before the full system is in place
-    # or if there are circular dependencies during setup.
+try:
+    from legal_ai_system.core.detailed_logging import (
+        DetailedLogger,
+        LogCategory,
+        get_detailed_logger,
+    )
+    from legal_ai_system.services.service_container import ServiceContainer
+    from legal_ai_system.services.security_manager import (
+        SecurityManager,
+        AccessLevel,
+        User as AuthUser,
+    )
+    SERVICES_AVAILABLE = True
+except Exception as e:  # pragma: no cover - degraded mode
     print(
         f"WARNING: Core services import failed in main.py: {e}. API will run in a limited mock mode.",
         file=sys.stderr,
@@ -97,8 +108,16 @@ from strawberry.types import Info  # type: ignore
     class LogCategory(Enum):
         API = "API"
 
-    def get_detailed_logger(name: str, category: LogCategory):
-        return logging.getLogger(name)
+    class DetailedLogger(logging.Logger):
+        """Minimal fallback DetailedLogger."""
+
+        def __init__(self, name: str, category: LogCategory = LogCategory.API) -> None:
+            super().__init__(name)
+            self.category = category
+            self.logger = self
+
+    def get_detailed_logger(name: str, category: LogCategory) -> DetailedLogger:
+        return DetailedLogger(name, category)
 
     class AccessLevel(Enum):
         READ = "read"
@@ -106,22 +125,14 @@ from strawberry.types import Info  # type: ignore
         ADMIN = "admin"
         SUPER_ADMIN = "super_admin"
 
-    class AuthUser:  # type: ignore
-        def __init__(
-            self,
-            user_id: str,
-            username: str,
-            email: str,
-            access_level: AccessLevel,
-            last_login: Optional[datetime] = None,
-            is_active: bool = True,
-        ):
-            self.user_id = user_id
-            self.username = username
-            self.email = email
-            self.access_level = access_level
-            self.last_login = last_login
-            self.is_active = is_active
+    @dataclass
+    class AuthUser:
+        user_id: str
+        username: str
+        email: str
+        access_level: AccessLevel
+        last_login: Optional[datetime] = None
+        is_active: bool = True
 
 
 
@@ -142,7 +153,7 @@ from strawberry.types import Info  # type: ignore
 
 
 # Initialize logger for this module
-main_api_logger = get_detailed_logger("FastAPI_Main", LogCategory.API)
+main_api_logger: DetailedLogger = get_detailed_logger("FastAPI_Main", LogCategory.API)
 
 # Global state (will be initialized in lifespan)
 service_container_instance: Optional["ServiceContainer"] = None
