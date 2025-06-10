@@ -31,6 +31,9 @@ for name in [
     if name not in sys.modules:
         sys.modules[name] = ModuleType(name)
 
+if hasattr(sys.modules["legal_ai_system.services.realtime_analysis_workflow"], "__dict__"):
+    sys.modules["legal_ai_system.services.realtime_analysis_workflow"].RealTimeAnalysisWorkflow = object
+
 sys.modules["faiss"].StandardGpuResources = object
 sys.modules["faiss"].index_cpu_to_gpu = lambda *a, **k: None
 sys.modules["faiss"].IndexFlatL2 = object
@@ -67,22 +70,22 @@ sec_mod.SecurityManager = object
 sec_mod.User = User
 sys.modules["legal_ai_system.utils.user_repository"].UserRepository = object
 
-svc_mod = sys.modules["legal_ai_system.services.service_container"]
+import importlib
+svc_mod = sys.modules.get("legal_ai_system.services.service_container")
+if svc_mod is None:
+    svc_mod = importlib.import_module("legal_ai_system.services.service_container")
+_orig_container_cls = getattr(svc_mod, "ServiceContainer", object)
+
 class ServiceContainer:
-    def __init__(self):
-        self.registry = {}
-        self._initialization_order = []
-        self._service_states = {}
 
-    async def register_service(self, name: str, factory):
-        self.registry[name] = factory
-        self._service_states[name] = SimpleNamespace(name="REGISTERED")
-
-    async def initialize_all_services(self):
-        for name in self.registry:
-            self._initialization_order.append(name)
-            self._service_states[name].name = "INITIALIZED"
 svc_mod.ServiceContainer = ServiceContainer
+
+import pytest
+
+@pytest.fixture(autouse=True, scope="module")
+def _restore_service_container():
+    yield
+    svc_mod.ServiceContainer = _orig_container_cls
 
 sys.modules["legal_ai_system.services.workflow_orchestrator"].WorkflowOrchestrator = object
 
@@ -294,3 +297,4 @@ async def test_upload_and_process_document_error(tmp_path):
     user = sec_mod.User("u1")
     with pytest.raises(ServiceLayerError):
         await svc.upload_and_process_document(b"x", "f.txt", user, progress_cb=None)
+

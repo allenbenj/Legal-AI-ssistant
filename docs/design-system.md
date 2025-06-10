@@ -6,6 +6,8 @@ This project uses a small set of design tokens and React components to keep styl
 
 Token values are defined in `frontend/src/design-system/tokens.ts` and include colors, spacing, typography, border radius, shadows and animation speeds. Import tokens into components to avoid magic values.
 
+Recent additions include extended spacing sizes (`2xl`, `3xl`) and light/dark variants for all semantic colors such as `primaryLight` and `primaryDark`.
+
 Example:
 ```ts
 import { colors, spacing } from '../design-system/tokens';
@@ -20,6 +22,7 @@ Currently available:
 - `Card` &ndash; simple container with padding and shadow.
 - `Alert` &ndash; color coded status messages.
 - `Grid` &ndash; layout utility for building responsive grids.
+- `StatusDashboard` &ndash; displays workflow progress using a WebSocket connection. Pass a unique `clientId` to connect to `/ws/{clientId}`.
 
 These components automatically apply token values so usage is consistent across the application.
 

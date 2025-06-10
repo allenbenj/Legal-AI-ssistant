@@ -24,6 +24,12 @@ except Exception:  # ImportError or other issues if langgraph not installed
         def add_edge(self, *args: Any, **kwargs: Any) -> None:
             raise RuntimeError("LangGraph is required to build workflows")
 
+        def add_parallel_nodes(self, *args: Any, **kwargs: Any) -> None:
+            raise RuntimeError("LangGraph is required to build workflows")
+
+        def add_conditional_edges(self, *args: Any, **kwargs: Any) -> None:
+            raise RuntimeError("LangGraph is required to build workflows")
+
         def run(self, *args: Any, **kwargs: Any) -> Any:
             raise RuntimeError("LangGraph is required to build workflows")
 
@@ -39,6 +45,14 @@ from ..utils.reviewable_memory import ReviewableMemory
 from ..api.websocket_manager import ConnectionManager
 
 
+def _uppercase(text: str) -> str:
+    return text.upper()
+
+
+def _merge_text(results: list[str]) -> str:
+    return "\n".join(results)
+
+
 def build_graph(topic: str) -> StateGraph:
     """Build a simple LangGraph pipeline for a given topic."""
     graph = StateGraph()
@@ -48,13 +62,6 @@ def build_graph(topic: str) -> StateGraph:
     graph.add_node("human_review", HumanReviewNode(review_memory))
     manager = ConnectionManager()
     graph.add_node("summary", SummaryNode())
-    graph.add_node("progress", ProgressTrackingNode(manager))
-
-    graph.set_entry_point("analysis")
-    graph.add_edge("analysis", "human_review")
-    graph.add_edge("human_review", "summary")
-    graph.add_edge("summary", "progress")
-    graph.add_edge("progress", END)
 
     return graph
 

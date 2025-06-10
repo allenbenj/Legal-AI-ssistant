@@ -63,3 +63,14 @@ PY
 If the script prints `Environment ready` without errors, the setup was successful.
 
 You can automate these steps by running `python legal_ai_system/scripts/install_all_dependencies.py` from the repository root. This script installs all Python and Node packages and executes the test suite.
+
+## Configuration Overrides
+The application loads defaults from `config/defaults.yaml`. Any environment variable
+beginning with `LEGAL_AI_` overrides the matching key. For example:
+
+```bash
+export LEGAL_AI_LLM_PROVIDER=openai
+```
+
+This would set `llm_provider` to `openai`. Keys are case-insensitive and list
+values can be provided as comma-separated strings.

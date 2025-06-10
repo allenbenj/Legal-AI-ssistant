@@ -88,7 +88,10 @@ else:
             class AuthenticationManager:
                 pass
 
-    from .realtime_analysis_workflow import RealTimeAnalysisWorkflow
+    try:
+        from .realtime_analysis_workflow import RealTimeAnalysisWorkflow
+    except Exception:  # pragma: no cover - optional during tests
+        RealTimeAnalysisWorkflow = None  # type: ignore
     from .workflow_config import WorkflowConfig
 
 
@@ -131,6 +134,14 @@ class ServiceContainer:
 
         service_container_logger.info("ServiceContainer instance created.")
 
+    def update_workflow_config(self, config: Dict[str, Any]) -> None:
+        """Update the active workflow configuration in-place."""
+        self._active_workflow_config.update(config)
+
+    def get_active_workflow_config(self) -> Dict[str, Any]:
+        """Return a copy of the active workflow configuration."""
+        return dict(self._active_workflow_config)
+
     @detailed_log_function(LogCategory.SYSTEM)
     async def register_service(
         self,
@@ -141,7 +152,7 @@ class ServiceContainer:
         depends_on: Optional[List[str]] = None,
         config_key: Optional[str] = None,  # Key to fetch config for this service
         **factory_kwargs: Any,
-    ):
+    ) -> None:
         """
         Registers a service instance or a factory to create it.
         If a factory is provided, the service will be created on first get() or during initialize_all().
@@ -182,82 +193,67 @@ class ServiceContainer:
                 raise ValueError(msg)
 
     @detailed_log_function(LogCategory.SYSTEM)
-    async def get_service(self, name: str) -> Any:
+    async def get_service(self, name: str, _chain: Optional[List[str]] = None) -> Any:
         """Retrieves a service instance, creating it via factory if necessary."""
-        async with self._lock:
-            if name not in self._services:
-                if name not in self._service_factories:
-                    service_container_logger.error(
-                        f"Service not found.", parameters={"name": name}
-                    )
-                    raise ConfigurationError(
-                        f"Service '{name}' not found in container."
-                    )
+        if _chain is None:
+            _chain = []
 
-                # Create service from factory
-                factory_info = self._service_factories[name]
-                service_container_logger.info(
-                    f"Creating service '{name}' from factory."
+        if name in _chain:
+            chain = " -> ".join(_chain + [name])
+            service_container_logger.critical(
+                f"Circular dependency detected while resolving {chain}."
+            )
+            raise ConfigurationError(f"Circular dependency detected: {chain}")
+
+        async with self._lock:
+            if name in self._services:
+                return self._services[name]
+
+            if name not in self._service_factories:
+                service_container_logger.error(
+                    f"Service not found.", parameters={"name": name}
+                )
+                raise ConfigurationError(f"Service '{name}' not found in container.")
+
+            # Copy factory info while holding the lock then release
+            factory_info = self._service_factories[name]
+
+        service_container_logger.info(f"Creating service '{name}' from factory.")
+
+        # Resolve dependencies first outside the lock
+        for dep_name in factory_info["depends_on"]:
+            if dep_name not in self._services:
+                await self.get_service(dep_name, _chain + [name])
+
+        # Get config for the service if config_key is provided
+        service_config = {}
+        if factory_info["config_key"]:
+            config_manager = self._services.get(
+                "configuration_manager"
+            )  # Assume CM is registered
+            if config_manager and hasattr(config_manager, "get"):
+                service_config = config_manager.get(factory_info["config_key"], {})
+            else:
+                service_container_logger.warning(
+                    f"ConfigurationManager not found or 'get' method missing. Cannot load config for service '{name}'."
                 )
 
-                # Resolve dependencies first
-                for dep_name in factory_info["depends_on"]:
-                    if (
-                        dep_name not in self._services
-                    ):  # Ensure dependency is initialized
-                        await self.get_service(dep_name)
+        # Merge factory_kwargs with loaded service_config (kwargs take precedence)
+        final_kwargs = {**service_config, **factory_info["kwargs"]}
 
-                # Get config for the service if config_key is provided
-                service_config = {}
-                if factory_info["config_key"]:
-                    config_manager = self._services.get(
-                        "configuration_manager"
-                    )  # Assume CM is registered
-                    if config_manager and hasattr(config_manager, "get"):
-                        service_config = config_manager.get(
-                            factory_info["config_key"], {}
-                        )
-                    else:
-                        service_container_logger.warning(
-                            f"ConfigurationManager not found or 'get' method missing. Cannot load config for service '{name}'."
-                        )
+        try:
+            if factory_info["is_async"]:
+                instance = await factory_info["factory"](
+                    self, **final_kwargs
+                )  # Pass container and merged kwargs
+            else:
+                instance = factory_info["factory"](self, **final_kwargs)
 
-                # Merge factory_kwargs with loaded service_config (kwargs take precedence)
-                final_kwargs = {**service_config, **factory_info["kwargs"]}
-
-                try:
-                    if factory_info["is_async"]:
-                        instance = await factory_info["factory"](
-                            self, **final_kwargs
-                        )  # Pass container and merged kwargs
-                    else:
-                        instance = factory_info["factory"](self, **final_kwargs)
-
-                    self._services[name] = instance
-                    # Initialization is now handled by initialize_all_services or explicitly
-                    # self._service_states[name] = ServiceLifecycleState.INITIALIZING
-                    # if hasattr(instance, 'initialize_service'):
-                    #     await instance.initialize_service()
-                    # elif hasattr(instance, 'initialize'):
-                    #     await instance.initialize()
-                    # self._service_states[name] = ServiceLifecycleState.INITIALIZED
-
-                    service_container_logger.info(
-                        f"Service '{name}' created and cached."
-                    )
-                except Exception as e:
-                    self._service_states[name] = ServiceLifecycleState.ERROR
-                    service_container_logger.critical(
-                        f"Failed to create service '{name}' from factory.", exception=e
-                    )
-                    raise SystemInitializationError(
-                        f"Failed to create service '{name}'", cause=e
-                    )
-
-            return self._services[name]
+            async with self._lock:
+                self._services[name] = instance
 
     @detailed_log_function(LogCategory.SYSTEM)
-    async def initialize_all_services(self):
+    async def initialize_all_services(self) -> None:
         """Initializes all registered services that have an 'initialize_service' or 'initialize' method."""
         service_container_logger.info("Initializing all registered services...")
         # Sort services by dependency order if complex dependencies exist (topological sort)
@@ -322,7 +318,7 @@ class ServiceContainer:
         service_container_logger.info("All services initialization process completed.")
 
     @detailed_log_function(LogCategory.SYSTEM)
-    async def shutdown_all_services(self):
+    async def shutdown_all_services(self) -> None:
         """Shuts down all registered services that have a 'shutdown' or 'close' method."""
         service_container_logger.info("Shutting down all registered services...")
 
@@ -447,7 +443,7 @@ class ServiceContainer:
         )
         return summary
 
-    def add_background_task(self, coro: Awaitable[Any]):
+    def add_background_task(self, coro: Awaitable[Any]) -> None:
         """Adds an awaitable to be run as a background task, managed by the container."""
         task = asyncio.create_task(coro)
         self._async_tasks.append(task)
@@ -469,7 +465,6 @@ class ServiceContainer:
         """Return a copy of the currently active workflow configuration."""
         return dict(self._active_workflow_config)
 
-
 # Global factory function to create and populate the service container
 # This is where you define how your system's services are created and wired together.
 async def create_service_container(
@@ -481,6 +476,14 @@ async def create_service_container(
     """
     service_container_logger.info("=== CREATE SERVICE CONTAINER START ===")
     container = ServiceContainer()
+
+    # Start Prometheus metrics exporter
+    from .metrics_exporter import init_metrics_exporter
+
+    await container.register_service(
+        "metrics_exporter",
+        instance=init_metrics_exporter(),
+    )
 
     # 1. Configuration Manager (must be first)
     from ..core.configuration_manager import create_configuration_manager
@@ -507,9 +510,7 @@ async def create_service_container(
 
     db_conf = config_manager_service.get_database_config()
     persistence_cfg_for_factory = {
-        "database_url": db_conf.get(
-            "neo4j_uri"
-        ),  # Example, if EnhancedPersistence uses Neo4j as primary
+        "database_url": db_conf.neo4j_uri,  # Example if EnhancedPersistence uses Neo4j
         # Or better: db_conf.get_url_for_service("main_relational_db")
         "redis_url": config_manager_service.get("REDIS_URL_CACHE"),  # Example
         "persistence_config": config_manager_service.get(
@@ -578,7 +579,7 @@ async def create_service_container(
         "security_manager",
         instance=SecurityManager(
             encryption_password=enc_pass,
-            allowed_directories=sec_config.get("allowed_directories", []),
+            allowed_directories=sec_config.allowed_directories,
         ),
     )
     # SecurityManager's AuthManager needs the UserRepository
@@ -616,8 +617,8 @@ async def create_service_container(
         LLMProviderEnum,
     )  # Assuming in core
 
-    llm_primary_conf_dict = config_manager_service.get_llm_config()
-    primary_llm_config = LLMConfig(**llm_primary_conf_dict)  # Create Pydantic model
+    llm_primary_conf = config_manager_service.get_llm_config()
+    primary_llm_config = llm_primary_conf
     # Example fallback config (could also come from ConfigurationManager)
     fallback_llm_conf_dict = config_manager_service.get(
         "llm_fallback_config",
@@ -641,7 +642,7 @@ async def create_service_container(
     # ModelSwitcher needs API key if it's to create new configs for XAI/OpenAI
     # This key should come from a secure source, e.g. config_manager
     api_key_for_switcher = config_manager_service.get(
-        f"{llm_primary_conf_dict['provider']}_api_key"
+        f"{llm_primary_conf.provider}_api_key"
     )  # e.g. xai_api_key
     await container.register_service(
         "model_switcher",
@@ -652,13 +653,11 @@ async def create_service_container(
 
     from ..core.embedding_manager import EmbeddingManager
 
-    embed_conf = (
-        config_manager_service.get_vector_store_config()
-    )  # Embedding model is part of VS config
+    embed_conf = config_manager_service.get_vector_store_config()  # Embedding model is part of VS config
     await container.register_service(
         "embedding_manager",
         instance=EmbeddingManager(
-            model_name=embed_conf.get("embedding_model", "all-MiniLM-L6-v2"),
+            model_name=embed_conf.embedding_model,
             cache_dir_str=str(
                 config_manager_service.get("data_dir") / "cache" / "embeddings"
             ),
@@ -669,9 +668,9 @@ async def create_service_container(
     from .knowledge_graph_manager import create_knowledge_graph_manager
 
     kg_conf = {  # Fetch from config_manager
-        "NEO4J_URI": db_conf.get("neo4j_uri"),
-        "NEO4J_USER": db_conf.get("neo4j_user"),
-        "NEO4J_PASSWORD": db_conf.get("neo4j_password"),
+        "NEO4J_URI": db_conf.neo4j_uri,
+        "NEO4J_USER": db_conf.neo4j_user,
+        "NEO4J_PASSWORD": db_conf.neo4j_password,
         "ENABLE_NEO4J_PERSISTENCE": True,
     }
     await container.register_service(
@@ -688,10 +687,10 @@ async def create_service_container(
         "STORAGE_PATH": str(
             config_manager_service.get("data_dir") / "vector_store_main"
         ),
-        "DOCUMENT_INDEX_PATH": embed_conf.get("document_index_path"),
-        "ENTITY_INDEX_PATH": embed_conf.get("entity_index_path"),
-        "DEFAULT_INDEX_TYPE": embed_conf.get("vector_store_type", "HNSW"),
-        "embedding_model_name": embed_conf.get("embedding_model"),
+        "DOCUMENT_INDEX_PATH": str(embed_conf.document_index_path),
+        "ENTITY_INDEX_PATH": str(embed_conf.entity_index_path),
+        "DEFAULT_INDEX_TYPE": embed_conf.type,
+        "embedding_model_name": embed_conf.embedding_model,
     }
     # EmbeddingProvider instance can be fetched from EmbeddingManager if VectorStore is designed to take it
     # embedding_provider_instance = await container.get_service("embedding_manager").get_provider_instance() # Conceptual
@@ -713,7 +712,7 @@ async def create_service_container(
     # 5. Memory Layer
     from ..core.unified_memory_manager import create_unified_memory_manager
 
-    umm_conf = {"DB_PATH": str(db_conf.get("memory_db_path"))}
+    umm_conf = {"DB_PATH": str(db_conf.memory_db_path)}
     await container.register_service(
         "unified_memory_manager",
         factory=create_unified_memory_manager,
@@ -737,7 +736,7 @@ async def create_service_container(
 
     from .violation_review import ViolationReviewDB
 
-    violation_db_path = str(db_conf.get("violations_db_path"))
+    violation_db_path = str(db_conf.violations_db_path)
     await container.register_service(
         "violation_review_db",
         instance=ViolationReviewDB(db_path=violation_db_path),
@@ -859,14 +858,6 @@ async def create_service_container(
         is_async_factory=False,
     )
 
-    # Register orchestrator which coordinates both realtime and builder workflows
-    from .workflow_orchestrator import WorkflowOrchestrator
-
-    await container.register_service(
-        "workflow_orchestrator",
-        factory=lambda sc, topic=workflow_topic: WorkflowOrchestrator(sc, topic=topic),
-        is_async_factory=False,
-    )
 
     # Register LangGraph nodes and builder for the orchestrator
     from ..agents.agent_nodes import AnalysisNode, SummaryNode
