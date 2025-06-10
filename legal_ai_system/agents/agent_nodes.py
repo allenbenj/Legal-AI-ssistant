@@ -19,10 +19,7 @@ BaseNode = LangGraphBaseNode
 if TYPE_CHECKING:  # pragma: no cover - hint for type checkers
     from langgraph.graph import BaseNode as LangGraphBaseNode
 from ..core.unified_services import get_service_container, register_core_services
-from ..services.integration_service import (
-    LegalAIIntegrationService,
-    create_integration_service,
-)
+from ..services.integration_service import LegalAIIntegrationService
 
 
 class AnalysisNode(BaseNode):
@@ -33,7 +30,9 @@ class AnalysisNode(BaseNode):
         if LegalAIIntegrationService:
             register_core_services()
             container = get_service_container()
-            self.service = create_integration_service(container)
+            self.service = asyncio.run(
+                container.get_service("integration_service")
+            )
         else:
             self.service = None
 
@@ -53,7 +52,9 @@ class SummaryNode(BaseNode):
         if LegalAIIntegrationService:
             register_core_services()
             container = get_service_container()
-            self.service = create_integration_service(container)
+            self.service = asyncio.run(
+                container.get_service("integration_service")
+            )
         else:
             self.service = None
 

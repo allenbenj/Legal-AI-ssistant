@@ -25,13 +25,7 @@ pip install --upgrade pip
 ```
 
 ## Installing Dependencies
-Install core packages first:
-
-```bash
-pip install fastapi uvicorn[standard] streamlit pydantic
-```
-
-Install remaining dependencies in batches:
+Install all required packages from the project requirements file:
 
 ```bash
 pip install -r requirements.txt

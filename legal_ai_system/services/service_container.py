@@ -728,13 +728,6 @@ async def create_service_container(
         instance=ViolationReviewDB(db_path=violation_db_path),
     )
 
-    from .workflow_orchestrator import WorkflowOrchestrator
-    await container.register_service(
-        "workflow_orchestrator",
-        factory=lambda sc: WorkflowOrchestrator(sc),
-    )
-
-    # 6. Agents (Register factories for agents)
     # Agents are often stateful per task, so factories are common.
     # Or, if stateless, can be singletons. BaseAgent is typically instantiated per use or task.
     # Here we register the classes themselves, and workflows will instantiate them.
