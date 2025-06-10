@@ -15,21 +15,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from .workflow_config import WorkflowConfig
 
-from ..agents.document_processor_agent import DocumentProcessorAgent
-from ..agents.document_rewriter_agent import DocumentRewriterAgent
-from ..agents.ontology_extraction_agent import OntologyExtractionAgent
-from ..core.optimized_vector_store import OptimizedVectorStore
-from ..utils.hybrid_extractor import HybridLegalExtractor
 from ..utils.reviewable_memory import (
     ReviewableMemory,
     ReviewDecision,
     ReviewStatus,
 )
-from .realtime_graph_manager import RealTimeGraphManager
-from ..config.workflow_config import WorkflowConfig
-from ..config.agent_unified_config import AGENT_CLASS_MAP
+
 
 
 @dataclass
@@ -100,9 +92,6 @@ class RealTimeAnalysisWorkflow:
     - Agent memory integration with user feedback loops
     - Performance monitoring and optimization
     """
-
-
-        self.logger = services.logger
 
 
         # Performance tracking
