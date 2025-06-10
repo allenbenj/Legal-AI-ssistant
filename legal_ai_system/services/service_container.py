@@ -122,12 +122,10 @@ class ServiceContainer:
         self._service_states: Dict[str, ServiceLifecycleState] = {}
         self._initialization_order: List[str] = []  # To manage dependencies during init
         self._shutdown_order: List[str] = []  # Reverse of init order
-        self._async_tasks: List[asyncio.Task] = (
-            []
-        )  # For background tasks started by services
-        self._lock = (
-            asyncio.Lock()
-        )  # For thread-safe registration and retrieval if needed (though primarily async)
+        self._async_tasks: List[
+            asyncio.Task
+        ] = []  # For background tasks started by services
+        self._lock = asyncio.Lock()  # For thread-safe registration and retrieval if needed (though primarily async)
         # Active workflow configuration shared across workflow instances
         self._active_workflow_config: Dict[str, Any] = {}
 
@@ -251,18 +249,6 @@ class ServiceContainer:
             async with self._lock:
                 self._services[name] = instance
 
-            service_container_logger.info(f"Service '{name}' created and cached.")
-        except Exception as e:
-            self._service_states[name] = ServiceLifecycleState.ERROR
-            service_container_logger.critical(
-                f"Failed to create service '{name}' from factory.", exception=e
-            )
-            raise SystemInitializationError(
-                f"Failed to create service '{name}'", cause=e
-            )
-
-        return instance
-
     @detailed_log_function(LogCategory.SYSTEM)
     async def initialize_all_services(self):
         """Initializes all registered services that have an 'initialize_service' or 'initialize' method."""
@@ -275,7 +261,17 @@ class ServiceContainer:
             self._service_factories.keys()
         ):  # Iterate on copy as get_service modifies _services
             if name not in self._services:
-                await self.get_service(name)  # This will create it
+                try:
+                    service_container_logger.debug(
+                        f"Creating service '{name}' before initialization."
+                    )
+                    await self.get_service(name)  # This will create it
+                except Exception as e:
+                    service_container_logger.error(
+                        f"Failed to create service '{name}' prior to initialization.",
+                        exception=e,
+                    )
+                    continue
 
         # Now initialize them
         for name in self._initialization_order:
@@ -453,6 +449,18 @@ class ServiceContainer:
             parameters={"task_name": getattr(coro, "__name__", "unnamed_coro")},
         )
 
+    async def update_workflow_config(self, new_config: Dict[str, Any]) -> None:
+        """Merge new values into the active workflow configuration."""
+        async with self._lock:
+            self._active_workflow_config.update(new_config)
+            service_container_logger.info(
+                "Workflow configuration updated.",
+                parameters={"config": self._active_workflow_config},
+            )
+
+    def get_active_workflow_config(self) -> Dict[str, Any]:
+        """Return a copy of the currently active workflow configuration."""
+        return dict(self._active_workflow_config)
 
 # Global factory function to create and populate the service container
 # This is where you define how your system's services are created and wired together.
@@ -472,7 +480,8 @@ async def create_service_container(
     # If app_settings (e.g. LegalAISettings from config.settings) is passed, use it
     await container.register_service(
         "configuration_manager",
-        factory=lambda sc, custom_settings_instance=app_settings: create_configuration_manager(
+        factory=lambda sc,
+        custom_settings_instance=app_settings: create_configuration_manager(
             custom_settings_instance=custom_settings_instance
         ),
     )
@@ -841,6 +850,7 @@ async def create_service_container(
         factory=lambda sc: SummaryNode(),
         is_async_factory=False,
     )
+
 
     # Register LangGraph nodes and builder for the orchestrator
     from ..agents.agent_nodes import AnalysisNode, SummaryNode

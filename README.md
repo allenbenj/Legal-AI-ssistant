@@ -59,6 +59,17 @@ tual environment and run the tests:
 python legal_ai_system/scripts/setup_environment_task.py
 ```
 
+## Environment Variables
+
+Several services expect credentials or URLs to be defined in environment variables:
+
+- `OPENAI_API_KEY` or `XAI_API_KEY` – API key for your selected language model provider.
+- `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD` – connection settings for the Neo4j database.
+- `REDIS_URL_CACHE` – Redis connection string used for caching.
+- `LEGAL_AI_ENCRYPTION_PASSWORD_SECRET` – master password used by the `SecurityManager`.
+
+Additional optional variables are documented in `legal_ai_system/core/settings.py` if you need to override default paths or tuning parameters.
+
 ### Start Task
 
 
@@ -74,4 +85,6 @@ print(result)
 
 You can customize the workflow builder to enable or disable specific agents.
 See the documents in the `docs/` folder for architecture details and advanced
-usage.
+usage. The [Integration Guide](docs/integration_plan.md) summarises the
+five-phase integration plan, WebSocket patterns and deployment tips and
+includes sections on security, testing, success metrics and troubleshooting.
