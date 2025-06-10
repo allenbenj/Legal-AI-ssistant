@@ -1775,21 +1775,50 @@ class VectorStore:
 
     @detailed_log_function(LogCategory.VECTOR_STORE)
     async def delete_vector_async(self, vector_id: str, index_target: str = "document"):
-        """Deletes a vector and its metadata. FAISS removal is complex for some index types."""
+        """Delete a vector, its metadata, and remove the associated FAISS entry."""
         async with self._async_lock:
 
             loop = asyncio.get_event_loop()
 
-            # 1. Delete from metadata DB and cache
+            # 1. Remove metadata from SQLite and in-memory cache
             await loop.run_in_executor(None, self._delete_metadata_sync, vector_id)
             if vector_id in self.metadata_mem_cache:
                 del self.metadata_mem_cache[vector_id]
 
-
-                            exception=e,
+            # 2. Look up FAISS ID and remove from index
+            faiss_id = await self._get_faiss_id_for_vector_id_async(vector_id, index_target)
+            if faiss_id is not None:
+                index = self.document_index if index_target.lower() == "document" else self.entity_index
+                if index is not None:
+                    try:
+                        index.remove_ids(np.array([faiss_id], dtype=np.int64))
+                        vs_index_logger.info(
+                            "Vector removed from FAISS index.",
+                            parameters={"vector_id": vector_id, "faiss_id": faiss_id, "index": index_target},
                         )
-                else:
-                    vs_index_logger.warning(
+                    except Exception as e:
+                        vs_index_logger.error(
+                            "Error removing vector from FAISS index.",
+                            exception=e,
+                            parameters={"vector_id": vector_id, "faiss_id": faiss_id},
+                        )
+            else:
+                vs_index_logger.warning(
+                    f"FAISS ID not found for vector_id '{vector_id}'. Skipping index removal.")
+
+            # 3. Remove mapping entry
+            await self._delete_id_mapping_async(vector_id)
+
+            # Update stats after deletion
+            self.stats.total_vectors = (
+                (self.document_index.ntotal if self.document_index else 0)
+                + (self.entity_index.ntotal if self.entity_index else 0)
+            )
+
+            # Schedule index compaction to handle gaps from removals
+            await self.optimization_request_queue.put(
+                {"type": "OPTIMIZE_INDEX_PERFORMANCE", "compact_storage": True}
+            )
 
 
     def _delete_metadata_sync(self, vector_id: str):
