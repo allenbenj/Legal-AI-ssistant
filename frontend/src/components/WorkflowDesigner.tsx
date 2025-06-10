@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import apiFetch from "../apiClient";
 import { Plus, Edit } from "lucide-react";
 import useLoadingState from "../hooks/useLoadingState";
 import TableSkeleton from "./skeletons/TableSkeleton";
@@ -25,7 +26,7 @@ const WorkflowDesigner: React.FC = () => {
   const [selected, setSelected] = useState<WorkflowConfig | null>(null);
 
   useEffect(() => {
-    executeAsync(() => listWorkflows());
+
   }, []);
 
   const editWorkflow = (wf: Workflow) => {
@@ -60,7 +61,7 @@ const WorkflowDesigner: React.FC = () => {
               <span>Error loading workflows</span>
               <button
                 className="underline"
-                onClick={() => executeAsync(listWorkflows)}
+
               >
                 Retry
               </button>
