@@ -150,10 +150,6 @@ security_manager_instance: Optional["SecurityManager"] = None
 websocket_manager_instance: Optional[ConnectionManager] = None
 realtime_publisher_instance: Optional[RealtimePublisher] = None
 
-# Workflow configuration storage
-
-WORKFLOW_CONFIG_FILE = Path(settings.data_dir) / "workflow_configs.json"
-workflow_configs: Dict[str, "WorkflowConfig"] = {}
 
 
 def load_workflow_configs() -> None:
@@ -185,7 +181,7 @@ def save_workflow_configs() -> None:
                 indent=2,
             )
     except Exception as e:  # pragma: no cover - I/O failure shouldn't crash
-        main_api_logger.error("Failed to save workflow configurations.", exception=e)
+
 
 
 @asynccontextmanager
@@ -194,6 +190,9 @@ async def lifespan(app: FastAPI):
     global service_container_instance, security_manager_instance, websocket_manager_instance, realtime_publisher_instance
 
     main_api_logger.info("🚀 Starting Legal AI System API lifespan...")
+
+    # Load any saved workflow configurations
+    load_workflow_configs()
 
     if SERVICES_AVAILABLE and ServiceContainer is not None:
         try:
@@ -275,7 +274,7 @@ async def lifespan(app: FastAPI):
     main_api_logger.info("🛑 Shutting down Legal AI System API via lifespan...")
 
     # Persist workflow configurations
-    save_workflow_configs()
+
     main_api_logger.info("Workflow configurations saved.")
     # if monitoring_task: monitoring_task.cancel(); await asyncio.gather(monitoring_task, return_exceptions=True)
     if service_container_instance and hasattr(service_container_instance, "shutdown"):
@@ -1123,7 +1122,6 @@ async def submit_review_decision_rest(  # Renamed
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Review processing failed: {str(e)}",
         )
-
 
 
 
