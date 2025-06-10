@@ -80,6 +80,11 @@ from ..core.base_agent import BaseAgent
 from ..core.performance import measure_performance
 from ..legacy_extras.modular_improvements import ProcessingCache
 from ..utils.error_recovery import ErrorRecovery
+from ..services.knowledge_graph_manager import (
+    KnowledgeGraphManager,
+    EntityType,
+    RelationshipType,
+)
 
 # Circuit breaker for database operations (design.txt requirement)
 knowledge_base_breaker = CircuitBreaker(fail_max=5, reset_timeout=60)
@@ -158,11 +163,16 @@ class KnowledgeBaseAgent(BaseAgent):
     
     def __init__(self, services):
         super().__init__(services, "KnowledgeBase")
-        
+
         # Shared components (design.txt: separation of concerns)
         self.cache = ProcessingCache()
         self.error_recovery = ErrorRecovery()
-        
+
+        # Retrieve KnowledgeGraphManager from the service container
+        self.graph_manager: Optional[KnowledgeGraphManager] = self._get_service(
+            "knowledge_graph_manager"
+        )
+
         # Entity resolution configuration
         self.similarity_threshold = 0.85
         self.max_aliases_per_entity = 10
@@ -229,7 +239,12 @@ class KnowledgeBaseAgent(BaseAgent):
                 return cached_result
             
             # Entity resolution with circuit breaker protection
-            resolved_entities = await self._resolve_entities_with_protection(raw_entities, document_id)
+            resolved_entities = await self._resolve_entities_with_protection(
+                raw_entities, document_id
+            )
+
+            # Persist resolved entities to the knowledge graph
+            await self._persist_entities_to_graph(resolved_entities, document_id)
             
             # Dual-purpose structuring
             organizational_structure = await self._create_organizational_structure(resolved_entities)
@@ -290,7 +305,7 @@ class KnowledgeBaseAgent(BaseAgent):
     async def _resolve_entities_with_protection(self, raw_entities: List[Dict], document_id: str) -> List[ResolvedEntity]:
         """Resolve entities with circuit breaker protection."""
         return await self._resolve_entities(raw_entities, document_id)
-    
+
     async def _resolve_entities(self, raw_entities: List[Dict], document_id: str) -> List[ResolvedEntity]:
         """Core entity resolution logic with deduplication and canonical naming."""
         resolved_entities = []
@@ -342,6 +357,44 @@ class KnowledgeBaseAgent(BaseAgent):
                 self.metrics['entities_resolved'] += 1
         
         return resolved_entities
+
+    @knowledge_base_breaker
+    async def _persist_entities_to_graph(self, entities: List[ResolvedEntity], document_id: str) -> None:
+        """Persist resolved entities and relationships to the knowledge graph."""
+        if not self.graph_manager:
+            logger.warning("knowledge_graph_manager_unavailable")
+            return
+
+        for entity in entities:
+            try:
+                kg_entity = await self.graph_manager.create_entity(
+                    entity_type=EntityType(entity.entity_type.lower()),
+                    name=entity.canonical_name,
+                    properties=entity.attributes,
+                    confidence=entity.confidence_score,
+                    source_document=document_id,
+                )
+
+                for rel in entity.relationships:
+                    target_id = rel.get("target_id")
+                    rel_type = rel.get("type")
+                    if not target_id or not rel_type:
+                        continue
+                    try:
+                        rt = RelationshipType(rel_type.lower())
+                    except ValueError:
+                        continue
+
+                    await self.graph_manager.create_relationship(
+                        source_entity_id=kg_entity.id,
+                        target_entity_id=target_id,
+                        relationship_type=rt,
+                        properties=rel.get("properties", {}),
+                        confidence=float(rel.get("confidence", 1.0)),
+                        source_document=document_id,
+                    )
+            except Exception as exc:
+                logger.error("graph_persistence_failed", error=str(exc))
     
     def _find_existing_entity(self, entity_name: str, entity_type: str) -> Optional[str]:
         """Find existing entity by name or alias with similarity matching."""

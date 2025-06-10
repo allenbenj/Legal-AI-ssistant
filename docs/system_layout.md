@@ -32,7 +32,7 @@ The project defines several specialized agents under `legal_ai_system/agents`:
 - **AutoTaggingAgent** – automatic tagging and classification of documents.  See `auto_tagging_agent.py` lines 1‑6.
 - Learns from user-provided examples and stores tags with the vector store.
 - **KnowledgeBaseAgent** – resolves entities and structures data for the knowledge base.  See `knowledge_base_agent.py` lines 1‑8.
-- Handles entity resolution and deduplication before persisting to the graph.
+- Persists resolved entities and relationships to the `KnowledgeGraphManager` using a circuit breaker for reliability.
 - **LegalAnalysisAgent** – performs IRAC analysis with contradiction detection.  See `legal_analysis_agent.py` lines 1‑9.
 - Runs deep reasoning and validates legal logic using LLM-based checks.
 - **NoteTakingAgent** – generates notes with legal context awareness.  See `note_taking_agent.py` lines 1‑5.
