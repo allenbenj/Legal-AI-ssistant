@@ -2,8 +2,8 @@ from __future__ import annotations
 
 
 
+from ..workflow_engine.types import LegalWorkflowNode
 from ..services.realtime_nodes import (
-    LegalWorkflowNode,
     DocumentProcessingNode,
     DocumentRewritingNode,
     HybridExtractionNode,
