@@ -25,6 +25,9 @@ fallback_model: llama3.2
 vector_store_type: hybrid
 embedding_model: all-MiniLM-L6-v2
 embedding_dim: 384
+pq_m: 8
+pq_nbits: 8
+metadata_memory_cache_size: 10000
 faiss_index_path: /workspace/Legal-AI-ssistant/legal_ai_system/storage/vectors/faiss_index.bin
 faiss_metadata_path: /workspace/Legal-AI-ssistant/legal_ai_system/storage/vectors/faiss_metadata.json
 document_index_path: /workspace/Legal-AI-ssistant/legal_ai_system/storage/vectors/document_index.faiss

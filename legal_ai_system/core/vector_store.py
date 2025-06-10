@@ -18,6 +18,7 @@ import threading  # Retained for _sync_lock, though asyncio.Lock is primary
 import time
 from abc import ABC, abstractmethod
 from collections import deque
+from cachetools import LRUCache
 from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime, timezone
 from enum import Enum
@@ -351,10 +352,22 @@ class VectorStore:
         self.pending_vectors_entity: List[np.ndarray] = []
         self.pending_vector_ids_entity: List[int] = []
 
+        # Product Quantization configuration
+        self.pq_m = int(self.config.get("pq_m", 8))
+        self.pq_nbits = int(self.config.get("pq_nbits", 8))
+        self.pq_quantizer = faiss.ProductQuantizer(
+            self.dimension, self.pq_m, self.pq_nbits
+        )
+        self.pq_trained = False
+        self._pq_training_data: List[np.ndarray] = []
+
         self.metadata_db_path = (
             self.storage_path / "vector_metadata.sqlite"
         )  # Changed extension
-        self.metadata_mem_cache: Dict[str, VectorMetadata] = {}
+        cache_size = int(self.config.get("metadata_memory_cache_size", 10000))
+        self.metadata_mem_cache: LRUCache[str, VectorMetadata] = LRUCache(
+            maxsize=cache_size
+        )
 
         self.vectorid_to_faissid_doc: Dict[str, int] = {}
         self.vectorid_to_faissid_entity: Dict[str, int] = {}
@@ -614,6 +627,20 @@ class VectorStore:
                 "FAISS index initialization critical failure.", cause=e
             )
 
+    def _train_pq(self, vectors: np.ndarray) -> None:
+        """Train the product quantizer on provided vectors if not already trained."""
+        if self.pq_trained:
+            return
+        try:
+            self.pq_quantizer.train(vectors)
+            self.pq_trained = True
+            vs_index_logger.info(
+                "Product quantizer trained.",
+                parameters={"samples": len(vectors)},
+            )
+        except Exception as e:
+            vs_index_logger.error("PQ training failed", exception=e)
+
     async def _load_all_existing_data_async(self):
         vector_store_logger.trace("Loading existing data from storage (async).")
         loop = asyncio.get_event_loop()
@@ -712,7 +739,7 @@ class VectorStore:
 
     def _load_metadata_mem_cache_sync(self):
         vs_cache_logger.trace("Loading metadata into memory cache (sync).")
-        max_cache_size = self.config.get("metadata_memory_cache_size", 10000)
+        max_cache_size = int(self.config.get("metadata_memory_cache_size", 10000))
         try:
             with self._sync_lock, sqlite3.connect(
                 self.metadata_db_path, timeout=5
@@ -722,7 +749,9 @@ class VectorStore:
                     f"SELECT * FROM vector_metadata ORDER BY last_accessed_iso DESC LIMIT {max_cache_size}"
                 )
 
-                new_cache: Dict[str, VectorMetadata] = {}
+                new_cache: LRUCache[str, VectorMetadata] = LRUCache(
+                    maxsize=max_cache_size
+                )
                 for row_data in map(dict, cursor.fetchall()):
                     try:
                         new_cache[row_data["vector_id"]] = VectorMetadata.from_row_dict(
@@ -1216,6 +1245,17 @@ class VectorStore:
                 embedding_np = np.array(embeddings_list[0], dtype="float32").reshape(
                     1, -1
                 )  # FAISS expects (1, D)
+                # Train PQ with initial vectors
+                if not self.pq_trained:
+                    self._pq_training_data.append(embedding_np[0])
+                    if len(self._pq_training_data) >= max(16, self.pq_m * 20):
+                        train_np = np.vstack(self._pq_training_data).astype("float32")
+                        self._train_pq(train_np)
+                        self._pq_training_data.clear()
+                pq_code_hex = ""
+                if self.pq_trained:
+                    code = self.pq_quantizer.compute_codes(embedding_np)
+                    pq_code_hex = code.tobytes().hex()
             except Exception as embed_e:  # Catch errors from embedding provider
                 raise VectorStoreError(
                     "Embedding generation failed.",
@@ -1294,6 +1334,8 @@ class VectorStore:
                 metadata_to_store.dimension = self.dimension
                 metadata_to_store.embedding_model = self.embedding_provider.model_name
                 metadata_to_store.faiss_id = faiss_id
+                if pq_code_hex:
+                    metadata_to_store.custom_metadata["pq_code"] = pq_code_hex
             else:
                 metadata_to_store = VectorMetadata(
                     faiss_id=faiss_id,
@@ -1304,6 +1346,8 @@ class VectorStore:
                     vector_norm=vector_norm_val,
                     dimension=self.dimension,
                 )
+                if pq_code_hex:
+                    metadata_to_store.custom_metadata["pq_code"] = pq_code_hex
 
             await self._store_metadata_sync_via_executor(metadata_to_store)
             await self._store_id_mapping_async(vector_id, faiss_id, index_target)
