@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
-
-from ..log_setup import init_logging
 
 from PyQt6 import QtWidgets
 
-from ..workflows.langgraph_setup import build_graph
+from ..log_setup import init_logging
 from ..utils.document_utils import extract_text
+from ..workflows.langgraph_setup import build_graph
 
 
 class MainWindow(QtWidgets.QWidget):

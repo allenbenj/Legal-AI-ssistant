@@ -7,14 +7,14 @@ from typing import Any, List, Optional
 try:
     from .vector_store import VectorStore, create_vector_store
 except Exception:  # pragma: no cover - optional dependency may be missing
-    VectorStore = Any  # type: ignore
+    VectorStore = Any  # type: ignore[assignment]
     create_vector_store = None
 
 
 class VectorStoreManager:
     """Lightweight manager around :class:`VectorStore`."""
 
-    def __init__(self, store: Optional["VectorStore"] = None) -> None:
+    def __init__(self, store: Optional[Any] = None) -> None:
         self.store = store
         self._initialized = False
 

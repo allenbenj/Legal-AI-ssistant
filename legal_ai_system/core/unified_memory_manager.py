@@ -15,7 +15,7 @@ import threading
 import uuid
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Tuple, Union
+from typing import Dict, List, Optional, Any
 from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from enum import Enum
@@ -24,7 +24,7 @@ import hashlib
 # Use detailed_logging
 from ..core.detailed_logging import get_detailed_logger, LogCategory, detailed_log_function
 # Import exceptions
-from ..core.unified_exceptions import MemoryManagerError, ConfigurationError
+from ..core.unified_exceptions import MemoryManagerError
 # Import constants if needed, e.g., for max_context_tokens default
 from ..core.constants import Constants
 

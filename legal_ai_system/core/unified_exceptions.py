@@ -7,7 +7,6 @@ and forensic tracking for the Legal AI System.
 """
 
 import functools
-import json
 import os  # For process_id
 import sys
 import threading  # For thread_id
@@ -28,39 +27,51 @@ try:
         get_detailed_logger,
     )
 except ImportError:  # Fallback for direct execution or testing
-    # Mock logger if detailed_logging is not available in this context
-    class MockDetailedLogger:
-        def __init__(self, name, category=None):
-            self.name = name
+    from enum import Enum
+    from typing import Callable
 
-        def info(self, *args, **kwargs):
+    class LogCategory(Enum):  # type: ignore[misc]
+        """Minimal log categories used during fallback."""
+
+        ERROR_HANDLING = "ERROR_HANDLING"
+        SECURITY = "SECURITY"
+        SYSTEM = "SYSTEM"
+
+    class DetailedLogger:  # type: ignore[misc]
+        """Lightweight stand-in for :class:`DetailedLogger`."""
+
+        def __init__(self, name: str, category: LogCategory = LogCategory.SYSTEM):
+            self.name = name
+            self.category = category
+
+        def info(self, *args: Any, **kwargs: Any) -> None:
             print(f"INFO: {args}")
 
-        def error(self, *args, **kwargs):
+        def error(self, *args: Any, **kwargs: Any) -> None:
             print(f"ERROR: {args}")
 
-        def warning(self, *args, **kwargs):
+        def warning(self, *args: Any, **kwargs: Any) -> None:
             print(f"WARNING: {args}")
 
-        def trace(self, *args, **kwargs):
+        def trace(self, *args: Any, **kwargs: Any) -> None:
             print(f"TRACE: {args}")
 
-        def critical(self, *args, **kwargs):
+        def critical(self, *args: Any, **kwargs: Any) -> None:
             print(f"CRITICAL: {args}")
 
-    def get_detailed_logger(name, category=None) -> MockDetailedLogger:  # type: ignore
-        return MockDetailedLogger(name, category)
+    def get_detailed_logger(
+        name: str, category: LogCategory = LogCategory.SYSTEM
+    ) -> DetailedLogger:
+        return DetailedLogger(name, category)
 
-    def detailed_log_function(category):  # type: ignore
-        def decorator(func):
+    def detailed_log_function(
+        category: LogCategory = LogCategory.SYSTEM,
+    ) -> Callable[[Callable], Callable]:
+        def decorator(func: Callable) -> Callable:
             return func
 
         return decorator
 
-    class LogCategory:  # type: ignore
-        ERROR_HANDLING = "ERROR_HANDLING"
-        SECURITY = "SECURITY"
-        SYSTEM = "SYSTEM"  # Added for default
 
 
 # Initialize specialized loggers for error handling
@@ -394,16 +405,6 @@ class ServiceLayerError(LegalAIException):
         kwargs.setdefault("recovery_strategy", ErrorRecoveryStrategy.RETRY)
         super().__init__(message, **kwargs)
 
-
-class ThirdPartyError(LegalAIException):
-    """Errors originating from external third-party services."""
-
-    def __init__(self, message: str, provider: Optional[str] = None, **kwargs):
-        kwargs.setdefault("category", ErrorCategory.THIRD_PARTY)
-        kwargs.setdefault("recovery_strategy", ErrorRecoveryStrategy.RETRY)
-        if provider:
-            kwargs.setdefault("technical_details", {}).update({"provider": provider})
-        super().__init__(message, **kwargs)
 
 
 class VectorStoreError(LegalAIException):
