@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable, List
 
 try:  # pragma: no cover - optional dependency
     from langgraph.graph import StateGraph, END
@@ -24,6 +24,12 @@ except Exception:  # ImportError or other issues if langgraph not installed
         def add_edge(self, *args: Any, **kwargs: Any) -> None:
             raise RuntimeError("LangGraph is required to build workflows")
 
+        def add_parallel_nodes(self, *args: Any, **kwargs: Any) -> None:
+            raise RuntimeError("LangGraph is required to build workflows")
+
+        def add_conditional_edges(self, *args: Any, **kwargs: Any) -> None:
+            raise RuntimeError("LangGraph is required to build workflows")
+
         def run(self, *args: Any, **kwargs: Any) -> Any:
             raise RuntimeError("LangGraph is required to build workflows")
 
@@ -34,18 +40,33 @@ if TYPE_CHECKING:  # pragma: no cover - hint for type checkers
     from langgraph.graph import END as _RealEND
 
 from ..agents.agent_nodes import AnalysisNode, SummaryNode
+from .nodes import HumanReviewNode, ProgressTrackingNode
+from ..utils.reviewable_memory import ReviewableMemory
+from ..api.websocket_manager import ConnectionManager
+
+
+def _uppercase(text: str) -> str:
+    return text.upper()
+
+
+def _merge_text(results: list[str]) -> str:
+    return "\n".join(results)
 
 
 def build_graph(topic: str) -> StateGraph:
-    """Build a simple LangGraph pipeline for a given topic."""
+    """Build a LangGraph pipeline demonstrating advanced features."""
+
     graph = StateGraph()
 
     graph.add_node("analysis", AnalysisNode(topic))
+    review_memory = ReviewableMemory()
+    graph.add_node("human_review", HumanReviewNode(review_memory))
+    manager = ConnectionManager()
     graph.add_node("summary", SummaryNode())
+    graph.add_node("echo", lambda x: x)
+    graph.add_node("combine", lambda items: " ".join(items))
+    graph.add_node("final", lambda x: x)
 
-    graph.set_entry_point("analysis")
-    graph.add_edge("analysis", "summary")
-    graph.add_edge("summary", END)
 
     return graph
 

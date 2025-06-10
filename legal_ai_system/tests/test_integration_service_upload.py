@@ -25,14 +25,13 @@ for name in [
     "legal_ai_system.services.security_manager",
     "legal_ai_system.services.workflow_orchestrator",
     "legal_ai_system.services.realtime_analysis_workflow",
+    "legal_ai_system.integration_ready.vector_store_enhanced",
     "yaml",
 ]:
     if name not in sys.modules:
         sys.modules[name] = ModuleType(name)
 
-sys.modules["legal_ai_system.services.realtime_analysis_workflow"].RealTimeAnalysisWorkflow = object
 
-# Stub package with submodule used by memory_manager
 
 sys.modules["faiss"].StandardGpuResources = object
 sys.modules["faiss"].index_cpu_to_gpu = lambda *a, **k: None
@@ -44,6 +43,11 @@ sys.modules["faiss"].IndexPQ = object
 sys.modules["faiss"].IndexIVFPQ = object
 sys.modules["faiss"].get_num_gpus = lambda: 0
 sys.modules["faiss"].read_index = lambda *a, **k: object()
+
+# Provide placeholder MemoryStore used by memory_manager
+sys.modules[
+    "legal_ai_system.integration_ready.vector_store_enhanced"
+].MemoryStore = object
 
 sys.modules["numpy"].array = lambda *a, **k: a
 sys.modules["numpy"].ndarray = object
@@ -281,3 +285,4 @@ async def test_upload_and_process_document_error(tmp_path):
     user = sec_mod.User("u1")
     with pytest.raises(ServiceLayerError):
         await svc.upload_and_process_document(b"x", "f.txt", user, progress_cb=None)
+

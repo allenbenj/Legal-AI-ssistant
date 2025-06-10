@@ -25,10 +25,6 @@ class LegalWorkflowBuilder:
         self._steps: List[Callable[[Any], Awaitable[Any] | Any]] = []
         self._error_handler: Callable[[Any], Awaitable[Any]] | None = None
 
-    def set_error_handler(
-        self, handler: Callable[[Any], Awaitable[Any]]
-    ) -> None:
-        """Set a final error handling node."""
 
         self._error_handler = handler
 
@@ -53,7 +49,7 @@ class LegalWorkflowBuilder:
         for step in self._steps:
             result = step(data)
             data = await result if asyncio.iscoroutine(result) else result
-        if self._error_handler is not None:
+
             data = await self._error_handler(data)
         return data
 

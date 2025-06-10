@@ -473,6 +473,8 @@ class VectorStore:
                     );
                     CREATE UNIQUE INDEX IF NOT EXISTS idx_faiss_id_map
                         ON faiss_id_map(index_target, faiss_id);
+                    """
+                )
 
         except sqlite3.Error as e:
             vs_index_logger.critical(
@@ -572,7 +574,6 @@ class VectorStore:
             )
 
         try:
-                )
 
                 if self.enable_gpu:
                     try:
@@ -644,62 +645,70 @@ class VectorStore:
         doc_index_path = self.document_index_path
         entity_index_path = self.entity_index_path
 
-            if doc_index_path.exists():
-                try:
-
-                        try:
-                            gpu_resource = faiss.StandardGpuResources()  # type: ignore[attr-defined]
-                            self.document_index = faiss.index_cpu_to_gpu(gpu_resource, 0, self.document_index)  # type: ignore[attr-defined]
-                        except Exception as gpu_e:
-                            vs_index_logger.warning(
-                                f"Failed to move loaded document index to GPU: {gpu_e}. Using CPU."
-                            )
-                    vectors = self.document_index.ntotal if self.document_index else 0
-                    vs_index_logger.info(
-                        "Document FAISS index loaded.",
-                        parameters={"path": str(doc_index_path), "vectors": vectors},
-                    )
-                except Exception as e:
-                    vs_index_logger.warning(
-                        f"Failed to load document FAISS index from '{doc_index_path}'. Re-initializing empty.",
-                        exception=e,
-                    )
-                    self._initialize_faiss_indexes_sync()  # Re-init if load fails to prevent None index
-            else:
-                vs_index_logger.info(
-                    f"No document FAISS index file found at '{doc_index_path}'. Starting with empty index."
+        if doc_index_path.exists():
+            try:
+                if self.enable_gpu:
+                    try:
+                        gpu_resource = faiss.StandardGpuResources()  # type: ignore[attr-defined]
+                        self.document_index = faiss.index_cpu_to_gpu(
+                            gpu_resource, 0, self.document_index
+                        )  # type: ignore[attr-defined]
+                    except Exception as gpu_e:
+                        vs_index_logger.warning(
+                            f"Failed to move loaded document index to GPU: {gpu_e}. Using CPU."
+                        )
+                vectors = (
+                    self.document_index.ntotal if self.document_index else 0
                 )
+                vs_index_logger.info(
+                    "Document FAISS index loaded.",
+                    parameters={"path": str(doc_index_path), "vectors": vectors},
+                )
+            except Exception as e:
+                vs_index_logger.warning(
+                    f"Failed to load document FAISS index from '{doc_index_path}'. Re-initializing empty.",
+                    exception=e,
+                )
+                self._initialize_faiss_indexes_sync()  # Re-init if load fails to prevent None index
+        else:
+            vs_index_logger.info(
+                f"No document FAISS index file found at '{doc_index_path}'. Starting with empty index."
+            )
 
-            entity_index_path = self.entity_index_path
-            if entity_index_path.exists():
-                try:
-                    if self.enable_gpu:
-                        try:
-                            gpu_resource = faiss.StandardGpuResources()  # type: ignore[attr-defined]
-                            self.entity_index = faiss.index_cpu_to_gpu(gpu_resource, 0, self.entity_index)  # type: ignore[attr-defined]
-                        except Exception as gpu_e:
-                            vs_index_logger.warning(
-                                f"Failed to move loaded entity index to GPU: {gpu_e}. Using CPU."
-                            )
-                    ent_vectors = self.entity_index.ntotal if self.entity_index else 0
-                    vs_index_logger.info(
-                        "Entity FAISS index loaded.",
-                        parameters={
-                            "path": str(entity_index_path),
-                            "vectors": ent_vectors,
-                        },
-                    )
-                except Exception as e:
-                    vs_index_logger.warning(
-                        f"Failed to load entity FAISS index from '{entity_index_path}'. Re-initializing empty.",
-                        exception=e,
-                    )
-                    # Re-init only entity index if document index was fine
-                    if not self.document_index:
-                        self._initialize_faiss_indexes_sync()
-                    else:
-                        # _initialize_faiss_indexes_sync updates instance attributes in-place
-                        self._initialize_faiss_indexes_sync()
+        entity_index_path = self.entity_index_path
+        if entity_index_path.exists():
+            try:
+                if self.enable_gpu:
+                    try:
+                        gpu_resource = faiss.StandardGpuResources()  # type: ignore[attr-defined]
+                        self.entity_index = faiss.index_cpu_to_gpu(
+                            gpu_resource, 0, self.entity_index
+                        )  # type: ignore[attr-defined]
+                    except Exception as gpu_e:
+                        vs_index_logger.warning(
+                            f"Failed to move loaded entity index to GPU: {gpu_e}. Using CPU."
+                        )
+                ent_vectors = (
+                    self.entity_index.ntotal if self.entity_index else 0
+                )
+                vs_index_logger.info(
+                    "Entity FAISS index loaded.",
+                    parameters={
+                        "path": str(entity_index_path),
+                        "vectors": ent_vectors,
+                    },
+                )
+            except Exception as e:
+                vs_index_logger.warning(
+                    f"Failed to load entity FAISS index from '{entity_index_path}'. Re-initializing empty.",
+                    exception=e,
+                )
+                # Re-init only entity index if document index was fine
+                if not self.document_index:
+                    self._initialize_faiss_indexes_sync()
+                else:
+                    # _initialize_faiss_indexes_sync updates instance attributes in-place
+                    self._initialize_faiss_indexes_sync()
 
     def _load_metadata_mem_cache_sync(self):
         vs_cache_logger.trace("Loading metadata into memory cache (sync).")

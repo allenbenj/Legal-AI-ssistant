@@ -1,10 +1,22 @@
 export const colors = {
   primary: '#1D4ED8',
+  primaryLight: '#3B82F6',
+  primaryDark: '#1E40AF',
   secondary: '#64748B',
+  secondaryLight: '#94A3B8',
+  secondaryDark: '#475569',
   success: '#16A34A',
+  successLight: '#4ADE80',
+  successDark: '#166534',
   danger: '#DC2626',
+  dangerLight: '#F87171',
+  dangerDark: '#991B1B',
   warning: '#F59E0B',
+  warningLight: '#FBBF24',
+  warningDark: '#B45309',
   info: '#0EA5E9',
+  infoLight: '#38BDF8',
+  infoDark: '#0369A1',
   white: '#ffffff',
   black: '#000000',
   gray100: '#F3F4F6',
@@ -24,6 +36,8 @@ export const spacing = {
   md: '1rem',
   lg: '1.5rem',
   xl: '2rem',
+  '2xl': '3rem',
+  '3xl': '4rem',
 };
 
 export const typography = {
