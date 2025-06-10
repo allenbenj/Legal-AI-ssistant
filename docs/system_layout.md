@@ -20,13 +20,15 @@ For details on REST endpoints, see the [API reference](api_endpoints.md) and the
 The project defines several specialized agents under `legal_ai_system/agents`:
 
 - **DocumentProcessorAgent** – extracts text and metadata from a variety of file types.  See `document_processor_agent.py` lines 1‑8.
-- Handles PDFs, DOCX, HTML, and image formats using optional dependencies for parsing.  Returns structured content for downstream agents.
+- Handles PDFs, DOCX, HTML, image formats, emails, zip archives, and structured JSON/YAML using optional dependencies.  Returns structured content for downstream agents.
 - **DocumentProcessorAgentV2** – advanced processor returning a `MultiModalDocument`. See `document_processor_agent_v2.py` lines 25-132.
 - Supports `process_video_depositions`, `process_legal_forms`, and `process_contract_redlines` for specialized legal content.
 - **DocumentRewriterAgent** – performs lightweight spelling correction on extracted text.  See `document_rewriter_agent.py` lines 1‑7.
 - Uses `pyspellchecker` to clean common OCR mistakes before analysis.
-- **OntologyExtractionAgent** – extracts legal entities and relationships using ontology‑driven patterns.  See `ontology_extraction_agent.py` lines 1‑7.
-- Integrates with the knowledge graph to ensure entities are linked consistently.
+- **OntologyExtractionAgent** – extracts legal entities and relationships using ontology‑driven patterns.
+  It can optionally load a spaCy NER pipeline and a HuggingFace Legal‑BERT model
+  to supplement the regex patterns. All NER outputs are merged with confidence
+  weighting. See `ontology_extraction_agent.py` for details.
 - **EntityExtractionAgent** – streamlined entity extraction for legal documents.  See `entity_extraction_agent.py` lines 1‑7.
 - Focused on speed and identifies names of parties, statutes, and case citations.
 - **SemanticAnalysisAgent** – summarization and legal topic identification.  See `semantic_analysis_agent.py` lines 1‑8.
