@@ -99,6 +99,7 @@ tqdm = "^4.65.0"
 pathlib = "^1.0.1"
 typing-extensions = "^4.7.0"
 pyspellchecker = "^0.7.2"
+diskcache = "^5.6.0"
 
 [tool.poetry.group.dev.dependencies]
 # Testing

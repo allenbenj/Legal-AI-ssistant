@@ -31,6 +31,7 @@ from ..core.detailed_logging import (
 from ..core.unified_exceptions import AgentExecutionError, DocumentProcessingError
 from ..utils.dependency_manager import DependencyManager
 from ..utils.document_utils import DocumentChunker, LegalDocumentClassifier
+from ..utils import ocr_cache
 
 MemoryMixin = create_agent_memory_mixin()
 file_logger = get_detailed_logger("File_Processing", LogCategory.DOCUMENT)
@@ -583,6 +584,7 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
         notes: List[str] = []
         page_count = 0
         image_ocr_res: List[Dict[str, str]] = []
+        file_hash = ocr_cache.compute_file_hash(file_path)
 
         try:
             doc = fitz.open(str(file_path))  # type: ignore
@@ -598,57 +600,65 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
 
             for i in range(page_count):
                 page = doc.load_page(i)
-                page_text = page.get_text(  # type: ignore[attr-defined]
-                    "text", sort=True
-                ).strip()  # Added sort=True for reading order
-
-                # OCR attempt if no text or forced
-                needs_ocr = options.get("force_ocr", False) or (
-                    not page_text and options.get("ocr_if_needed", True)
-                )
-                if needs_ocr:
-                    if dep_manager.is_available(
-                        "pytesseract"
-                    ) and dep_manager.is_available("PIL"):
-                        notes.append(
-                            f"Page {i+1}: Attempting OCR (Reason: {'forced' if options.get('force_ocr') else 'no text layer'})."
-                        )
-                        try:
-                            pix = page.get_pixmap(  # type: ignore[attr-defined]
-                                dpi=options.get("ocr_dpi", 300)
-                            )
-                            img_bytes = pix.tobytes(  # type: ignore[attr-defined]
-                                "png"
-                            )  # Get bytes in a common format
-                            pil_img = Image.open(io.BytesIO(img_bytes))  # type: ignore
-                            ocr_text = pytesseract.image_to_string(pil_img, lang=options.get("ocr_language", "eng")).strip()  # type: ignore
-                            if ocr_text:
-                                page_text = (
-                                    ocr_text  # Replace page_text with OCR result
-                                )
-                                notes.append(
-                                    f"Page {i+1}: OCR successful, added {len(ocr_text)} chars."
-                                )
-                                image_ocr_res.append(
-                                    {
-                                        "page": str(i + 1),
-                                        "ocr_text_preview": ocr_text[:100] + "...",
-                                    }
-                                )
-                            else:
-                                notes.append(f"Page {i+1}: OCR yielded no text.")
-                        except Exception as ocr_e:
+                cached = ocr_cache.get(file_path, page=i + 1, file_hash=file_hash)
+                if cached and not options.get("force_ocr", False):
+                    page_text = cached
+                    notes.append(f"Page {i+1}: Loaded OCR text from cache.")
+                else:
+                    page_text = page.get_text(  # type: ignore[attr-defined]
+                        "text", sort=True
+                    ).strip()
+                    needs_ocr = options.get("force_ocr", False) or (
+                        not page_text and options.get("ocr_if_needed", True)
+                    )
+                    if needs_ocr:
+                        if dep_manager.is_available("pytesseract") and dep_manager.is_available("PIL"):
                             notes.append(
-                                f"Page {i+1}: OCR failed - {str(ocr_e)[:100]}."
-                            )  # Limit error message length
-                            file_logger.warning(
-                                f"OCR for page {i+1} of {file_path.name} failed.",
-                                exception=ocr_e,
+                                f"Page {i+1}: Attempting OCR (Reason: {'forced' if options.get('force_ocr') else 'no text layer'})."
                             )
-                    else:
-                        notes.append(
-                            f"Page {i+1}: OCR skipped (pytesseract/Pillow unavailable)."
-                        )
+                            try:
+                                pix = page.get_pixmap(  # type: ignore[attr-defined]
+                                    dpi=options.get("ocr_dpi", 300)
+                                )
+                                img_bytes = pix.tobytes(  # type: ignore[attr-defined]
+                                    "png"
+                                )
+                                pil_img = Image.open(io.BytesIO(img_bytes))  # type: ignore
+                                ocr_text = pytesseract.image_to_string(
+                                    pil_img,
+                                    lang=options.get("ocr_language", "eng"),
+                                ).strip()  # type: ignore
+                                if ocr_text:
+                                    page_text = ocr_text
+                                    ocr_cache.set(
+                                        file_path,
+                                        page=i + 1,
+                                        text=ocr_text,
+                                        file_hash=file_hash,
+                                    )
+                                    notes.append(
+                                        f"Page {i+1}: OCR successful, added {len(ocr_text)} chars."
+                                    )
+                                    image_ocr_res.append(
+                                        {
+                                            "page": str(i + 1),
+                                            "ocr_text_preview": ocr_text[:100] + "...",
+                                        }
+                                    )
+                                else:
+                                    notes.append(f"Page {i+1}: OCR yielded no text.")
+                            except Exception as ocr_e:
+                                notes.append(
+                                    f"Page {i+1}: OCR failed - {str(ocr_e)[:100]}."
+                                )
+                                file_logger.warning(
+                                    f"OCR for page {i+1} of {file_path.name} failed.",
+                                    exception=ocr_e,
+                                )
+                        else:
+                            notes.append(
+                                f"Page {i+1}: OCR skipped (pytesseract/Pillow unavailable)."
+                            )
 
                 if page_text:
                     text_content_parts.append(page_text)
@@ -1185,6 +1195,8 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
         notes = []
         text_content = ""
         extracted_meta: Dict[str, Any] = {"source_format": "image"}
+        file_hash = ocr_cache.compute_file_hash(file_path)
+        cached = ocr_cache.get(file_path, page=1, file_hash=file_hash)
 
         if not (
             dep_manager.is_available("pytesseract") and dep_manager.is_available("PIL")
@@ -1195,31 +1207,31 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
 
         try:
             pil_img = Image.open(str(file_path))  # type: ignore
-            # Store basic image metadata
             meta_info: Dict[str, Any] = {
                 "format": pil_img.format,
                 "mode": pil_img.mode,
                 "size": pil_img.size,
                 "info": pil_img.info,
             }
-            extracted_meta.update(meta_info)  # pil_img.info can be large
+            extracted_meta.update(meta_info)
 
-            # Pre-processing (optional, can improve OCR)
-            # img = img.convert('L') # Convert to grayscale
-            # img = img.filter(ImageFilter.MedianFilter()) # Example filter
-
-            text_content = pytesseract.image_to_string(
-                pil_img,
-                lang=options.get("ocr_language", "eng"),
-                config=f"--dpi {options.get('ocr_dpi',300)}",
-            )  # type: ignore
-            text_content = text_content.strip()
-            if text_content:
-                notes.append(
-                    f"OCR successful, extracted {len(text_content)} characters."
-                )
+            if cached and not options.get("force_ocr", False):
+                text_content = cached
+                notes.append("OCR text loaded from cache.")
             else:
-                notes.append("OCR performed, but no text detected.")
+                text_content = pytesseract.image_to_string(
+                    pil_img,
+                    lang=options.get("ocr_language", "eng"),
+                    config=f"--dpi {options.get('ocr_dpi',300)}",
+                )  # type: ignore
+                text_content = text_content.strip()
+                if text_content:
+                    notes.append(
+                        f"OCR successful, extracted {len(text_content)} characters."
+                    )
+                    ocr_cache.set(file_path, 1, text_content, file_hash=file_hash)
+                else:
+                    notes.append("OCR performed, but no text detected.")
         except UnidentifiedImageError:  # type: ignore
             notes.append(f"Cannot identify image file: {file_path.name}")
             file_logger.error(f"Pillow UnidentifiedImageError for {file_path.name}")
