@@ -4,6 +4,10 @@ Coordinates execution of document analysis workflows such as
 :class:`RealTimeAnalysisWorkflow`.
 """
 
+from __future__ import annotations
+
+import asyncio
+from pathlib import Path
 from typing import Any, Dict, Optional
 from pathlib import Path
 
@@ -16,6 +20,8 @@ from ..core.detailed_logging import (
     detailed_log_function,
 )
 from .realtime_analysis_workflow import RealTimeAnalysisWorkflow
+from ..workflows.langgraph_setup import build_graph
+from ..utils.document_utils import extract_text
 
 wo_logger = get_detailed_logger("WorkflowOrchestrator", LogCategory.SYSTEM)
 
@@ -41,10 +47,6 @@ class WorkflowOrchestrator:
             **config,
         )
 
-        # Setup builder based workflow
-        self.topic = config.get("workflow_topic", "default")
-        self.graph_builder = config.get("graph_builder", build_graph)
-        self._graph = None
 
         wo_logger.info("WorkflowOrchestrator initialized")
 
@@ -54,6 +56,11 @@ class WorkflowOrchestrator:
         # lazily build graph for builder-based workflow
         if self._graph is None:
             self._graph = self.graph_builder(self.topic)
+
+    def _create_builder_graph(self, topic: Optional[str] = None):
+        """Return a LangGraph graph for the provided topic."""
+        actual_topic = topic or self.builder_topic
+        return build_graph(actual_topic)
 
     @detailed_log_function(LogCategory.SYSTEM)
     async def execute_workflow_instance(
@@ -77,3 +84,16 @@ class WorkflowOrchestrator:
         await loop.run_in_executor(None, self._graph.run, text)
 
         return result.document_id
+
+    @detailed_log_function(LogCategory.SYSTEM)
+    async def execute_builder_workflow(
+        self, document_path_str: str, topic: Optional[str] = None
+    ) -> Any:
+        """Run the LangGraph builder workflow on a document."""
+        text = extract_text(Path(document_path_str))
+        graph = self._create_builder_graph(topic)
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, graph.run, text)
+
+
+__all__ = ["WorkflowOrchestrator"]
