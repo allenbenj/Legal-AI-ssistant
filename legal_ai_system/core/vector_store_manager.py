@@ -24,7 +24,10 @@ class VectorStoreManager:
     async def initialize(self, service_container: Optional[Any] = None) -> None:
         """Initialize the underlying vector store if needed."""
         if self.store is None and create_vector_store is not None:
-            self.store = create_vector_store(service_container or {})
+            pool = None
+            if service_container and hasattr(service_container, "get_service"):
+                pool = await service_container.get_service("connection_pool")
+            self.store = create_vector_store(pool, service_container or {})
         if self.store and hasattr(self.store, "initialize") and not self._initialized:
             await self.store.initialize()
             self._initialized = True
