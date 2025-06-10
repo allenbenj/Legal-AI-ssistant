@@ -1,11 +1,12 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
-import { 
-  Search, Upload, FileText, Users, Settings, Shield, 
+import {
+  Search, Upload, FileText, Users, Settings, Shield,
   Activity, Database, Cpu, AlertCircle, CheckCircle,
   Play, Pause, RefreshCw, ChevronRight, Home,
   BarChart, Network, Workflow, Eye, Download,
   Clock, Filter, Plus, Trash2, Edit, Save
 } from 'lucide-react';
+import { Button } from '../../frontend/src/design-system';
 
 // Context for global state management
 const AppContext = createContext({});
@@ -85,16 +86,17 @@ function Sidebar() {
       
       <nav className="mt-8">
         {menuItems.map(item => (
-          <button
+          <Button
             key={item.id}
             onClick={() => setCurrentView(item.id)}
+            variant="secondary"
             className={`w-full px-4 py-3 flex items-center gap-3 hover:bg-gray-800 transition-colors ${
               currentView === item.id ? 'bg-gray-800 border-l-4 border-blue-500' : ''
             }`}
           >
             <item.icon className="w-5 h-5" />
             <span>{item.label}</span>
-          </button>
+          </Button>
         ))}
       </nav>
     </div>
@@ -123,15 +125,15 @@ function Header() {
         </div>
         
         <div className="flex items-center gap-4">
-          <button className="p-2 hover:bg-gray-100 rounded-lg">
+          <Button variant="outline" size="sm" className="p-2 hover:bg-gray-100 rounded-lg">
             <RefreshCw className="w-5 h-5" />
-          </button>
-          <button className="p-2 hover:bg-gray-100 rounded-lg relative">
+          </Button>
+          <Button variant="outline" size="sm" className="p-2 hover:bg-gray-100 rounded-lg relative">
             <AlertCircle className="w-5 h-5" />
             <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
               2
             </span>
-          </button>
+          </Button>
           <div className="flex items-center gap-2">
             <img src="/api/placeholder/32/32" alt="User" className="w-8 h-8 rounded-full" />
             <span className="text-sm font-medium">Admin User</span>
@@ -251,14 +253,14 @@ function DocumentProcessing() {
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">Document Processing</h2>
         <div className="flex gap-3">
-          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2">
+          <Button className="px-4 py-2 flex items-center gap-2" variant="primary">
             <Upload className="w-4 h-4" />
             Upload Documents
-          </button>
-          <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2">
+          </Button>
+          <Button className="px-4 py-2 border border-gray-300 flex items-center gap-2" variant="outline">
             <Filter className="w-4 h-4" />
             Filter
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -267,12 +269,13 @@ function DocumentProcessing() {
         <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
         <p className="text-gray-600 mb-2">Drag and drop files here or click to browse</p>
         <p className="text-sm text-gray-500">Supported formats: PDF, DOCX, TXT, CSV, XLSX</p>
-        <button 
+        <Button
           onClick={handleFileUpload}
-          className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          className="mt-4 px-6 py-2"
+          variant="primary"
         >
           Select Files
-        </button>
+        </Button>
       </div>
 
       {/* Document Queue */}
@@ -296,15 +299,15 @@ function DocumentProcessing() {
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button className="p-1 hover:bg-gray-100 rounded">
+                  <Button variant="outline" size="sm" className="p-1 hover:bg-gray-100 rounded">
                     <Eye className="w-4 h-4" />
-                  </button>
-                  <button className="p-1 hover:bg-gray-100 rounded">
+                  </Button>
+                  <Button variant="outline" size="sm" className="p-1 hover:bg-gray-100 rounded">
                     <Download className="w-4 h-4" />
-                  </button>
-                  <button className="p-1 hover:bg-gray-100 rounded text-red-500">
+                  </Button>
+                  <Button variant="outline" size="sm" className="p-1 hover:bg-gray-100 rounded text-red-500">
                     <Trash2 className="w-4 h-4" />
-                  </button>
+                  </Button>
                 </div>
               </div>
               {doc.status === 'processing' && (
@@ -355,9 +358,9 @@ function KnowledgeGraph() {
             <option value="organization">Organizations</option>
             <option value="case">Cases</option>
           </select>
-          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+          <Button className="px-4 py-2" variant="primary">
             Export Graph
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -416,9 +419,9 @@ function AgentManagement() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">Agent Management</h2>
-        <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+        <Button className="px-4 py-2" variant="primary">
           Deploy New Agent
-        </button>
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -437,14 +440,16 @@ function AgentManagement() {
                 </div>
               </div>
               <div className="flex gap-2">
-                <button className={`p-2 rounded ${
-                  agent.status === 'running' ? 'hover:bg-gray-100' : 'bg-green-100 hover:bg-green-200'
-                }`}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={`p-2 rounded ${agent.status === 'running' ? 'hover:bg-gray-100' : 'bg-green-100 hover:bg-green-200'}`}
+                >
                   {agent.status === 'running' ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                </button>
-                <button className="p-2 hover:bg-gray-100 rounded">
+                </Button>
+                <Button variant="outline" size="sm" className="p-2 hover:bg-gray-100 rounded">
                   <Settings className="w-4 h-4" />
-                </button>
+                </Button>
               </div>
             </div>
 
@@ -526,9 +531,9 @@ function WorkflowDesigner() {
                 <div className="font-medium">{workflow.name}</div>
               </div>
               <div className="flex items-center gap-3">
-                <button className="p-2 hover:bg-gray-100 rounded" onClick={() => editWorkflow(workflow)}>
+                <Button variant="outline" size="sm" className="p-2 hover:bg-gray-100 rounded" onClick={() => editWorkflow(workflow)}>
                   <Edit className="w-4 h-4" />
-                </button>
+                </Button>
               </div>
             </div>
           ))}
@@ -606,9 +611,9 @@ function SecurityManagement() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">Security Management</h2>
-        <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+        <Button className="px-4 py-2" variant="primary">
           Add User
-        </button>
+        </Button>
       </div>
 
       {/* Security Overview */}
@@ -678,8 +683,8 @@ function SecurityManagement() {
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <button className="text-indigo-600 hover:text-indigo-900 mr-3">Edit</button>
-                    <button className="text-red-600 hover:text-red-900">Delete</button>
+                    <Button className="text-indigo-600 hover:text-indigo-900 mr-3" variant="outline" size="sm">Edit</Button>
+                    <Button className="text-red-600 hover:text-red-900" variant="outline" size="sm">Delete</Button>
                   </td>
                 </tr>
               ))}
@@ -801,15 +806,12 @@ function SystemSettings() {
       </div>
 
       <div className="flex justify-end gap-3">
-        <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
+        <Button className="px-4 py-2 border border-gray-300" variant="outline">
           Cancel
-        </button>
-        <button 
-          onClick={handleSave}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-        >
+        </Button>
+        <Button onClick={handleSave} className="px-4 py-2" variant="primary">
           Save Settings
-        </button>
+        </Button>
       </div>
     </div>
   );
