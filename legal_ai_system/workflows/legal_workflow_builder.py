@@ -1,10 +1,9 @@
+"""Simplified access to the generic :class:`LegalWorkflowBuilder`."""
+
 from __future__ import annotations
 
-import asyncio
-from typing import Any, Awaitable, Callable, List, Tuple
 
-from .merge import MergeStrategy, DEFAULT_MERGE_STRATEGIES
-
+    pass
 
 class LegalWorkflowBuilder:
     """Minimal async workflow builder with optional parallel steps."""
