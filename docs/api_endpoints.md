@@ -12,3 +12,17 @@ This document lists key REST endpoints exposed by the FastAPI backend. Each endp
 | `/api/v1/reasoning/case-outcome` | `POST` | Predict likely case outcomes based on facts. |
 
 Each endpoint accepts a JSON payload and returns the structured result from the `LegalReasoningEngine`.
+
+## System Health
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/system/health` | `GET` | Report overall and per-service status. |
+
+`GET /api/v1/system/health` returns a JSON object that includes:
+
+- `overall_status` – aggregate status for the entire system.
+- `services_status` – map of service names to their individual status.
+
+Implemented by `get_system_health_rest` in
+[`legal_ai_system/scripts/main.py`](../legal_ai_system/scripts/main.py).
