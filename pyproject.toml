@@ -166,8 +166,6 @@ extend-exclude = '''
   | buck-out
   | build
   | dist
-  | archive_backup_2025-05-24
-  | archive_legacy_components
 )/
 '''
 
@@ -277,11 +275,10 @@ exclude_lines = [
 ]
 
 [tool.bandit]
-exclude_dirs = ["tests", "archive_backup_2025-05-24", "archive_legacy_components"]
+exclude_dirs = ["tests"]
 skips = ["B101", "B601"]  # Skip assert_used and shell_injection_subprocess
 
 [tool.vulture]
-exclude = ["archive_backup_2025-05-24/", "archive_legacy_components/"]
 ignore_decorators = ["@app.route", "@pytest.fixture"]
 ignore_names = ["setUp", "tearDown"]
 make_whitelist = true
