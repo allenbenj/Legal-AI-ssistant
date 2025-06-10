@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
+import uuid
 
 from ..core.detailed_logging import (
     get_detailed_logger,
@@ -82,8 +83,8 @@ class RealTimeAnalysisResult:
 class RealTimeAnalysisWorkflow:
     """Master workflow for real-time legal document analysis."""
 
-
-
+    def __init__(self) -> None:
+        """Initialize runtime attributes."""
         # Performance tracking
         self.documents_processed = 0
         self.processing_times: List[float] = []
@@ -136,6 +137,8 @@ class RealTimeAnalysisWorkflow:
             # and manage reviewable memory. We return a minimal result so
             # that the module remains functional and flake8 compliant.
             await asyncio.sleep(0)  # simulate async processing
+
+        document_id = kwargs.get("document_id") or f"doc_rt_{uuid.uuid4().hex}"
 
         total_processing_time = time.time() - start_time
         return RealTimeAnalysisResult(

@@ -142,3 +142,15 @@ async def test_process_document_realtime_returns_result_structure() -> None:
         "memory_updates",
     }
     assert expected_keys.issubset(set(data.keys()))
+    assert result.document_id
+
+
+@pytest.mark.asyncio
+async def test_process_document_realtime_uses_provided_document_id() -> None:
+    wf = DummyWorkflow()
+    result = await wf.process_document_realtime(
+        "sample.txt", document_id="custom_id"
+    )
+
+    assert result.document_id == "custom_id"
+
