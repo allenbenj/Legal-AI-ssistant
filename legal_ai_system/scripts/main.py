@@ -11,18 +11,19 @@
 
 import asyncio
 import json
+import logging
 import os
 import sys
 import uuid  # For generating IDs
-import logging
+from collections import defaultdict
 
 # import logging # Replaced by detailed_logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union, Set
-from collections import defaultdict
+from typing import Any, Dict, List, Optional, Set, Union
+
 from jose import jwt
 
 # third-party imports
@@ -42,6 +43,7 @@ except ImportError:  # pragma: no cover - optional server dependency
 try:
     from legal_ai_system.core.constants import Constants
 except Exception:  # pragma: no cover - fallback for testing/archive usage
+
     class Constants:
         """Fallback constants used when the full package is unavailable."""
 
@@ -64,7 +66,10 @@ try:
         status,
     )
     from fastapi.middleware.cors import CORSMiddleware
-    from fastapi.responses import HTMLResponse, JSONResponse  # Added HTMLResponse for root
+    from fastapi.responses import (  # Added HTMLResponse for root
+        HTMLResponse,
+        JSONResponse,
+    )
     from fastapi.security import (
         HTTPAuthorizationCredentials,
         HTTPBearer,
@@ -77,25 +82,26 @@ from pydantic import BaseModel
 from pydantic import Field as PydanticField  # Alias Field
 from strawberry.fastapi import GraphQLRouter  # type: ignore
 from strawberry.types import Info  # type: ignore
+
 from config.settings import settings
 
 # Attempt to import core services, with fallbacks for standalone running or partial setup
 try:
+    from legal_ai_system.config.settings import settings
     from legal_ai_system.core.detailed_logging import (
         LogCategory,
         get_detailed_logger,
     )
-    from legal_ai_system.services.security_manager import (
-        AccessLevel,
-        SecurityManager,
-        User as AuthUser,
-    )
-    from legal_ai_system.services.service_container import ServiceContainer
     from legal_ai_system.services.realtime_analysis_workflow import (
         RealTimeAnalysisResult,
         RealTimeAnalysisWorkflow,
     )
-    from legal_ai_system.config.settings import settings
+    from legal_ai_system.services.security_manager import (
+        AccessLevel,
+        SecurityManager,
+    )
+    from legal_ai_system.services.security_manager import User as AuthUser
+    from legal_ai_system.services.service_container import ServiceContainer
 
     SERVICES_AVAILABLE = True
 except ImportError as e:
@@ -141,8 +147,11 @@ except ImportError as e:
 
     RealTimeAnalysisWorkflow = None  # type: ignore
     RealTimeAnalysisResult = None  # type: ignore
+
     class _SettingsFallback:
-        frontend_dist_path = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+        frontend_dist_path = (
+            Path(__file__).resolve().parent.parent / "frontend" / "dist"
+        )
 
     settings = _SettingsFallback()
 
@@ -255,9 +264,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Legal AI System API",
     description="Comprehensive API for Legal AI document processing and analysis",
-    version=(
-        getattr(getattr(Constants, "Version", None), "APP_VERSION", "2.0.1")
-    ),
+    version=(getattr(getattr(Constants, "Version", None), "APP_VERSION", "2.0.1")),
     lifespan=lifespan,
 )
 
@@ -272,6 +279,22 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Serve the built frontend if available. Deployment can override the
+# path via the FRONTEND_DIST_PATH environment variable.
+frontend_dist = Path(settings.frontend_dist_path)
+if frontend_dist.is_dir():
+    app.mount(
+        "/",
+        StaticFiles(directory=str(frontend_dist), html=True),
+        name="frontend",
+    )
+else:
+    main_api_logger.warning(
+        "Frontend dist path not found; serving minimal root page.",
+        extra={"path": str(frontend_dist)},
+    )
+
 
 # --- Security & Auth ---
 # Mocked for now as per original file, to be integrated with SecurityManager
@@ -682,23 +705,25 @@ app.include_router(graphql_app_router, prefix="/graphql")
 
 
 # --- REST API Endpoints ---
-@app.get("/", response_class=HTMLResponse, include_in_schema=False)
-async def api_root():
-    # Simple landing page with links to docs
-    return """
-    <html>
-        <head><title>Legal AI System API</title></head>
-        <body>
-            <h1>Welcome to the Legal AI System API</h1>
-            <p>This is the central backend for all Legal AI operations.</p>
-            <ul>
-                <li><a href="/docs">API Documentation (Swagger UI)</a></li>
-                <li><a href="/redoc">Alternative API Documentation (ReDoc)</a></li>
-                <li><a href="/graphql">GraphQL Endpoint (GraphiQL)</a></li>
-            </ul>
-        </body>
-    </html>
-    """
+if not Path(settings.frontend_dist_path).is_dir():
+
+    @app.get("/", response_class=HTMLResponse, include_in_schema=False)
+    async def api_root():
+        """Fallback landing page shown when frontend assets are missing."""
+        return """
+        <html>
+            <head><title>Legal AI System API</title></head>
+            <body>
+                <h1>Welcome to the Legal AI System API</h1>
+                <p>This is the central backend for all Legal AI operations.</p>
+                <ul>
+                    <li><a href="/docs">API Documentation (Swagger UI)</a></li>
+                    <li><a href="/redoc">Alternative API Documentation (ReDoc)</a></li>
+                    <li><a href="/graphql">GraphQL Endpoint (GraphiQL)</a></li>
+                </ul>
+            </body>
+        </html>
+        """
 
 
 @app.post("/api/v1/auth/token", response_model=TokenResponse)
