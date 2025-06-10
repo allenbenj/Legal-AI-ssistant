@@ -13,6 +13,7 @@ from typing import Any, Dict, Optional
 from ..utils.document_utils import extract_text
 
 
+
 from ..core.detailed_logging import (
     get_detailed_logger,
     LogCategory,
@@ -42,7 +43,8 @@ class WorkflowOrchestrator:
         self.config = config
         self.topic = topic
         self.builder_topic = builder_topic or topic
-        self.graph_builder = build_advanced_legal_workflow
+
+        self.graph_builder = build_graph
         self._graph = None
 
         if workflow_config is None:
@@ -112,7 +114,6 @@ class WorkflowOrchestrator:
     def _create_builder_graph(self, topic: Optional[str] = None):
         """Return a LangGraph graph for the provided topic."""
         actual_topic = topic or self.builder_topic
-        return build_advanced_legal_workflow(actual_topic)
 
     @detailed_log_function(LogCategory.SYSTEM)
     async def execute_workflow_instance(
@@ -162,4 +163,4 @@ class WorkflowOrchestrator:
         return await loop.run_in_executor(None, graph.run, text)
 
 
-__all__ = ["WorkflowOrchestrator"]
+__all__ = ["WorkflowOrchestrator", "build_graph"]

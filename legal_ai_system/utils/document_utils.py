@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Iterable, List, Dict, Any, cast
+
+import aiofiles
+import aiofiles.os
 
 import fitz  # PyMuPDF
 import pytesseract
@@ -18,6 +22,13 @@ def discover_documents(
     for ext in extensions:
         docs.extend(directory.rglob(f"*{ext}"))
     return docs
+
+
+async def discover_documents_async(
+    directory: Path, extensions: Iterable[str] = (".pdf", ".txt", ".png", ".jpg")
+) -> List[Path]:
+    """Asynchronously discover documents using a thread pool."""
+    return await asyncio.to_thread(discover_documents, directory, extensions)
 
 
 def extract_text(path: Path, ocr: bool = True) -> str:
@@ -45,7 +56,25 @@ def extract_text(path: Path, ocr: bool = True) -> str:
     return path.read_text(errors="ignore")
 
 
-__all__ = ["discover_documents", "extract_text"]
+async def extract_text_async(path: Path, ocr: bool = True) -> str:
+    """Async wrapper around :func:`extract_text` using aiofiles when possible."""
+    if not await aiofiles.os.path.exists(path):
+        raise FileNotFoundError(path)
+
+    if path.suffix.lower() in {".pdf", ".png", ".jpg", ".jpeg"}:
+        # Use thread offloading for heavy libraries
+        return await asyncio.to_thread(extract_text, path, ocr)
+
+    async with aiofiles.open(path, "r", errors="ignore") as f:
+        return await f.read()
+
+
+__all__ = [
+    "discover_documents",
+    "discover_documents_async",
+    "extract_text",
+    "extract_text_async",
+]
 
 
 class DocumentChunker:
@@ -91,7 +120,9 @@ class LegalDocumentClassifier:
 
 __all__ = [
     "discover_documents",
+    "discover_documents_async",
     "extract_text",
+    "extract_text_async",
     "DocumentChunker",
     "LegalDocumentClassifier",
 ]
