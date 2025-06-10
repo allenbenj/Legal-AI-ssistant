@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+"""Service layer re-exports of workflow processing nodes."""
 
 
-__all__ = [
     "DocumentProcessingNode",
     "DocumentRewritingNode",
     "HybridExtractionNode",
