@@ -25,8 +25,10 @@ The project defines several specialized agents under `legal_ai_system/agents`:
 - Supports `process_video_depositions`, `process_legal_forms`, and `process_contract_redlines` for specialized legal content.
 - **DocumentRewriterAgent** – performs lightweight spelling correction on extracted text.  See `document_rewriter_agent.py` lines 1‑7.
 - Uses `pyspellchecker` to clean common OCR mistakes before analysis.
-- **OntologyExtractionAgent** – extracts legal entities and relationships using ontology‑driven patterns.  See `ontology_extraction_agent.py` lines 1‑7.
-- Integrates with the knowledge graph to ensure entities are linked consistently.
+- **OntologyExtractionAgent** – extracts legal entities and relationships using ontology‑driven patterns.
+  It can optionally load a spaCy NER pipeline and a HuggingFace Legal‑BERT model
+  to supplement the regex patterns. All NER outputs are merged with confidence
+  weighting. See `ontology_extraction_agent.py` for details.
 - **EntityExtractionAgent** – streamlined entity extraction for legal documents.  See `entity_extraction_agent.py` lines 1‑7.
 - Focused on speed and identifies names of parties, statutes, and case citations.
 - **SemanticAnalysisAgent** – summarization and legal topic identification.  See `semantic_analysis_agent.py` lines 1‑8.
