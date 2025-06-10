@@ -293,6 +293,22 @@ class LegalAISettings(BaseSettings):
         default=384, env="EMBEDDING_DIM"
     )  # Will be set in __init__
 
+    vector_store_optimization_interval: int = Field(
+        default=3600, env="VECTOR_STORE_OPTIMIZATION_INTERVAL"
+    )
+    vector_store_backup_interval: int = Field(
+        default=86400, env="VECTOR_STORE_BACKUP_INTERVAL"
+    )
+    vector_store_instances: int = Field(
+        default=1, env="VECTOR_STORE_INSTANCES"
+    )
+    vector_store_hosts: List[str] = Field(
+        default_factory=list, env="VECTOR_STORE_HOSTS"
+    )
+    load_balancing_strategy: str = Field(
+        default="round_robin", env="LOAD_BALANCING_STRATEGY"
+    )
+
     # FAISS Settings - Path will be updated in __init__
     faiss_index_path: Optional[Path] = Field(default=None, env="FAISS_INDEX_PATH")
     faiss_metadata_path: Optional[Path] = Field(default=None, env="FAISS_METADATA_PATH")
