@@ -37,9 +37,22 @@ class DictMerge(MergeStrategy):
         return merged
 
 
+# Default merge strategies mapping.
+#
+# These provide convenient ready-to-use instances for common merge
+# behaviors.  They are exposed at the package level for easy reuse by
+# workflow builders and other components.
+DEFAULT_MERGE_STRATEGIES: Dict[str, MergeStrategy] = {
+    "first": FirstResultMerge(),
+    "list": ListMerge(),
+    "dict": DictMerge(),
+}
+
+
 __all__ = [
     "MergeStrategy",
     "FirstResultMerge",
     "ListMerge",
     "DictMerge",
+    "DEFAULT_MERGE_STRATEGIES",
 ]
