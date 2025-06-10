@@ -288,6 +288,7 @@ class EnhancedVectorStore:
         embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
         index_type: IndexType = IndexType.HNSW,
         enable_gpu: bool = False,
+        index_params: Optional[Dict[str, Any]] = None,
         document_index_path: str | None = None,
         entity_index_path: str | None = None,
     ):
@@ -311,6 +312,7 @@ class EnhancedVectorStore:
         self.state = VectorStoreState.INITIALIZING
         self.index_type = index_type
         self.enable_gpu = enable_gpu
+        self.index_params = index_params or {}
         
         # Core components
         self.embedding_provider = EmbeddingProvider(embedding_model)
@@ -403,31 +405,36 @@ class EnhancedVectorStore:
         
         try:
             if self.index_type == IndexType.FLAT:
-                # Exact search index
                 self.document_index = faiss.IndexFlatL2(self.dimension)
                 self.entity_index = faiss.IndexFlatL2(self.dimension)
-                
+
             elif self.index_type == IndexType.IVF:
-                # Inverted file index for approximate search
                 quantizer = faiss.IndexFlatL2(self.dimension)
-                self.document_index = faiss.IndexIVFFlat(quantizer, self.dimension, 100)
-                self.entity_index = faiss.IndexIVFFlat(quantizer, self.dimension, 50)
-                
+                nlist = int(self.index_params.get("nlist", 100))
+                self.document_index = faiss.IndexIVFFlat(quantizer, self.dimension, nlist)
+                self.entity_index = faiss.IndexIVFFlat(quantizer, self.dimension, max(1, nlist // 2))
+
             elif self.index_type == IndexType.HNSW:
-                # Hierarchical Navigable Small World for fast search
-                self.document_index = faiss.IndexHNSWFlat(self.dimension, 32)
-                self.entity_index = faiss.IndexHNSWFlat(self.dimension, 32)
-                
+                m_val = int(self.index_params.get("M", 32))
+                ef_construction = int(self.index_params.get("ef_construction", 200))
+                self.document_index = faiss.IndexHNSWFlat(self.dimension, m_val)
+                self.document_index.hnsw.efConstruction = ef_construction
+                self.entity_index = faiss.IndexHNSWFlat(self.dimension, m_val)
+                self.entity_index.hnsw.efConstruction = ef_construction
+
             elif self.index_type == IndexType.PQ:
-                # Product quantization for memory efficiency
-                self.document_index = faiss.IndexPQ(self.dimension, 8, 8)
-                self.entity_index = faiss.IndexPQ(self.dimension, 8, 8)
-                
+                m_val = int(self.index_params.get("m", 8))
+                nbits = int(self.index_params.get("nbits", 8))
+                self.document_index = faiss.IndexPQ(self.dimension, m_val, nbits)
+                self.entity_index = faiss.IndexPQ(self.dimension, m_val, nbits)
+
             elif self.index_type == IndexType.IVFPQ:
-                # Combined IVF and PQ
                 quantizer = faiss.IndexFlatL2(self.dimension)
-                self.document_index = faiss.IndexIVFPQ(quantizer, self.dimension, 100, 8, 8)
-                self.entity_index = faiss.IndexIVFPQ(quantizer, self.dimension, 50, 8, 8)
+                nlist = int(self.index_params.get("nlist", 100))
+                m_val = int(self.index_params.get("m", 8))
+                nbits = int(self.index_params.get("nbits", 8))
+                self.document_index = faiss.IndexIVFPQ(quantizer, self.dimension, nlist, m_val, nbits)
+                self.entity_index = faiss.IndexIVFPQ(quantizer, self.dimension, max(1, nlist // 2), m_val, nbits)
             
             # Enable GPU if requested and available
             if self.enable_gpu and faiss.get_num_gpus() > 0:
@@ -459,6 +466,9 @@ class EnhancedVectorStore:
         if doc_index_path.exists():
             try:
                 self.document_index = faiss.read_index(str(doc_index_path))
+                if self.enable_gpu and faiss.get_num_gpus() > 0:
+                    gpu_res = StandardGpuResources()
+                    self.document_index = index_cpu_to_gpu(gpu_res, 0, self.document_index)
                 vector_logger.info(
                     "Document index loaded from disk",
                     parameters={"vectors_count": self.document_index.ntotal},
@@ -471,6 +481,9 @@ class EnhancedVectorStore:
         if entity_index_path.exists():
             try:
                 self.entity_index = faiss.read_index(str(entity_index_path))
+                if self.enable_gpu and faiss.get_num_gpus() > 0:
+                    gpu_res = StandardGpuResources()
+                    self.entity_index = index_cpu_to_gpu(gpu_res, 0, self.entity_index)
                 vector_logger.info(
                     "Entity index loaded from disk",
                     parameters={"vectors_count": self.entity_index.ntotal},
@@ -538,6 +551,21 @@ class EnhancedVectorStore:
             
         except Exception as e:
             cache_logger.error("Failed to load metadata cache", exception=e)
+
+    @detailed_log_function(LogCategory.VECTOR_STORE)
+    def save_indexes(self) -> None:
+        """Persist FAISS indexes to disk."""
+        index_logger.info("Saving FAISS indexes to disk")
+        if self.document_index:
+            try:
+                faiss.write_index(self.document_index, str(self.document_index_path))
+            except Exception as e:
+                index_logger.warning("Failed to save document index", exception=e)
+        if self.entity_index:
+            try:
+                faiss.write_index(self.entity_index, str(self.entity_index_path))
+            except Exception as e:
+                index_logger.warning("Failed to save entity index", exception=e)
     
     @detailed_log_function(LogCategory.VECTOR_STORE)
     def add_document(
@@ -624,7 +652,9 @@ class EnhancedVectorStore:
                     'content_length': len(content),
                     'vector_dimension': len(embedding)
                 })
-                
+
+                self.save_indexes()
+
                 return vector_id
                 
         except Exception as e:
@@ -674,54 +704,40 @@ class EnhancedVectorStore:
                     parameters={'total_vectors': index.ntotal, 'k': k},
                 )
                 
-                # Perform search
-                distances, indices = index.search(query_embedding.reshape(1, -1), k * 2)  # Get extra for filtering
-                
-                # Process results
+                distances, indices = index.search(query_embedding.reshape(1, -1), k)
+
                 results = []
-                for _, (distance, idx) in enumerate(zip(distances[0], indices[0])):
-                    if idx == -1:  # No more results
+                for rank, (distance, idx) in enumerate(zip(distances[0], indices[0]), start=1):
+                    if idx == -1:
                         break
-                    
-                    # Calculate similarity score (convert distance to similarity)
+
                     similarity_score = 1.0 / (1.0 + distance)
-                    
                     if similarity_score < min_similarity:
                         continue
-                    
-                    # Get metadata for this vector
+
                     vector_id = self._get_vector_id_by_index(idx, search_type)
                     if not vector_id:
                         continue
-                    
+
                     metadata = self._get_metadata(vector_id)
-                    if not metadata:
+                    if not metadata or not self._apply_filters(metadata, filters):
                         continue
-                    
-                    # Apply filters
-                    if not self._apply_filters(metadata, filters):
-                        continue
-                    
-                    # Update access statistics
+
                     self._update_access_stats(vector_id)
-                    
-                    # Create search result
-                    result = SearchResult(
-                        vector_id=vector_id,
-                        document_id=metadata.document_id,
-                        content_preview=metadata.content_preview,
-                        similarity_score=similarity_score,
-                        distance=float(distance),
-                        metadata=metadata,
-                        search_time=time.time() - search_start_time,
-                        index_used=index_name,
-                        rank=len(results) + 1
+
+                    results.append(
+                        SearchResult(
+                            vector_id=vector_id,
+                            document_id=metadata.document_id,
+                            content_preview=metadata.content_preview,
+                            similarity_score=similarity_score,
+                            distance=float(distance),
+                            metadata=metadata,
+                            search_time=time.time() - search_start_time,
+                            index_used=index_name,
+                            rank=rank,
+                        )
                     )
-                    
-                    results.append(result)
-                    
-                    if len(results) >= k:
-                        break
                 
                 search_time = time.time() - search_start_time
                 self.state = VectorStoreState.READY
@@ -930,6 +946,7 @@ def create_enhanced_vector_store(
         enable_gpu=cfg.get("ENABLE_GPU_FAISS", False),
         document_index_path=cfg.get("DOCUMENT_INDEX_PATH"),
         entity_index_path=cfg.get("ENTITY_INDEX_PATH"),
+        index_params=cfg.get("INDEX_PARAMS"),
     )
 
     # ------------------------------------------------------------------
@@ -937,8 +954,8 @@ def create_enhanced_vector_store(
 if __name__ == "__main__":
     # Test the enhanced vector store
     vector_logger.info("Testing enhanced vector store")
-    
-    store = EnhancedVectorStore()
+
+    store = EnhancedVectorStore(index_params={"nlist": 100, "m": 8, "nbits": 8})
     
     # Test document addition
     doc_id = store.add_document(
