@@ -11,8 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from ..utils.document_utils import extract_text
-from ..workflows.langgraph_setup import build_graph
-from ..workflows.case_workflow_state import CaseWorkflowState
+
 
 from ..core.detailed_logging import (
     get_detailed_logger,
@@ -43,8 +42,9 @@ class WorkflowOrchestrator:
         self.config = config
         self.topic = topic
         self.builder_topic = builder_topic or topic
-        self.graph_builder = build_graph
+        self.graph_builder = build_advanced_legal_workflow
         self._graph = None
+        self.websocket_manager: Optional[ConnectionManager] = None
 
         if workflow_config is None:
             workflow_config = config.get("workflow_config", WorkflowConfig())
@@ -59,9 +59,42 @@ class WorkflowOrchestrator:
 
         wo_logger.info("WorkflowOrchestrator initialized")
 
+    async def _forward_progress(self, message: str, progress: float) -> None:
+        """Forward workflow progress via WebSocket if manager available."""
+        if not self.websocket_manager:
+            return
+        try:
+            await self.websocket_manager.broadcast(
+                f"workflow_progress_{self.topic}",
+                {
+                    "type": "processing_progress",
+                    "message": message,
+                    "progress": float(progress),
+                },
+            )
+        except Exception as exc:  # pragma: no cover - network issues
+            wo_logger.error(
+                "Failed to broadcast progress update.", exception=exc
+            )
+
     @detailed_log_function(LogCategory.SYSTEM)
     async def initialize_service(self) -> None:
+        # Ensure container services are initialized before workflow runs
+        if hasattr(self.service_container, "initialize_all_services"):
+            await self.service_container.initialize_all_services()
+
+        # Fetch websocket manager if available
+        try:
+            self.websocket_manager = await self.service_container.get_service(
+                "websocket_manager"
+            )
+        except Exception:  # pragma: no cover - optional dependency
+            self.websocket_manager = None
+
         await self.workflow.initialize()
+
+        if self.websocket_manager:
+            self.workflow.register_progress_callback(self._forward_progress)
         # lazily build graph for builder-based workflow
         if self._graph is None:
             self._graph = self.graph_builder(self.topic)
@@ -69,7 +102,7 @@ class WorkflowOrchestrator:
     def _create_builder_graph(self, topic: Optional[str] = None):
         """Return a LangGraph graph for the provided topic."""
         actual_topic = topic or self.builder_topic
-        return build_graph(actual_topic)
+        return build_advanced_legal_workflow(actual_topic)
 
     @detailed_log_function(LogCategory.SYSTEM)
     async def execute_workflow_instance(
