@@ -79,6 +79,8 @@ class AutoTaggingAgent(BaseAgent, MemoryMixin):
         self.logger.info(f"AutoTaggingAgentAgent configured with model: {self.llm_config.get('llm_model', 'default')}")
         self.llm_manager: Optional[LLMManager] = self._get_service("llm_manager")
         self.unified_memory_manager: Optional[UnifiedMemoryManager] = self._get_service("unified_memory_manager")
+        # Vector store used to persist embeddings and tag metadata
+        self.vector_store: Any = self._get_service("vector_store")
 
         self.config = config
         self.min_pattern_confidence = float(config.get('min_pattern_confidence', 0.45))
@@ -186,8 +188,28 @@ class AutoTaggingAgent(BaseAgent, MemoryMixin):
 
             await self._update_learning_from_session_async(document_id, output.all_generated_tags)
 
-            self.logger.info(f"Auto-tagging completed for doc '{document_id}'.", 
-                            parameters={'tags_generated': len(output.all_generated_tags), 'overall_conf': output.overall_confidence})
+            if self.vector_store:
+                try:
+                    await self.vector_store.add_vector_async(
+                        content_to_embed=text_content[:1000],
+                        document_id_ref=document_id,
+                        index_target="document",
+                        tags=output.all_generated_tags,
+                        custom_metadata={"tag_source": "AutoTaggingAgent", "document_id": document_id},
+                    )
+                except Exception as vs_err:
+                    self.logger.warning(
+                        "Failed to store tags in vector store.",
+                        exception=vs_err,
+                    )
+
+            self.logger.info(
+                f"Auto-tagging completed for doc '{document_id}'.",
+                parameters={
+                    'tags_generated': len(output.all_generated_tags),
+                    'overall_conf': output.overall_confidence,
+                },
+            )
         
         except AgentProcessingError as ape:
             self.logger.error(f"AgentProcessingError during auto-tagging for doc '{document_id}'.", exception=ape, exc_info=True)
@@ -509,7 +531,8 @@ class AutoTaggingAgent(BaseAgent, MemoryMixin):
         status['agent_name'] = self.name
         status['dependencies_status'] = {
             'llm_manager': 'available' if self.llm_manager else 'unavailable',
-            'unified_memory_manager': 'available' if self.unified_memory_manager else 'unavailable'
+            'unified_memory_manager': 'available' if self.unified_memory_manager else 'unavailable',
+            'vector_store': 'available' if self.vector_store else 'unavailable'
         }
         status['config_summary'] = {
             'enable_llm_tag_generation': self.enable_llm_tag_generation,
