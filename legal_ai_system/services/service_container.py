@@ -23,6 +23,7 @@ if str(project_root) not in sys.path:
 # Use absolute imports with fallback
 try:
     from legal_ai_system.core.detailed_logging import (
+        DetailedLogger,
         get_detailed_logger,
         LogCategory,
         detailed_log_function,
@@ -36,6 +37,7 @@ except ImportError:
     # Fallback for relative imports
     try:
         from ..core.detailed_logging import (
+            DetailedLogger,
             get_detailed_logger,
             LogCategory,
             detailed_log_function,
@@ -47,8 +49,12 @@ except ImportError:
         from .security_manager import AuthenticationManager
     except ImportError:
         # Final fallback - create minimal classes
+
         class LogCategory:
             SYSTEM = "SYSTEM"
+
+        class DetailedLogger:
+            pass
 
         def get_detailed_logger(name, category):
             import logging
@@ -72,7 +78,9 @@ except ImportError:
 
 
 # Initialize logger for this module
-service_container_logger = get_detailed_logger("ServiceContainer", LogCategory.SYSTEM)
+service_container_logger: DetailedLogger = get_detailed_logger(
+    "ServiceContainer", LogCategory.SYSTEM
+)
 
 
 class ServiceLifecycleState(Enum):
