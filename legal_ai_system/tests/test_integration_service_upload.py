@@ -26,10 +26,13 @@ for name in [
     "legal_ai_system.services.service_container",
     "legal_ai_system.services.workflow_orchestrator",
     "legal_ai_system.services.realtime_analysis_workflow",
+    "legal_ai_system.integration_ready.vector_store_enhanced",
     "yaml",
 ]:
     if name not in sys.modules:
         sys.modules[name] = ModuleType(name)
+
+sys.modules["legal_ai_system.integration_ready.vector_store_enhanced"].MemoryStore = object
 
 sys.modules["faiss"].StandardGpuResources = object
 sys.modules["faiss"].index_cpu_to_gpu = lambda *a, **k: None
@@ -69,7 +72,21 @@ sys.modules["legal_ai_system.utils.user_repository"].UserRepository = object
 
 svc_mod = sys.modules["legal_ai_system.services.service_container"]
 class ServiceContainer:
-    pass
+    def __init__(self):
+        self.services = {}
+        self._initialization_order = []
+        self._service_states = {}
+
+    async def register_service(self, name, factory):
+        self.services[name] = factory(self)
+        self._initialization_order.append(name)
+        self._service_states[name] = SimpleNamespace(name="INITIALIZED")
+
+    async def initialize_all_services(self):
+        pass
+
+    async def get_service(self, name):
+        return self.services.get(name)
 svc_mod.ServiceContainer = ServiceContainer
 
 sys.modules["legal_ai_system.services.workflow_orchestrator"].WorkflowOrchestrator = object

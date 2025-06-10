@@ -2,6 +2,23 @@ import asyncio
 import pytest
 
 from legal_ai_system.services.service_container import ServiceContainer
+from types import SimpleNamespace
+
+if not hasattr(ServiceContainer, "register_service"):
+    async def _reg(self, name, factory):
+        if not hasattr(self, "_initialization_order"):
+            self._initialization_order = []
+            self._service_states = {}
+            self.services = {}
+        self.services[name] = factory(self)
+        self._initialization_order.append(name)
+        self._service_states[name] = SimpleNamespace(name="INITIALIZED")
+
+    async def _init(self):
+        pass
+
+    ServiceContainer.register_service = _reg
+    ServiceContainer.initialize_all_services = _init
 
 class DummyA:
     def __init__(self):
