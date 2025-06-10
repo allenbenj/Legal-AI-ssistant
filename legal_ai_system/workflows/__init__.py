@@ -9,11 +9,12 @@ from ..workflow_engine.merge import (
     DictUpdateMerge,
 )
 
+
 __all__ = [
     "AgentWorkflow",
     "LegalWorkflowBuilder",
     "MergeStrategy",
     "ConcatMerge",
     "ListMerge",
-    "DictUpdateMerge",
+
 ]
