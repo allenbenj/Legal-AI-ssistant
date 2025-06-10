@@ -6,7 +6,11 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-from .core.detailed_logging import get_detailed_logger, LogCategory
+from .core.detailed_logging import (
+    get_detailed_logger,
+    LogCategory,
+    JSONHandler,
+)
 
 
 LOG_DIR = Path(__file__).resolve().parent / "logs"
@@ -43,9 +47,18 @@ def init_logging(
         fh.setFormatter(formatter)
         logging.getLogger().addHandler(fh)
 
+        # Structured JSON logs
+        json_log_path = log_file.with_suffix(".jsonl")
+        json_handler = JSONHandler(json_log_path)
+        json_handler.setLevel(level)
+        logging.getLogger().addHandler(json_handler)
+
     # Ensure our detailed logger for the application exists
     logger = get_detailed_logger("LegalAISystem", LogCategory.SYSTEM)
-    logger.info("Logging initialized")
+    logger.info(
+        "Logging initialized",
+        parameters={"log_file": str(log_file)},
+    )
     return logger
 
 
