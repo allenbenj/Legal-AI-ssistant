@@ -60,6 +60,7 @@ class LegalAIIntegrationService:
         self.workflow_orchestrator: Optional[WorkflowOrchestrator] = None
         self.llm_manager: Optional[Any] = None
         self.persistence_manager: Optional[EnhancedPersistenceManager] = None
+        self.legal_reasoning_engine: Optional[Any] = None
 
         # Example: self.realtime_workflow: Optional[RealTimeAnalysisWorkflow] = None
 
@@ -446,6 +447,96 @@ class LegalAIIntegrationService:
     # Add other methods that FastAPI endpoints will call, e.g.:
     # async def search_knowledge_graph(...)
     # async def submit_review_decision_service(...)
+
+    @detailed_log_function(LogCategory.API)
+    async def run_analogical_reasoning(self, base_case: str, target_case: str) -> Dict[str, Any]:
+        """Run analogical reasoning between two cases using the LegalReasoningEngine."""
+        if not self.legal_reasoning_engine:
+            try:
+                self.legal_reasoning_engine = await self.service_container.get_service("legal_reasoning_engine")
+            except Exception as e:
+                integration_service_logger.error(
+                    "LegalReasoningEngine retrieval failed.", exception=e
+                )
+                raise ServiceLayerError("LegalReasoningEngine not available", cause=e)
+
+        engine = self.legal_reasoning_engine
+        if not engine:
+            raise ServiceLayerError("LegalReasoningEngine not available")
+
+        try:
+            return await engine.run_analogical_reasoning(base_case, target_case)
+        except Exception as e:  # pragma: no cover - engine failure
+            integration_service_logger.error("Analogical reasoning failed", exception=e)
+            raise ServiceLayerError("Analogical reasoning failed", cause=e)
+
+    @detailed_log_function(LogCategory.API)
+    async def interpret_statute(self, statute_text: str, context: Optional[str] = None) -> Dict[str, Any]:
+        """Interpret statutory language in context."""
+        if not self.legal_reasoning_engine:
+            try:
+                self.legal_reasoning_engine = await self.service_container.get_service("legal_reasoning_engine")
+            except Exception as e:
+                integration_service_logger.error(
+                    "LegalReasoningEngine retrieval failed.", exception=e
+                )
+                raise ServiceLayerError("LegalReasoningEngine not available", cause=e)
+
+        engine = self.legal_reasoning_engine
+        if not engine:
+            raise ServiceLayerError("LegalReasoningEngine not available")
+
+        try:
+            return await engine.interpret_statute(statute_text, context)
+        except Exception as e:  # pragma: no cover - engine failure
+            integration_service_logger.error("Statute interpretation failed", exception=e)
+            raise ServiceLayerError("Statute interpretation failed", cause=e)
+
+    @detailed_log_function(LogCategory.API)
+    async def perform_constitutional_analysis(self, text: str) -> Dict[str, Any]:
+        """Analyze text for constitutional issues."""
+        if not self.legal_reasoning_engine:
+            try:
+                self.legal_reasoning_engine = await self.service_container.get_service("legal_reasoning_engine")
+            except Exception as e:
+                integration_service_logger.error(
+                    "LegalReasoningEngine retrieval failed.", exception=e
+                )
+                raise ServiceLayerError("LegalReasoningEngine not available", cause=e)
+
+        engine = self.legal_reasoning_engine
+        if not engine:
+            raise ServiceLayerError("LegalReasoningEngine not available")
+
+        try:
+            return await engine.perform_constitutional_analysis(text)
+        except Exception as e:  # pragma: no cover - engine failure
+            integration_service_logger.error(
+                "Constitutional analysis failed", exception=e
+            )
+            raise ServiceLayerError("Constitutional analysis failed", cause=e)
+
+    @detailed_log_function(LogCategory.API)
+    async def predict_case_outcome(self, case_facts: str) -> Dict[str, Any]:
+        """Predict likely case outcome based on provided facts."""
+        if not self.legal_reasoning_engine:
+            try:
+                self.legal_reasoning_engine = await self.service_container.get_service("legal_reasoning_engine")
+            except Exception as e:
+                integration_service_logger.error(
+                    "LegalReasoningEngine retrieval failed.", exception=e
+                )
+                raise ServiceLayerError("LegalReasoningEngine not available", cause=e)
+
+        engine = self.legal_reasoning_engine
+        if not engine:
+            raise ServiceLayerError("LegalReasoningEngine not available")
+
+        try:
+            return await engine.predict_case_outcome(case_facts)
+        except Exception as e:  # pragma: no cover - engine failure
+            integration_service_logger.error("Case outcome prediction failed", exception=e)
+            raise ServiceLayerError("Case outcome prediction failed", cause=e)
 
     async def initialize_service(self):  # For service container
         integration_service_logger.info(
