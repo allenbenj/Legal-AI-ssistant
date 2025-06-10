@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 import uuid
@@ -22,6 +23,7 @@ from ..core.detailed_logging import (
     LogCategory,
     detailed_log_function,
 )
+from .metrics_exporter import MetricsExporter, metrics_exporter
 
 
 try:  # Avoid heavy imports during tests
@@ -84,14 +86,7 @@ class RealTimeAnalysisResult:
 class RealTimeAnalysisWorkflow:
     """Master workflow for real-time legal document analysis."""
 
-    def __init__(self, *_: Any, task_queue=None, workflow_config=None, **__: Any) -> None:
-        self.task_queue = task_queue
-        self.workflow_config = workflow_config
-        self.logger = get_detailed_logger("RealTimeAnalysisWorkflow", LogCategory.SYSTEM)
 
-        # Basic runtime settings
-        self.max_concurrent_documents = 1
-        self.auto_optimization_threshold = 1000
 
         # Performance tracking
         self.documents_processed = 0
@@ -145,19 +140,12 @@ class RealTimeAnalysisWorkflow:
 
         return await self._run_realtime_pipeline(document_path, **kwargs)
 
-    async def _run_realtime_pipeline(
-        self, document_path: str, **kwargs
-    ) -> RealTimeAnalysisResult:
-        """Execute the real-time analysis pipeline."""
-        start_time = time.time()
 
-        async with self.processing_lock:
-            await asyncio.sleep(0)
 
         document_id = kwargs.get("document_id") or f"doc_rt_{uuid.uuid4().hex}"
 
         total_processing_time = time.time() - start_time
-        result = RealTimeAnalysisResult(
+
             document_path=document_path,
             document_id=document_id,
             document_processing=None,
