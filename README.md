@@ -34,7 +34,7 @@ For more detailed instructions see [ENV_SETUP.md](ENV_SETUP.md).
 
 Alternatively, run the helper script to automate the setup and validation:
 ```bash
-python scripts/setup_environment_task.py
+python legal_ai_system/scripts/setup_environment_task.py
 ```
 
 ```bash
