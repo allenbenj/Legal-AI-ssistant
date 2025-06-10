@@ -92,15 +92,6 @@ try:
         LogCategory,
         get_detailed_logger,
     )
-    from legal_ai_system.services.realtime_analysis_workflow import (
-        RealTimeAnalysisResult,
-        RealTimeAnalysisWorkflow,
-    )
-    from legal_ai_system.services.security_manager import (
-        AccessLevel,
-        SecurityManager,
-    )
-
     SERVICES_AVAILABLE = True
 except ImportError as e:
     # This fallback is for when main.py might be run before the full system is in place
@@ -1064,15 +1055,6 @@ async def process_document_rest(  # Renamed
             possible_files[0]
         )  # Take the first match for simplicity
 
-    if not service_container_instance:
-        main_api_logger.error(
-            "Processing cannot start: ServiceContainer not available."
-        )
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Processing service is not configured.",
-        )
-
     workflow = await service_container_instance.get_service(
         "realtime_analysis_workflow"
     )
@@ -1432,40 +1414,6 @@ async def process_document_background_task(  # Renamed
         "stage": "Initializing",
     }
 
-    if not service_container_instance:
-        main_api_logger.critical(
-            "Cannot process document: ServiceContainer not available."
-        )
-        global_processing_states[document_id].update(
-            {"status": "failed", "error": "System not configured for processing."}
-        )
-        if websocket_manager_instance:
-            await websocket_manager_instance.broadcast_to_topic(
-                {
-                    "type": "processing_error",
-                    "document_id": document_id,
-                    "error": "System not configured.",
-                },
-                f"document_updates_{document_id}",
-            )  # User-specific topic or general
-        return
-
-    try:
-        workflow_config = (
-            processing_request_model.model_dump()
-        )  # Convert Pydantic model to dict
-        workflow_config["user_id"] = requesting_user_id  # Add user context
-
-        workflow = await service_container_instance.get_service(
-            "realtime_analysis_workflow"
-        )
-        await service_container_instance.update_workflow_config(workflow_config)
-        if hasattr(workflow, "initialize") and getattr(
-            service_container_instance._service_states.get("realtime_analysis_workflow"),
-            None,
-        ) != ServiceLifecycleState.INITIALIZED:
-            await workflow.initialize()
-
         # Define progress callback for WebSocket
         async def ws_progress_callback(
             stage: str,
@@ -1497,13 +1445,6 @@ async def process_document_background_task(  # Renamed
         )  # Assuming workflow supports this
 
         # Execute the workflow
-        analysis_result: RealTimeAnalysisResult = (
-            await workflow.process_document_realtime(
-                document_path=document_file_path,
-                # other options from processing_request_model can be passed if workflow accepts them
-            )
-        )
-
         global_processing_states[document_id].update(
             {
                 "status": "completed",

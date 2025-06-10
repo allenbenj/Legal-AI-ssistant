@@ -88,10 +88,10 @@ class RealTimeAnalysisWorkflow:
     - Performance monitoring and optimization
     """
 
+
         self.logger = services.logger
 
         self._apply_config()
-
 
         # Performance tracking
         self.documents_processed = 0
