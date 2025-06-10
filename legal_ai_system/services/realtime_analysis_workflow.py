@@ -29,6 +29,7 @@ try:  # Avoid heavy imports during tests
     )
 except Exception:  # pragma: no cover - fallback for tests
 
+    pass
 
 # Node classes are imported lazily by the workflow builder during tests.
 
@@ -77,19 +78,50 @@ class RealTimeAnalysisResult:
 
 
 class RealTimeAnalysisWorkflow:
-    """
-    Master workflow for real-time legal document analysis.
+    """Master workflow for real-time legal document analysis."""
 
-    Features:
-    - Real-time document processing and entity extraction
-    - Hybrid NER+LLM extraction with validation
-    - Automatic knowledge graph building and synchronization
-    - Vector store optimization with intelligent caching
-    - Agent memory integration with user feedback loops
-    - Performance monitoring and optimization
-    """
+    def _get_service(self, name: str) -> Any:
+        """Safely retrieve a service from the container if available."""
+        if not self.service_container:
+            return None
 
+        getter = getattr(self.service_container, "get_service", None)
+        if getter:
+            try:
+                svc = getter(name)
+                if asyncio.iscoroutine(svc):
+                    try:
+                        return asyncio.get_event_loop().run_until_complete(svc)
+                    except RuntimeError:
+                        return asyncio.run(svc)
+                return svc
+            except Exception:
+                return None
+        return getattr(self.service_container, name, None)
 
+    @detailed_log_function(LogCategory.SYSTEM)
+    def __init__(self, service_container: Any, config: WorkflowConfig) -> None:
+        """Initialize the real-time analysis workflow with dependencies."""
+
+        self.service_container = service_container
+        self.config = config
+        self.logger = get_detailed_logger(
+            self.__class__.__name__, LogCategory.SYSTEM
+        )
+
+        # Resolve dependent services from the container
+        self.hybrid_extractor = self._get_service(
+            "streamlined_entity_extraction_agent"
+        )
+        self.graph_manager = self._get_service("realtime_graph_manager")
+        self.vector_store = self._get_service("vector_store")
+        self.reviewable_memory = self._get_service("reviewable_memory")
+
+        # Configuration driven options
+        self.max_concurrent_documents = int(config.max_concurrent_documents)
+        self.confidence_threshold = float(config.confidence_threshold)
+        self.enable_real_time_sync = bool(config.enable_real_time_sync)
+        self.auto_optimization_threshold = int(config.auto_optimization_threshold)
 
         # Performance tracking
         self.documents_processed = 0
@@ -134,6 +166,8 @@ class RealTimeAnalysisWorkflow:
         Returns:
             RealTimeAnalysisResult with comprehensive analysis
         """
+        start_time = time.time()
+        document_id = f"doc_{int(start_time * 1000)}"
         async with self.processing_lock:
             # This method is largely a placeholder in the test environment.
             # A real implementation would orchestrate the various node
