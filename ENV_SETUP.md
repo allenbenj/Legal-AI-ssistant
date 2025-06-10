@@ -58,3 +58,5 @@ PY
 ```
 
 If the script prints `Environment ready` without errors, the setup was successful.
+
+You can automate these steps by running `python scripts/setup_environment_task.py` from the repository root.
