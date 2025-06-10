@@ -31,6 +31,7 @@ import tenacity  # For retries
 
 # Core imports
 from .detailed_logging import LogCategory, detailed_log_function, get_detailed_logger
+from .agent_unified_config import _get_service_sync
 from .unified_exceptions import ConfigurationError, DatabaseError, VectorStoreError
 
 # Initialize loggers for this module
@@ -291,9 +292,13 @@ class VectorStore:
         document_index_path: str | None = None,
         entity_index_path: str | None = None,
         service_config: Optional[Dict[str, Any]] = None,
+        cache_manager: Optional[Any] = None,
+        metrics_exporter: Optional[Any] = None,
     ):
         vector_store_logger.info("=== VectorStore: Instance Creation START ===")
         self.config = service_config or {}
+        self.cache_manager = cache_manager
+        self.metrics = metrics_exporter
         self.storage_path = Path(storage_path_str)
         self.document_index_path = (
             Path(document_index_path)
@@ -433,6 +438,16 @@ class VectorStore:
             )  # Creates empty shells
             await self._load_all_existing_data_async()  # Loads from disk into shells
 
+            # Recovery: if caches failed to load but index files exist, reload
+            if not self.metadata_mem_cache and (
+                self.document_index_path.exists() or self.entity_index_path.exists()
+            ):
+                vector_store_logger.warning(
+                    "Caches empty after initial load; attempting recovery from disk."
+                )
+                await loop.run_in_executor(None, self._load_metadata_mem_cache_sync)
+                await loop.run_in_executor(None, self._load_id_mapping_cache_sync)
+
             self._start_background_optimization_task()
             self._start_periodic_save_task()
 
@@ -452,11 +467,15 @@ class VectorStore:
             raise VectorStoreError("VectorStore failed to initialize.", cause=e)
 
     def _initialize_metadata_storage_sync(self):
+        """Ensure SQLite metadata storage tables exist and perform migrations."""
         vs_index_logger.info(
             "Initializing metadata SQLite storage.",
             parameters={"db_path": str(self.metadata_db_path)},
         )
         try:
+            with self._sync_lock, sqlite3.connect(
+                self.metadata_db_path, timeout=5
+            ) as conn:
                 conn.executescript(
                     """
                     CREATE TABLE IF NOT EXISTS vector_metadata (
@@ -489,6 +508,13 @@ class VectorStore:
                     """
                 )
 
+                # Ensure faiss_id column exists for older databases
+                columns = [r[1] for r in conn.execute("PRAGMA table_info(vector_metadata)").fetchall()]
+                if "faiss_id" not in columns:
+                    conn.execute("ALTER TABLE vector_metadata ADD COLUMN faiss_id INTEGER")
+
+                self._migrate_metadata_to_id_map_sync(conn)
+
         except sqlite3.Error as e:
             vs_index_logger.critical(
                 "Failed to initialize metadata SQLite storage.", exception=e
@@ -498,6 +524,49 @@ class VectorStore:
                 database_type="sqlite",
                 cause=e,
             )
+
+    def _migrate_metadata_to_id_map_sync(self, conn: sqlite3.Connection) -> None:
+        """Populate faiss_id_map table from existing metadata if missing."""
+        try:
+            cursor = conn.execute("SELECT COUNT(*) FROM faiss_id_map")
+            existing = cursor.fetchone()[0]
+            if existing > 0:
+                return
+
+            doc_next = 0
+            ent_next = 0
+            cursor = conn.execute("SELECT vector_id, faiss_id FROM vector_metadata")
+            rows = cursor.fetchall()
+            for vector_id, faiss_id in rows:
+                index_target = "entity" if vector_id.startswith("vec_ent") else "document"
+                if index_target == "document":
+                    if faiss_id is None or faiss_id < 0:
+                        faiss_id = doc_next
+                        doc_next += 1
+                        conn.execute(
+                            "UPDATE vector_metadata SET faiss_id = ? WHERE vector_id = ?",
+                            (faiss_id, vector_id),
+                        )
+                    else:
+                        doc_next = max(doc_next, int(faiss_id) + 1)
+                else:
+                    if faiss_id is None or faiss_id < 0:
+                        faiss_id = ent_next
+                        ent_next += 1
+                        conn.execute(
+                            "UPDATE vector_metadata SET faiss_id = ? WHERE vector_id = ?",
+                            (faiss_id, vector_id),
+                        )
+                    else:
+                        ent_next = max(ent_next, int(faiss_id) + 1)
+
+                conn.execute(
+                    "INSERT OR IGNORE INTO faiss_id_map (vector_id, index_target, faiss_id) VALUES (?,?,?)",
+                    (vector_id, index_target, int(faiss_id)),
+                )
+            conn.commit()
+        except sqlite3.Error as e:
+            vs_index_logger.error("Failed migrating metadata to faiss_id_map", exception=e)
 
     def _initialize_faiss_indexes_sync(self):
         vs_index_logger.info(
@@ -999,6 +1068,7 @@ class VectorStore:
                     ),
                 )
                 conn.commit()
+            # Update memory cache only after metadata is safely written
             self.metadata_mem_cache[metadata.vector_id] = metadata
         except sqlite3.Error as e:
             vs_index_logger.error(
@@ -1185,6 +1255,31 @@ class VectorStore:
         return await loop.run_in_executor(
             None, self._get_faiss_id_for_vector_id_sync, vector_id, index_target
         )
+
+    async def _get_metadata_async_from_db_or_cache(
+        self, vector_id: str
+    ) -> Optional[VectorMetadata]:
+        """Retrieve metadata for a vector_id from cache or SQLite."""
+        if vector_id in self.metadata_mem_cache:
+            self.stats.cache_hits_session += 1
+            meta = self.metadata_mem_cache[vector_id]
+            meta.last_accessed_iso = datetime.now(timezone.utc).isoformat()
+            meta.access_count += 1
+            return meta
+
+        self.stats.cache_misses_session += 1
+        vs_cache_logger.debug(
+            f"Metadata cache miss for vector_id '{vector_id}'. Fetching from DB."
+        )
+        loop = asyncio.get_event_loop()
+        row_dict = await loop.run_in_executor(
+            None, self._get_metadata_from_db_sync, vector_id
+        )
+        if row_dict:
+            metadata = VectorMetadata.from_row_dict(row_dict)
+            self.metadata_mem_cache[vector_id] = metadata
+            return metadata
+        return None
 
     @detailed_log_function(LogCategory.VECTOR_STORE)
     async def add_vector_async(
@@ -1382,6 +1477,17 @@ class VectorStore:
                 duration_add,
                 {"content_len": len(content_to_embed)},
             )
+            if self.metrics:
+                self.metrics.observe_vector_add(duration_add)
+            if self.cache_manager:
+                try:
+                    await self.cache_manager.set(
+                        f"vec_meta:{vector_id}",
+                        metadata_to_store.to_dict(),
+                        ttl_seconds=self.config.get("metadata_cache_ttl", 3600),
+                    )
+                except Exception:
+                    pass
             return vector_id
 
     def _generate_unique_vector_id(self, index_target: str, doc_ref: str) -> str:
@@ -1501,57 +1607,16 @@ class VectorStore:
             # 3. Retrieve metadata and construct SearchResult objects
             results: List[SearchResult] = []
             cache_hits = 0
-            # FAISS returns internal integer IDs. We need a way to map these back to our application vector_ids.
-            # This requires IndexIDMap if we use string IDs with FAISS, or a separate mapping layer.
-            # For simplicity, if we don't use IndexIDMap, we assume our vector_id for metadata somehow relates to
-            # the order of addition or we search metadata by other means (e.g. if we stored vectors with our custom IDs using add_with_ids)
-            # Let's assume we need to fetch metadata for each FAISS index `idx`.
-            # This is where the mapping from FAISS sequential ID to our application's VectorMetadata.vector_id is crucial.
-            # If we add vectors sequentially without `add_with_ids`, `indices_batch[0]` contains the internal FAISS IDs (0 to ntotal-1).
-            # We need a reverse map: faiss_internal_id -> application_vector_id.
-            # This is complex to maintain with additions/deletions if not using FAISS's IDMap.
-            # For now, conceptual: assume we can get our vector_id from FAISS internal id `idx`.
-            # This placeholder needs a robust solution in a production system.
-            # One way: When adding, store mapping: faiss_idx -> our_vector_id.
-            # OR query metadata DB by some other property if possible (less efficient)
-
-            # Placeholder: For now, construct a dummy vector_id for demonstration if direct mapping is not set up.
-            # In a real system with IndexFlatL2/HNSWFlat, indices_batch[0] ARE the 0-based indices.
-            # We need a separate list or DB table `faiss_id_to_app_vector_id_map`.
-
-            # For this example, let's assume our `VectorMetadata.vector_id` was constructed as `f"{index_target}_FAISSINTERNALID_{content_hash_short}"`
-            # OR, better, when we add to FAISS, we use `add_with_ids` if we have our own int64 IDs.
-            # If we don't use `add_with_ids`, then `indices_batch[0]` are the sequential 0-based IDs.
-            # We need to retrieve metadata using these. A common pattern is to store metadata with these sequential FAISS IDs if not using IDMap.
-
-            # Simpler: iterate through FAISS indices and fetch associated metadata.
-            # Let's assume we have a method to get app vector_id from FAISS idx (e.g., a list of all app vector_ids in FAISS order).
-            # This is a major simplification and needs careful design.
-            # A better design: VectorMetadata table has a faiss_internal_id column.
 
             faiss_indices = indices_batch[0]
             faiss_distances = distances_batch[0]
 
-            # Fetch all potentially relevant metadata in one go (if possible and efficient)
-            # For now, fetch one by one.
             for rank_idx, internal_faiss_id in enumerate(faiss_indices):
                 if internal_faiss_id == -1:
-                    continue  # No more results or invalid index
+                    continue  # padding value when fewer than k results
 
-                # This is the CRITICAL part: mapping internal_faiss_id to your application's VectorMetadata.vector_id
-                # Option 1: If you have a direct list map (fragile with deletes unless index is rebuilt):
-                #    app_vector_id = self.faiss_id_to_app_id_list[internal_faiss_id]
-                # Option 2: Query metadata DB for a vector whose `faiss_internal_id` (a new column you'd add) matches.
-                # Option 3 (Simplistic, assumes vector_id contains faiss_id - NOT ROBUST):
-                #    vector_id_to_find = f"{index_target}_SOMEPREFIX_{internal_faiss_id}"
-
-                vector_id_mapped = await self._get_vector_id_by_faiss_id_async(
-                    internal_faiss_id, index_target
-                )
-                metadata_obj = (
-                    await self._get_metadata_async_from_db_or_cache(vector_id_mapped)
-                    if vector_id_mapped
-                    else None
+                metadata_obj = await self._get_metadata_by_faiss_internal_id_async(
+                    int(internal_faiss_id), index_target
                 )
 
                 if metadata_obj:
@@ -1644,35 +1709,13 @@ class VectorStore:
                     "faiss_time_sec": search_duration_faiss,
                 },
             )
+            if self.metrics:
+                self.metrics.observe_vector_search(total_search_pipeline_duration)
             return results
 
     async def _get_metadata_by_faiss_internal_id_async(
         self, faiss_id: int, index_target: str
     ) -> Optional[VectorMetadata]:
-
-        """Retrieves metadata for a given vector_id, checking cache first."""
-        if vector_id in self.metadata_mem_cache:
-            self.stats.cache_hits_session += 1
-            self.metadata_mem_cache[vector_id].last_accessed_iso = datetime.now(
-                timezone.utc
-            ).isoformat()
-            self.metadata_mem_cache[vector_id].access_count += 1
-            return self.metadata_mem_cache[vector_id]
-
-        self.stats.cache_misses_session += 1
-        vs_cache_logger.debug(
-            f"Metadata cache miss for vector_id '{vector_id}'. Fetching from DB."
-        )
-        loop = asyncio.get_event_loop()
-        row_dict = await loop.run_in_executor(
-            None, self._get_metadata_from_db_sync, vector_id
-        )
-
-        if row_dict:
-            metadata = VectorMetadata.from_row_dict(row_dict)
-            self.metadata_mem_cache[vector_id] = metadata  # Add to cache
-            return metadata
-        return None
 
     def _get_metadata_from_db_sync(self, vector_id: str) -> Optional[Dict[str, Any]]:
         """Synchronously fetches a single metadata record from SQLite."""
@@ -2261,5 +2304,7 @@ def create_vector_store(
         document_index_path=vs_cfg.get("DOCUMENT_INDEX_PATH"),
         entity_index_path=vs_cfg.get("ENTITY_INDEX_PATH"),
         service_config=vs_cfg,
+        cache_manager=getattr(_get_service_sync(service_container, "persistence_manager"), "cache_manager", None),
+        metrics_exporter=_get_service_sync(service_container, "metrics_exporter"),
     )
     return vs_instance
