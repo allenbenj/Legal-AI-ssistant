@@ -14,16 +14,14 @@ import logging
 import os
 import sys
 import uuid  # For generating IDs
-from collections import defaultdict
 
 # import logging # Replaced by detailed_logging
 from contextlib import asynccontextmanager
 import datetime
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Union
-from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
 
 from jose import jwt
 
@@ -206,7 +204,6 @@ def save_workflow_configs() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager for startup and shutdown."""
-    global service_container_instance, security_manager_instance, websocket_manager_instance, realtime_publisher_instance, integration_service_instance
 
     # --- Startup events ---
     # Log startup and initialize all dynamic components such as the
@@ -223,25 +220,6 @@ async def lifespan(app: FastAPI):
                 create_service_container,
             )
 
-            service_container_instance = (
-                await create_service_container()
-            )  # If it's async
-            main_api_logger.info("✅ Service container initialized successfully.")
-            try:
-                integration_service_instance = await service_container_instance.get_service(
-                    "integration_service"
-                )
-                main_api_logger.info(
-                    "✅ Integration service initialized.",
-                    parameters={"service": type(integration_service_instance).__name__},
-                )
-            except Exception as e:
-                main_api_logger.error(
-                    "Failed to initialize IntegrationService.",
-                    exception=e,
-                )
-                integration_service_instance = None
-        except Exception as e:
             main_api_logger.error(
                 "Failed to initialize service container.", exception=e
             )
@@ -939,7 +917,7 @@ async def process_document_rest(  # Renamed
     # user_id_for_task = current_user.user_id
     user_id_for_task = "mock_user_for_processing"  # Placeholder if auth is off
 
-    processing_request.model_dump()
+
         )
     background_tasks.add_task(
         process_document_background_task,
@@ -977,7 +955,10 @@ async def get_document_status_rest(  # Renamed
     # In a real system, this would come from a database or a state manager.
     # Check if the document ID is in a (hypothetical) processing state tracker
     # global_processing_states is a placeholder for actual state management
-    if "global_processing_states" in globals() and document_id in global_processing_states:  # type: ignore
+    if (
+        "global_processing_states" in globals()
+        and document_id in global_processing_states
+    ):  # type: ignore
         state = global_processing_states[document_id]  # type: ignore
         return DocumentStatusResponse(
             document_id=document_id,

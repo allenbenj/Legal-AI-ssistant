@@ -59,15 +59,7 @@ tual environment and run the tests:
 python legal_ai_system/scripts/setup_environment_task.py
 ```
 
-## Running Tests
 
-Install the development dependencies before executing the test suite. Run
-`pip install -e .[dev]` or use the installation script above. Missing packages
-such as `pytest-mock` will cause test failures.
-
-```bash
-pytest
-```
 
 ### Start Task
 
@@ -84,4 +76,6 @@ print(result)
 
 You can customize the workflow builder to enable or disable specific agents.
 See the documents in the `docs/` folder for architecture details and advanced
-usage.
+usage. The [Integration Guide](docs/integration_plan.md) summarises the
+five-phase integration plan, WebSocket patterns and deployment tips and
+includes sections on security, testing, success metrics and troubleshooting.
