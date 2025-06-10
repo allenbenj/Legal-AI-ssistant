@@ -5,7 +5,7 @@ Configuration Manager - Centralized Configuration Management
 Provides a service-oriented interface to the Legal AI System configuration.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, cast
 from pathlib import Path
 from datetime import datetime
 from enum import Enum
@@ -264,6 +264,10 @@ class ConfigurationManager:
         config_manager_logger.trace("Retrieving system directories")
         
         # These paths are now set in LegalAISettings.__init__ relative to base_dir
+        faiss_index_path = cast(Path, self._settings.faiss_index_path)
+        lance_db_path = cast(Path, self._settings.lance_db_path)
+        sqlite_path = cast(Path, self._settings.sqlite_path)
+
         directories = {
             'base_dir': self._settings.base_dir,
             'data_dir': self._settings.data_dir,
@@ -271,9 +275,9 @@ class ConfigurationManager:
             'models_dir': self._settings.models_dir,
             'logs_dir': self._settings.logs_dir,
             # Add other important dirs if they are part of settings
-            'faiss_index_dir': self._settings.faiss_index_path.parent,
-            'lance_db_dir': self._settings.lance_db_path,  # LanceDB path is a directory
-            'sqlite_db_dir': self._settings.sqlite_path.parent,
+            'faiss_index_dir': faiss_index_path.parent,
+            'lance_db_dir': lance_db_path,  # LanceDB path is a directory
+            'sqlite_db_dir': sqlite_path.parent,
         }
         
         for name, path_obj in directories.items():
