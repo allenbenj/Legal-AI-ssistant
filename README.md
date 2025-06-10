@@ -70,6 +70,18 @@ tual environment and run the tests:
 python legal_ai_system/scripts/setup_environment_task.py
 ```
 
+### Extraction Options
+
+The ontology extraction agent supports multiple NER backends. Enable them in
+`config/defaults.yaml`:
+
+- `enable_spacy_ner`: load a spaCy pipeline specified by `spacy_ner_model`.
+- `enable_legal_bert`: use a HuggingFace Legal‑BERT model defined by
+  `legal_bert_model_name`.
+- `enable_regex_extraction`: apply regex patterns from the configuration files.
+
+All enabled methods are combined with confidence weighting during extraction.
+
 
 ### Start Task
 

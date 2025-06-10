@@ -25,5 +25,6 @@ def create_optimized_vector_store(
         embedding_model=cfg.get("embedding_model_name", "sentence-transformers/all-MiniLM-L6-v2"),
         index_type=IndexType(cfg.get("DEFAULT_INDEX_TYPE", "HNSW")),
         enable_gpu=cfg.get("ENABLE_GPU_FAISS", False),
+        index_params=cfg.get("INDEX_PARAMS"),
     )
 
