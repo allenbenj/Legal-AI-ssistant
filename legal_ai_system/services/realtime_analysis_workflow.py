@@ -26,6 +26,7 @@ except Exception:  # pragma: no cover - fallback for tests
     ReviewableMemory = ReviewDecision = ReviewStatus = object
 
 from ..workflows.legal_workflow_builder import LegalWorkflowBuilder
+from .workflow_config import WorkflowConfig
 from .realtime_nodes import (
     DocumentProcessingNode,
     DocumentRewritingNode,
@@ -82,17 +83,6 @@ class RealTimeAnalysisResult:
         }
 
 
-@dataclass
-class WorkflowConfig:
-    """Configuration options for :class:`RealTimeAnalysisWorkflow`."""
-
-    enable_real_time_sync: bool = True
-    confidence_threshold: float = 0.75
-    enable_user_feedback: bool = True
-    parallel_processing: bool = True
-    max_concurrent_documents: int = 3
-    performance_monitoring: bool = True
-    auto_optimization_threshold: int = 100
 
 
 class RealTimeAnalysisWorkflow:
