@@ -216,6 +216,8 @@ class ConfigurationManager:
             'embedding_dim': self.get('embedding_dim', Constants.Performance.EMBEDDING_DIMENSION),
             'faiss_index_path': str(self.get('faiss_index_path', data_dir / "vectors/faiss_index.bin")),
             'faiss_metadata_path': str(self.get('faiss_metadata_path', data_dir / "vectors/faiss_metadata.json")),
+            'document_index_path': str(self.get('document_index_path', data_dir / "vectors/document_index.faiss")),
+            'entity_index_path': str(self.get('entity_index_path', data_dir / "vectors/entity_index.faiss")),
             'lance_db_path': str(self.get('lance_db_path', data_dir / "vectors/lancedb")),
             'lance_table_name': self.get('lance_table_name', "documents")
         }
@@ -265,6 +267,8 @@ class ConfigurationManager:
         
         # These paths are now set in LegalAISettings.__init__ relative to base_dir
         faiss_index_path = cast(Path, self._settings.faiss_index_path)
+        document_index_path = cast(Path, self._settings.document_index_path)
+        entity_index_path = cast(Path, self._settings.entity_index_path)
         lance_db_path = cast(Path, self._settings.lance_db_path)
         sqlite_path = cast(Path, self._settings.sqlite_path)
 
@@ -276,6 +280,8 @@ class ConfigurationManager:
             'logs_dir': self._settings.logs_dir,
             # Add other important dirs if they are part of settings
             'faiss_index_dir': faiss_index_path.parent,
+            'document_index_dir': document_index_path.parent,
+            'entity_index_dir': entity_index_path.parent,
             'lance_db_dir': lance_db_path,  # LanceDB path is a directory
             'sqlite_db_dir': sqlite_path.parent,
         }

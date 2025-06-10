@@ -5,7 +5,10 @@ import asyncio
 from typing import Any, List, Optional
 
 try:
-    from .vector_store import VectorStore, create_vector_store
+    from .enhanced_vector_store import (
+        EnhancedVectorStore as VectorStore,
+        create_enhanced_vector_store as create_vector_store,
+    )
 except Exception:  # pragma: no cover - optional dependency may be missing
     VectorStore = Any  # type: ignore[assignment]
     create_vector_store = None
