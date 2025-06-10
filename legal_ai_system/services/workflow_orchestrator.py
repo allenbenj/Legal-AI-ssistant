@@ -44,7 +44,6 @@ class WorkflowOrchestrator:
         self.builder_topic = builder_topic or topic
         self.graph_builder = build_advanced_legal_workflow
         self._graph = None
-        self.websocket_manager: Optional[ConnectionManager] = None
 
         if workflow_config is None:
             workflow_config = config.get("workflow_config", WorkflowConfig())
@@ -79,17 +78,6 @@ class WorkflowOrchestrator:
 
     @detailed_log_function(LogCategory.SYSTEM)
     async def initialize_service(self) -> None:
-        # Ensure container services are initialized before workflow runs
-        if hasattr(self.service_container, "initialize_all_services"):
-            await self.service_container.initialize_all_services()
-
-        # Fetch websocket manager if available
-        try:
-            self.websocket_manager = await self.service_container.get_service(
-                "websocket_manager"
-            )
-        except Exception:  # pragma: no cover - optional dependency
-            self.websocket_manager = None
 
         await self.workflow.initialize()
 
@@ -98,6 +86,28 @@ class WorkflowOrchestrator:
         # lazily build graph for builder-based workflow
         if self._graph is None:
             self._graph = self.graph_builder(self.topic)
+
+        # Setup progress forwarding if connection manager available
+        if ConnectionManager:
+            try:
+                self.connection_manager = await self.service_container.get_service(
+                    "connection_manager"
+                )
+            except Exception:
+                self.connection_manager = None
+
+        if self.connection_manager:
+            async def _progress_cb(message: str, progress: float) -> None:
+                await self.connection_manager.broadcast(
+                    "workflow_progress",
+                    {
+                        "type": "workflow_progress",
+                        "message": message,
+                        "progress": float(progress),
+                    },
+                )
+
+            self.workflow.register_progress_callback(_progress_cb)
 
     def _create_builder_graph(self, topic: Optional[str] = None):
         """Return a LangGraph graph for the provided topic."""
