@@ -12,6 +12,8 @@ class WorkflowConfig:
     max_concurrent_documents: int = 3
     performance_monitoring: bool = True
     auto_optimization_threshold: int = 100
+    # Toggle between legacy workflow and new builder implementation
+    use_builder: bool = False
 
     def update(self, **kwargs: Any) -> None:
         for key, value in kwargs.items():
