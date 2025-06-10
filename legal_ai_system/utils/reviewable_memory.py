@@ -18,16 +18,26 @@ from pathlib import Path
 import threading
 
 # Use detailed_logging
-from ..core.detailed_logging import get_detailed_logger, LogCategory, detailed_log_function
-# Import exceptions
-from ..core.unified_exceptions import MemoryManagerError
-# Import types from agents - this creates a coupling, but might be intended
-# Ensure these types are stable or use more generic dicts if they change often.
-from ..agents.ontology_extraction_agent import (
-    ExtractedEntity,
-    ExtractedRelationship,
-    OntologyExtractionOutput,
+from ..core.detailed_logging import (
+    get_detailed_logger,
+    LogCategory,
+    detailed_log_function,
 )
+from ..core.unified_exceptions import MemoryManagerError
+from typing import TYPE_CHECKING, Any
+
+# Import types from agents only for type checking to avoid heavy dependencies at
+# runtime during tests.
+if TYPE_CHECKING:  # pragma: no cover - hints only
+    from ..agents.ontology_extraction_agent import (
+        ExtractedEntity,
+        ExtractedRelationship,
+        OntologyExtractionOutput,
+    )
+else:  # pragma: no cover - simplified fallbacks
+    ExtractedEntity = Any  # type: ignore
+    ExtractedRelationship = Any  # type: ignore
+    OntologyExtractionOutput = Any  # type: ignore
 
 # Initialize logger for this module
 review_mem_logger = get_detailed_logger("ReviewableMemory", LogCategory.DATABASE)
