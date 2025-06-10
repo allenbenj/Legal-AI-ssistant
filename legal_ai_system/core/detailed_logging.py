@@ -19,6 +19,32 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+# Standard attributes found on ``logging.LogRecord`` instances.
+# Used to filter them out when capturing custom ``extra`` fields.
+_STANDARD_LOG_RECORD_ATTRS = {
+    "name",
+    "msg",
+    "args",
+    "levelname",
+    "levelno",
+    "pathname",
+    "filename",
+    "module",
+    "exc_info",
+    "exc_text",
+    "stack_info",
+    "lineno",
+    "funcName",
+    "created",
+    "msecs",
+    "relativeCreated",
+    "thread",
+    "threadName",
+    "processName",
+    "process",
+    "taskName",
+}
+
 # Define LOGS_DIR relative to this file's location (core/) then up to legal_ai_system/logs
 LOGS_DIR = Path(__file__).resolve().parent.parent / "logs"
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
@@ -503,9 +529,12 @@ class ColoredFormatter(logging.Formatter):
 
 
 class JSONHandler(logging.Handler):
-    """Custom handler for structured JSON logging"""
+    """Custom handler for structured JSON logging.
 
-    # TODO: Pass custom fields to JSONHandler via 'extra' kwarg in DetailedLogger methods for these to be logged.
+    Any values passed via ``extra`` on the logging call are automatically
+    appended to the JSON output. This keeps ``DetailedLogger`` flexible without
+    requiring changes to every handler when new context fields are needed.
+    """
 
     def __init__(self, filepath: Path):
         super().__init__()
@@ -526,17 +555,10 @@ class JSONHandler(logging.Handler):
                 "process_id": record.process,
             }
 
-            # Add extra fields if present
-            if hasattr(record, "category_val"):
-                log_entry["category"] = record.category_val  # type: ignore
-            if hasattr(record, "parameters_val"):
-                log_entry["parameters"] = record.parameters_val  # type: ignore
-            if hasattr(record, "result_val"):
-                log_entry["result"] = record.result_val  # type: ignore
-            if hasattr(record, "execution_time_val"):
-                log_entry["execution_time"] = record.execution_time_val  # type: ignore
-            if hasattr(record, "error_details_val"):
-                log_entry["error_details"] = record.error_details_val  # type: ignore
+            # Include any custom attributes added via ``extra``
+            for key, value in record.__dict__.items():
+                if key not in _STANDARD_LOG_RECORD_ATTRS and key not in log_entry:
+                    log_entry[key] = value
 
             with self._lock:
                 with open(
