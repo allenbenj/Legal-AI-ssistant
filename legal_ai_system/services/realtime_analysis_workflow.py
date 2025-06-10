@@ -15,6 +15,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+from ..core.detailed_logging import (
+    get_detailed_logger,
+    LogCategory,
+    detailed_log_function,
+)
+
 
 try:  # Avoid heavy imports during tests
     from ..utils.reviewable_memory import (
@@ -22,7 +28,7 @@ try:  # Avoid heavy imports during tests
         ReviewStatus,
     )
 except Exception:  # pragma: no cover - fallback for tests
-    ReviewDecision = ReviewStatus = object
+
 
 # Node classes are imported lazily by the workflow builder during tests.
 
@@ -96,55 +102,13 @@ class RealTimeAnalysisWorkflow:
     - Performance monitoring and optimization
     """
 
-    def __init__(
-        self,
-        service_container: Any,
-        config: WorkflowConfig,
-    ) -> None:
-        """Initialize the workflow with required services and configuration."""
-
-        # Basic references
-        self.service_container = service_container
-        self.config = config
-
-        # Logger setup with fallback during tests
-        try:
-            from ..core.detailed_logging import get_detailed_logger, LogCategory
-        except Exception:  # pragma: no cover - fallback for tests
-            import logging
-
-            class LogCategory:  # type: ignore
-                SYSTEM = "SYSTEM"
-
-            def get_detailed_logger(name: str, category: LogCategory):  # type: ignore
-                return logging.getLogger(name)
-
-        self.logger = get_detailed_logger(
-            "RealTimeAnalysisWorkflow", LogCategory.SYSTEM
-        )
-
-        # Retrieve core services if available
-        getter = getattr(service_container, "get_service", None)
-        self.hybrid_extractor = getter("hybrid_extractor") if getter else None
-        self.graph_manager = getter("realtime_graph_manager") if getter else None
-        self.vector_store = getter("vector_store") if getter else None
-        self.reviewable_memory = getter("reviewable_memory") if getter else None
-
-        # Configuration-driven attributes
-        self.max_concurrent_documents = config.max_concurrent_documents
-        self.confidence_threshold = config.confidence_threshold
-        self.enable_real_time_sync = config.enable_real_time_sync
-        self.enable_user_feedback = config.enable_user_feedback
-        self.parallel_processing = config.parallel_processing
-        self.performance_monitoring = config.performance_monitoring
-        self.auto_optimization_threshold = config.auto_optimization_threshold
 
         # Performance tracking
         self.documents_processed = 0
         self.processing_times: List[float] = []
         self.performance_stats: Dict[str, Any] = {}
 
-        # Callback management
+
         self.progress_callbacks: List[Callable] = []
         self.update_callbacks: List[Callable] = []
 
@@ -184,11 +148,8 @@ class RealTimeAnalysisWorkflow:
             RealTimeAnalysisResult with comprehensive analysis
         """
         async with self.processing_lock:
-            # Real implementation would orchestrate each processing stage in
-            # sequence and stream results back to the caller. This minimal
-            # placeholder keeps the workflow syntactically valid during tests.
-            pass
 
+        return result
 
     async def _process_entities_realtime(
         self, hybrid_result, ontology_result, document_id: str
