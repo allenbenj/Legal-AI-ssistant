@@ -530,28 +530,6 @@ function WorkflowDesigner() {
       });
   };
 
-  const [componentSelection, setComponentSelection] = useState({
-    documentProcessor: 'DocumentProcessorAgent',
-    documentRewriter: 'DocumentRewriterAgent',
-    ontologyExtractor: 'OntologyExtractionAgent'
-  });
-
-  const handleComponentChange = (e) => {
-    const { name, value } = e.target;
-    setComponentSelection(prev => ({ ...prev, [name]: value }));
-  };
-
-  const [componentSelection, setComponentSelection] = useState({
-    documentProcessor: 'DocumentProcessorAgent',
-    documentRewriter: 'DocumentRewriterAgent',
-    ontologyExtractor: 'OntologyExtractionAgent'
-  });
-
-  const handleComponentChange = (e) => {
-    const { name, value } = e.target;
-    setComponentSelection(prev => ({ ...prev, [name]: value }));
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -563,102 +541,7 @@ function WorkflowDesigner() {
       </div>
 
       {/* Workflow Settings */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-lg font-semibold mb-4">Workflow Settings</h3>
-        <div className="space-y-4">
-          <input className="border rounded p-2 w-full" placeholder="Workflow name" value={name} onChange={e => setName(e.target.value)} />
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={enableNER} onChange={e => setEnableNER(e.target.checked)} /> Enable NER
-          </label>
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={enableLLM} onChange={e => setEnableLLM(e.target.checked)} /> Enable LLM Extraction
-          </label>
-          <label className="block">Confidence Threshold: {confidence.toFixed(2)}</label>
-          <input type="range" min="0" max="1" step="0.05" value={confidence} onChange={e => setConfidence(parseFloat(e.target.value))} className="w-full" />
-          <button onClick={saveWorkflow} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2">
-            <Save className="w-4 h-4" />
-            Save Workflow
-          </button>
-        </div>
-      </div>
 
-      {/* Component Selection */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-lg font-semibold mb-4">Components</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Document Processor</label>
-            <select
-              name="documentProcessor"
-              value={componentSelection.documentProcessor}
-              onChange={handleComponentChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-            >
-              <option>DocumentProcessorAgent</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Document Rewriter</label>
-            <select
-              name="documentRewriter"
-              value={componentSelection.documentRewriter}
-              onChange={handleComponentChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-            >
-              <option>DocumentRewriterAgent</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Ontology Extractor</label>
-            <select
-              name="ontologyExtractor"
-              value={componentSelection.ontologyExtractor}
-              onChange={handleComponentChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-            >
-              <option>OntologyExtractionAgent</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* Component Selection */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-lg font-semibold mb-4">Components</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Document Processor</label>
-            <select
-              name="documentProcessor"
-              value={componentSelection.documentProcessor}
-              onChange={handleComponentChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-            >
-              <option>DocumentProcessorAgent</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Document Rewriter</label>
-            <select
-              name="documentRewriter"
-              value={componentSelection.documentRewriter}
-              onChange={handleComponentChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-            >
-              <option>DocumentRewriterAgent</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Ontology Extractor</label>
-            <select
-              name="ontologyExtractor"
-              value={componentSelection.ontologyExtractor}
-              onChange={handleComponentChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-            >
-              <option>OntologyExtractionAgent</option>
-            </select>
-          </div>
         </div>
       </div>
 
