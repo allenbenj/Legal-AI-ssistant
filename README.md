@@ -16,6 +16,11 @@ This repository contains the core components for the Legal AI assistant. To run 
    ```
    The requirements file includes database drivers such as **asyncpg** for PostgreSQL and **aioredis** for Redis. If you see errors like `Import "asyncpg" could not be resolved` or `Import "aioredis" could not be resolved`, ensure the dependencies are installed in the active environment.
 
+If you plan to use the optional **LexPredict** pipelines, also install `lexnlp`:
+```bash
+pip install lexnlp
+```
+
 For more detailed instructions see [ENV_SETUP.md](ENV_SETUP.md).
 
 
