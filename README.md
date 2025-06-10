@@ -4,7 +4,16 @@ This repository contains the core components for the Legal AI assistant. To run 
 
 ## Quick Start
 
-1. (Recommended) Create and activate a virtual environment:
+To install all required and optional dependencies in one step, run the unified setup script:
+
+```bash
+python legal_ai_system/scripts/install_all_dependencies.py
+```
+
+This script creates a `.venv` virtual environment, installs every Python package (including extras like audio transcription and database utilities), and installs the Node packages for the React frontend.
+
+If you prefer manual installation:
+1. Create and activate a virtual environment:
    ```bash
    python3 -m venv .venv
    source .venv/bin/activate
@@ -15,6 +24,11 @@ This repository contains the core components for the Legal AI assistant. To run 
    pip install -r requirements.txt
    ```
    The requirements file includes database drivers such as **asyncpg** for PostgreSQL and **aioredis** for Redis. If you see errors like `Import "asyncpg" could not be resolved` or `Import "aioredis" could not be resolved`, ensure the dependencies are installed in the active environment.
+3. Install Node packages for the React frontend:
+   ```bash
+   npm install
+   (cd frontend && npm install)
+   ```
 
 If you plan to use the optional **LexPredict** pipelines, also install `lexnlp`:
 ```bash
@@ -32,7 +46,8 @@ pip install ffmpeg-python openai-whisper whisperx pdfplumber pyannote.audio
 
 For more detailed instructions see [ENV_SETUP.md](ENV_SETUP.md).
 
-Alternatively, run the helper script to automate the setup and validation:
+The older `setup_environment_task.py` script can also be used to create the vir
+tual environment and run the tests:
 ```bash
 python legal_ai_system/scripts/setup_environment_task.py
 ```
