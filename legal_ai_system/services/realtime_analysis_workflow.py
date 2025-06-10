@@ -105,6 +105,8 @@ class RealTimeAnalysisWorkflow:
     - Performance monitoring and optimization
     """
 
+    def __init__(self, *args: Any, **kwargs: Any) -> None:  # pragma: no cover - stub
+        """Create an empty workflow instance for testing."""
 
         # Performance tracking
         self.documents_processed = 0
