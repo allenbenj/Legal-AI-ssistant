@@ -8,6 +8,7 @@ core services and agents within the Legal AI System.
 
 import asyncio
 from typing import Dict, Any, Optional, Callable, Awaitable, List, TYPE_CHECKING
+from dataclasses import asdict
 from enum import Enum
 from datetime import datetime, timezone
 import os
@@ -88,6 +89,11 @@ else:
             class AuthenticationManager:
                 pass
 
+    from .realtime_analysis_workflow import (
+        RealTimeAnalysisWorkflow,
+        WorkflowConfig,
+    )
+
 
 # Initialize logger for this module
 service_container_logger: DetailedLogger = get_detailed_logger(
@@ -125,6 +131,7 @@ class ServiceContainer:
         self._lock = (
             asyncio.Lock()
         )  # For thread-safe registration and retrieval if needed (though primarily async)
+
         service_container_logger.info("ServiceContainer instance created.")
 
     @detailed_log_function(LogCategory.SYSTEM)
@@ -251,6 +258,21 @@ class ServiceContainer:
                     )
 
             return self._services[name]
+
+    def get_active_workflow_config(self) -> Dict[str, Any]:
+        """Return the currently active workflow configuration."""
+        return dict(self._active_workflow_config)
+
+    @detailed_log_function(LogCategory.SYSTEM)
+    async def update_workflow_config(self, new_config: Dict[str, Any]) -> None:
+        """Update workflow configuration and propagate to the workflow service if initialized."""
+        async with self._lock:
+            self._active_workflow_config.update(new_config)
+            workflow = self._services.get("realtime_analysis_workflow")
+            if workflow and hasattr(workflow, "update_config"):
+                maybe = workflow.update_config(**self._active_workflow_config)
+                if asyncio.iscoroutine(maybe):
+                    await maybe
 
     @detailed_log_function(LogCategory.SYSTEM)
     async def initialize_all_services(self):
@@ -441,6 +463,19 @@ class ServiceContainer:
             "Background task added to ServiceContainer.",
             parameters={"task_name": getattr(coro, "__name__", "unnamed_coro")},
         )
+
+    def get_active_workflow_config(self) -> WorkflowConfig:
+        """Return the currently active workflow configuration."""
+        return self._active_workflow_config
+
+    def update_workflow_config(self, new_config: Dict[str, Any]) -> None:
+        """Update the workflow configuration and propagate to the workflow instance."""
+        for key, value in new_config.items():
+            setattr(self._active_workflow_config, key, value)
+        if "realtime_analysis_workflow" in self._services:
+            workflow = self._services["realtime_analysis_workflow"]
+            if hasattr(workflow, "update_config"):
+                workflow.update_config(**new_config)
 
 
 # Global factory function to create and populate the service container
@@ -651,21 +686,23 @@ async def create_service_container(
         service_config=kg_conf,
     )
 
-    from ..core.vector_store import create_vector_store  # Standard one
+    from ..core.enhanced_vector_store import create_enhanced_vector_store  # Unified implementation
 
-    vs_conf = {  # Fetch from config_manager
+    vs_conf = {
         "STORAGE_PATH": str(
             config_manager_service.get("data_dir") / "vector_store_main"
         ),
+        "DOCUMENT_INDEX_PATH": embed_conf.get("document_index_path"),
+        "ENTITY_INDEX_PATH": embed_conf.get("entity_index_path"),
         "DEFAULT_INDEX_TYPE": embed_conf.get(
             "vector_store_type", "HNSW"
-        ),  # Map if needed
+        ),
         "embedding_model_name": embed_conf.get("embedding_model"),
     }
     # EmbeddingProvider instance can be fetched from EmbeddingManager if VectorStore is designed to take it
     # embedding_provider_instance = await container.get_service("embedding_manager").get_provider_instance() # Conceptual
     await container.register_service(
-        "vector_store", factory=create_vector_store, service_config=vs_conf
+        "vector_store", factory=create_enhanced_vector_store, service_config=vs_conf
     )
 
     from ..core.optimized_vector_store import (
@@ -676,6 +713,8 @@ async def create_service_container(
         "STORAGE_PATH": str(
             config_manager_service.get("data_dir") / "vector_store_optimized"
         ),
+        "DOCUMENT_INDEX_PATH": embed_conf.get("document_index_path"),
+        "ENTITY_INDEX_PATH": embed_conf.get("entity_index_path"),
         "DEFAULT_INDEX_TYPE": "HNSW",  # Often optimized means HNSW or specific FAISS params
     }
     await container.register_service(
@@ -726,6 +765,19 @@ async def create_service_container(
     await container.register_service(
         "violation_review_db",
         instance=ViolationReviewDB(db_path=violation_db_path),
+    )
+
+    from .workflow_config import WorkflowConfig
+    from .realtime_analysis_workflow import RealTimeAnalysisWorkflow
+
+    workflow_cfg_dict = config_manager_service.get("workflow_config", {})
+    await container.update_workflow_config(workflow_cfg_dict)
+    await container.register_service(
+        "realtime_analysis_workflow",
+        factory=lambda sc: RealTimeAnalysisWorkflow(
+            sc, config=WorkflowConfig(**sc.get_active_workflow_config())
+        ),
+        is_async_factory=False,
     )
 
     # Agents are often stateful per task, so factories are common.
@@ -807,6 +859,17 @@ async def create_service_container(
                 factory=lambda sc, cfg=agent_config, cls=agent_cls: cls(sc, **cfg),
                 is_async_factory=False,
             )
+
+    # Register workflow with active configuration
+    workflow_conf_dict = config_manager_service.get("workflow_config", {})
+    container.update_workflow_config(workflow_conf_dict)
+    await container.register_service(
+        "realtime_analysis_workflow",
+        factory=lambda sc: RealTimeAnalysisWorkflow(
+            sc, **asdict(sc.get_active_workflow_config())
+        ),
+        is_async_factory=False,
+    )
 
     # Initialize all services that were registered with factories or need explicit init
     await container.initialize_all_services()

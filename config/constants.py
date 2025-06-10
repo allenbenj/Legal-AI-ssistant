@@ -1,15 +1,13 @@
-"""Public re-export of constants from :mod:`legal_ai_system`.
+"""Unified constants exported for public consumption.
 
-This module exposes the constant classes and helper validation functions found
-in :mod:`legal_ai_system.config.constants` so that external packages can import
-them from a stable location.  The previous implementation imported each symbol
-individually which confused linters that expected those names to be used
-locally.  Instead we import the target module as ``_base`` and re-export the
-attributes we wish to expose.  This avoids linter warnings while maintaining a
-clear mapping to the original implementation.
+This module exposes the constant classes and helper validation functions
+defined in :mod:`legal_ai_system.core.constants`.  Prior revisions chained
+imports through ``legal_ai_system.config.constants`` which duplicated code and
+confused static analyzers.  The constants are now loaded directly from the core
+implementation to provide a single authoritative source.
 """
 
-from legal_ai_system.config import constants as _base
+from legal_ai_system.core import constants as _base
 
 
 # Re-export the public constants classes and validators from ``_base``.

@@ -488,11 +488,47 @@ function AgentManagement() {
 
 // Workflow Designer
 function WorkflowDesigner() {
-  const [workflows] = useState([
-    { id: 1, name: 'Document Analysis Pipeline', status: 'active', steps: 5, lastRun: '2 hours ago' },
-    { id: 2, name: 'Entity Extraction Workflow', status: 'active', steps: 3, lastRun: '30 min ago' },
-    { id: 3, name: 'Legal Violation Detection', status: 'inactive', steps: 7, lastRun: '1 day ago' }
-  ]);
+  const [workflows, setWorkflows] = useState<any[]>([]);
+  const [selected, setSelected] = useState<any>(null);
+  const [name, setName] = useState('');
+  const [enableNER, setEnableNER] = useState(true);
+  const [enableLLM, setEnableLLM] = useState(true);
+  const [confidence, setConfidence] = useState(0.7);
+
+  useEffect(() => {
+    fetch('/api/v1/workflows')
+      .then(res => res.json())
+      .then(data => setWorkflows(Array.isArray(data) ? data : []))
+      .catch(() => setWorkflows([]));
+  }, []);
+
+  const editWorkflow = (wf: any) => {
+    setSelected(wf);
+    setName(wf.name || '');
+    setEnableNER(wf.enable_ner ?? true);
+    setEnableLLM(wf.enable_llm_extraction ?? true);
+    setConfidence(wf.confidence_threshold ?? 0.7);
+  };
+
+  const saveWorkflow = () => {
+    const payload = {
+      name,
+      enable_ner: enableNER,
+      enable_llm_extraction: enableLLM,
+      confidence_threshold: confidence
+    };
+    const url = selected ? `/api/v1/workflows/${selected.id}` : '/api/v1/workflows';
+    const method = selected ? 'PUT' : 'POST';
+    fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      .then(res => res.json())
+      .then(() => {
+        setSelected(null);
+        setName('');
+        fetch('/api/v1/workflows')
+          .then(res => res.json())
+          .then(data => setWorkflows(Array.isArray(data) ? data : []));
+      });
+  };
 
   // Available component choices. In a real app this would be fetched from the
   // backend via ``AGENT_CLASS_REGISTRY``.
@@ -524,20 +560,14 @@ function WorkflowDesigner() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">Workflow Designer</h2>
-        <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2">
+        <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2" onClick={() => { setSelected(null); setName(''); }}>
           <Plus className="w-4 h-4" />
           Create Workflow
         </button>
       </div>
 
-      {/* Workflow Canvas */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-lg font-semibold mb-4">Workflow Canvas</h3>
-        <div className="h-96 bg-gray-50 rounded border-2 border-dashed border-gray-300 flex items-center justify-center">
-          <div className="text-center">
-            <Workflow className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-500">Drag and drop components to design workflow</p>
-          </div>
+      {/* Workflow Settings */}
+
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
           {Object.keys(componentOptions).map(key => (
@@ -569,21 +599,10 @@ function WorkflowDesigner() {
             <div key={workflow.id} className="border rounded-lg p-4 flex items-center justify-between">
               <div>
                 <div className="font-medium">{workflow.name}</div>
-                <div className="text-sm text-gray-500">
-                  {workflow.steps} steps • Last run: {workflow.lastRun}
-                </div>
               </div>
               <div className="flex items-center gap-3">
-                <span className={`text-sm px-2 py-1 rounded ${
-                  workflow.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
-                }`}>
-                  {workflow.status}
-                </span>
-                <button className="p-2 hover:bg-gray-100 rounded">
+                <button className="p-2 hover:bg-gray-100 rounded" onClick={() => editWorkflow(workflow)}>
                   <Edit className="w-4 h-4" />
-                </button>
-                <button className="p-2 hover:bg-gray-100 rounded">
-                  <Play className="w-4 h-4" />
                 </button>
               </div>
             </div>

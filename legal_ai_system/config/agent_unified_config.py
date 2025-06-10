@@ -13,9 +13,6 @@ from ..core.agent_unified_config import (
     validate_agent_setup,  # noqa: F401
 )
 
-# Expose mapping of available agent implementations so workflows can look them
-# up dynamically.  New agent versions can be registered here and referenced by
-# name in :class:`WorkflowConfig`.
 from ..agents.document_processor_agent import DocumentProcessorAgent
 from ..agents.document_rewriter_agent import DocumentRewriterAgent
 from ..agents.ontology_extraction_agent import OntologyExtractionAgent
@@ -24,7 +21,6 @@ from ..services.realtime_graph_manager import RealTimeGraphManager
 from ..core.optimized_vector_store import OptimizedVectorStore
 from ..utils.reviewable_memory import ReviewableMemory
 
-AGENT_CLASS_REGISTRY = {
     "DocumentProcessorAgent": DocumentProcessorAgent,
     "DocumentRewriterAgent": DocumentRewriterAgent,
     "OntologyExtractionAgent": OntologyExtractionAgent,
@@ -41,5 +37,5 @@ __all__ = [
     "get_agent_configuration_status",
     "setup_agents_example",
     "validate_agent_setup",
-    "AGENT_CLASS_REGISTRY",
+
 ]
