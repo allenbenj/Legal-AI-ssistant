@@ -78,3 +78,28 @@ if __name__ == "__main__":
 ```
 
 
+## Document Processor V2
+
+`DocumentProcessorAgentV2` outputs a `MultiModalDocument` that unifies text, images, tables and optional audio or video data. The agent also offers helpers for specialized legal workflows:
+
+- `process_video_depositions(path)` &ndash; returns a `DepositionTranscript` with timestamped segments.
+- `process_legal_forms(path)` &ndash; extracts form fields into a `StructuredForm`.
+- `process_contract_redlines(path)` &ndash; summarizes revisions into a `RedlineAnalysis`.
+
+### Example
+
+```python
+import asyncio
+from pathlib import Path
+from legal_ai_system.agents.document_processor_agent_v2 import DocumentProcessorAgentV2
+
+async def main() -> None:
+    agent = DocumentProcessorAgentV2()
+    transcript = await agent.process_video_depositions(Path("deposition.mp4"))
+    form_data = await agent.process_legal_forms(Path("form.pdf"))
+    redline = await agent.process_contract_redlines(Path("contract.docx"))
+    print(transcript, form_data, redline)
+
+asyncio.run(main())
+```
+
