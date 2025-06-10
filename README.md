@@ -33,4 +33,8 @@ npm install
 npm run build
 ```
 
+## Knowledge Graph Reasoning Agent
+
+Refer to [docs/knowledge_graph_reasoning_agent.md](docs/knowledge_graph_reasoning_agent.md) for configuration parameters and usage examples of the `KnowledgeGraphReasoningAgent`.
+
 
