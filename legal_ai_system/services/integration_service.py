@@ -75,7 +75,21 @@ class LegalAIIntegrationService:
         user_id: str,
         options: Optional[Dict[str, Any]] = None,
     ) -> None:
-        """Persist metadata for an uploaded document."""
+        """Persist metadata for an uploaded document.
+
+        Parameters
+        ----------
+        document_id : str
+            Identifier assigned to the uploaded document.
+        filename : str
+            Original filename provided by the client.
+        file_path : Path
+            Location on disk where the file was stored.
+        user_id : str
+            ID of the authenticated user uploading the file.
+        options : Dict[str, Any], optional
+            Additional metadata provided with the upload.
+        """
         if not self.persistence_manager:
             self.persistence_manager = await self.service_container.get_service(
                 "persistence_manager"
@@ -98,6 +112,9 @@ class LegalAIIntegrationService:
             file_size = 0
             file_hash = None
 
+        metadata = dict(options or {})
+        metadata.setdefault("user_id", user_id)
+
         try:
             async with persistence.connection_pool.get_pg_connection() as conn:
                 await conn.execute(
@@ -119,7 +136,7 @@ class LegalAIIntegrationService:
                     file_type,
                     file_hash,
                     "upload",
-                    json.dumps(options or {}),
+                    json.dumps(metadata),
                 )
             integration_service_logger.debug(
                 "Document record created.", parameters={"document_id": document_id}
