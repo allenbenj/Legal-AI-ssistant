@@ -1,6 +1,10 @@
 # Advanced LangGraph Workflows
 
-This page describes how to enable and use the optional `langgraph` package for more complex document processing flows. LangGraph allows the system to route documents through specialized subgraphs based on classification results and exposes real‑time progress events over WebSocket.
+This page explains how to enable and use the optional `langgraph` package for
+the enhanced workflow engine. When installed, LangGraph adds document
+classification routing so each document flows through a specialized subgraph and
+emits real-time progress events over WebSocket. The example `CaseWorkflowState`
+shows how to pass state through the graph.
 
 ## Installation
 
@@ -66,4 +70,7 @@ result = workflow.run(CaseWorkflowState(document_id="123"))
 ```
 
 This pattern allows every stage to augment the state and makes the entire workflow easily inspectable.
+
+For integration steps see [integration_plan.md](integration_plan.md). The overall
+service layout is described in [system_layout.md](system_layout.md).
 

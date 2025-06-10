@@ -86,7 +86,9 @@ During processing:
 
 LangGraph based workflows use `AnalysisNode` and `SummaryNode` (see `agents/agent_nodes.py`) which internally retrieve the integration service via the service container to run analysis or summarization.  This allows complex graphs of tasks to be executed with consistent resource management.
 
-For a deep dive into classification routing and specialized subgraphs see [advanced_langgraph.md](advanced_langgraph.md).
+For a deep dive into the enhanced LangGraph workflow, including classification
+routing, specialized subgraphs, and the `CaseWorkflowState` model, see
+[advanced_langgraph.md](advanced_langgraph.md).
 
 ### Typed Workflow Engine
 
