@@ -5,12 +5,13 @@
 # as LLM providers for the Legal AI System.
 
 
-from typing import Dict, Any, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
+
+from .llm_providers import LLMConfig, LLMProviderEnum
 
 # Simplified imports from local modules. These modules are part of the
 # ``legal_ai_system`` package, so standard relative imports are sufficient.
 from .settings import LegalAISettings
-from .llm_providers import LLMConfig, BaseLLMProvider, LLMProviderEnum
 
 # Grok model configurations
 GROK_MODELS_CONFIG: Dict[str, Dict[str, Any]] = {
@@ -20,7 +21,7 @@ GROK_MODELS_CONFIG: Dict[str, Dict[str, Any]] = {
         "max_tokens": 4096,
         "temperature": 0.7,
         "use_case": "Fast, efficient legal analysis",
-        "reasoning": False
+        "reasoning": False,
     },
     "grok-3-reasoning": {
         "model_name": "grok-3-reasoning",
@@ -28,7 +29,7 @@ GROK_MODELS_CONFIG: Dict[str, Dict[str, Any]] = {
         "max_tokens": 4096,
         "temperature": 0.7,  # Potentially lower for reasoning tasks
         "use_case": "Complex legal reasoning and analysis",
-        "reasoning": True
+        "reasoning": True,
     },
     "grok-2-1212": {  # Assuming this is another model, ensure its name is accurate
         "model_name": "grok-2-1212",  # Placeholder name, update if different
@@ -36,8 +37,8 @@ GROK_MODELS_CONFIG: Dict[str, Dict[str, Any]] = {
         "max_tokens": 4096,
         "temperature": 0.7,
         "use_case": "Balanced performance and reasoning",
-        "reasoning": False  # Or True, depending on the model's capability
-    }
+        "reasoning": False,  # Or True, depending on the model's capability
+    },
 }
 
 # Default configuration (can be switched at runtime)
@@ -62,9 +63,9 @@ RATE_LIMITS: Dict[str, Union[int, float]] = {  # type: ignore[valid-type]
 
 
 def create_grok_config(
-    model_name: Optional[str] = None,  # Optional model_name
+    model_name: Optional[str] = None,
     api_key: Optional[str] = None,
-    base_url: str = "https://api.x.ai/v1"
+    base_url: Optional[str] = "https://api.x.ai/v1",
 ) -> LLMConfig:
     """
     Create optimized LLMConfig for any Grok model.
@@ -72,7 +73,7 @@ def create_grok_config(
     Args:
         model_name: Grok model name (e.g., "grok-3-mini"). Defaults to DEFAULT_GROK_MODEL.
         api_key: Your xAI API key.
-        base_url: xAI API endpoint.
+        base_url: Optional custom xAI API endpoint.
 
     Returns:
         LLMConfig optimized for the specified Grok model.
@@ -81,7 +82,8 @@ def create_grok_config(
 
     if resolved_model_name not in GROK_MODELS_CONFIG:
         raise ValueError(
-            f"Unknown Grok model: {resolved_model_name}. Available: {list(GROK_MODELS_CONFIG.keys())}")
+            f"Unknown Grok model: {resolved_model_name}. Available: {list(GROK_MODELS_CONFIG.keys())}"
+        )
 
     model_specific_config = GROK_MODELS_CONFIG[resolved_model_name]
 
@@ -94,13 +96,16 @@ def create_grok_config(
         max_tokens=model_specific_config["max_tokens"],
         timeout=int(RATE_LIMITS["timeout"]),  # Ensure int
         retry_attempts=int(RATE_LIMITS["retry_attempts"]),  # Ensure int
-        retry_delay=float(RATE_LIMITS["retry_delay"])  # Ensure float
+        retry_delay=float(RATE_LIMITS["retry_delay"]),  # Ensure float
     )
+
 
 # Backward compatibility
 
 
-def create_grok_3_mini_config(api_key: str, base_url: str = "https://api.x.ai/v1") -> LLMConfig:
+def create_grok_3_mini_config(
+    api_key: str, base_url: str = "https://api.x.ai/v1"
+) -> LLMConfig:
     """Backward compatibility function for Grok-3-Mini."""
     return create_grok_config("grok-3-mini", api_key, base_url)
 
@@ -116,7 +121,8 @@ def get_grok_primary_settings() -> Dict[str, Any]:
     """
     if DEFAULT_GROK_MODEL not in GROK_MODELS_CONFIG:
         raise ValueError(
-            f"Default Grok model '{DEFAULT_GROK_MODEL}' not found in configurations.")
+            f"Default Grok model '{DEFAULT_GROK_MODEL}' not found in configurations."
+        )
 
     default_model_config = GROK_MODELS_CONFIG[DEFAULT_GROK_MODEL]
 
@@ -126,22 +132,18 @@ def get_grok_primary_settings() -> Dict[str, Any]:
         "llm_model": default_model_config["model_name"],
         "llm_temperature": default_model_config["temperature"],
         "llm_max_tokens": default_model_config["max_tokens"],
-
         # xAI specific settings
         # Redundant with llm_model if provider is xai
         "xai_model": default_model_config["model_name"],
         "xai_base_url": "https://api.x.ai/v1",
-
         # Fallback to Ollama for privacy-sensitive operations or if xAI fails
         "fallback_provider": "ollama",
         "fallback_model": "llama3.2",  # Example fallback
-
         # Optimized context management for the default Grok model
         # Leave buffer (e.g. 75%)
         "max_context_tokens": int(default_model_config["context_length"] * 0.75),
         # Summarize if >50% context
         "auto_summarize_threshold": int(default_model_config["context_length"] * 0.5),
-
         # Performance optimizations (consider rate limits)
         "max_concurrent_documents": 2,  # Conservative for rate limits
         "batch_size": 5,  # Depends on task, may not apply to all LLM calls
@@ -149,7 +151,9 @@ def get_grok_primary_settings() -> Dict[str, Any]:
 
 
 # Allow specifying model
-def create_grok_legal_settings(api_key: str, model_name: Optional[str] = None) -> LegalAISettings:
+def create_grok_legal_settings(
+    api_key: str, model_name: Optional[str] = None
+) -> LegalAISettings:
     """
     Create complete LegalAISettings optimized for a specific Grok model.
 
@@ -163,7 +167,8 @@ def create_grok_legal_settings(api_key: str, model_name: Optional[str] = None) -
     target_model = model_name or DEFAULT_GROK_MODEL
     if target_model not in GROK_MODELS_CONFIG:
         raise ValueError(
-            f"Target Grok model '{target_model}' not found in configurations.")
+            f"Target Grok model '{target_model}' not found in configurations."
+        )
 
     model_specific_config = GROK_MODELS_CONFIG[target_model]
 
@@ -176,20 +181,25 @@ def create_grok_legal_settings(api_key: str, model_name: Optional[str] = None) -
     settings_dict["llm_max_tokens"] = model_specific_config["max_tokens"]
     settings_dict["xai_model"] = model_specific_config["model_name"]
     settings_dict["max_context_tokens"] = int(
-        model_specific_config["context_length"] * 0.75)
+        model_specific_config["context_length"] * 0.75
+    )
     settings_dict["auto_summarize_threshold"] = int(
-        model_specific_config["context_length"] * 0.5)
+        model_specific_config["context_length"] * 0.5
+    )
 
     # Add API key
     settings_dict["xai_api_key"] = api_key
 
     return LegalAISettings(**settings_dict)
 
+
 # Model switching functionality
 
 
 # Renamed parameter
-def switch_grok_model_config(current_config: LLMConfig, new_model_name: str) -> LLMConfig:
+def switch_grok_model_config(
+    current_config: LLMConfig, new_model_name: str
+) -> LLMConfig:
     """
     Switch to a different Grok model while preserving other settings like API key and base URL.
 
@@ -202,12 +212,13 @@ def switch_grok_model_config(current_config: LLMConfig, new_model_name: str) -> 
     """
     if current_config.provider != LLMProviderEnum.XAI:
         raise ValueError(
-            "Current config must be for XAI provider to switch Grok models.")
+            "Current config must be for XAI provider to switch Grok models."
+        )
 
     return create_grok_config(
         model_name=new_model_name,
         api_key=current_config.api_key,
-        base_url=current_config.base_url
+        base_url=current_config.base_url,
     )
 
 
@@ -257,7 +268,6 @@ GROK_PROMPTS: Dict[str, str] = {
     
     Provide a structured analysis with citations and reasoning.
     """,
-
     "legal_analysis_reasoning": """
     You are a legal AI assistant with advanced reasoning capabilities. Analyze the following legal document step-by-step.
     
@@ -275,7 +285,6 @@ GROK_PROMPTS: Dict[str, str] = {
     
     Think through each step carefully and provide detailed reasoning for your conclusions.
     """,
-
     "violation_detection": """
     As a legal expert, examine this document for potential legal violations.
     
@@ -294,7 +303,6 @@ GROK_PROMPTS: Dict[str, str] = {
     3. Relevant legal standards
     4. Severity assessment
     """,
-
     "violation_detection_reasoning": """
     As a legal expert with step-by-step reasoning capabilities, systematically examine this document for potential legal violations.
     
@@ -313,7 +321,6 @@ GROK_PROMPTS: Dict[str, str] = {
     
     Work through each step methodically, explaining your reasoning for each potential violation identified.
     """,
-
     "citation_formatting": """
     Format the following legal citations according to Bluebook style.
     Be extremely precise with formatting, punctuation, and abbreviations.
@@ -323,7 +330,6 @@ GROK_PROMPTS: Dict[str, str] = {
     
     Return only the properly formatted citations.
     """,
-
     "document_summary": """
     Summarize this legal document concisely but comprehensively.
     Include key parties, issues, holdings, and implications.
@@ -337,11 +343,13 @@ GROK_PROMPTS: Dict[str, str] = {
     - Main arguments
     - Conclusions/Holdings
     - Implications
-    """
+    """,
 }
 
 
-def get_optimized_prompt(prompt_type: str, model_name: Optional[str] = None, **kwargs) -> str:
+def get_optimized_prompt(
+    prompt_type: str, model_name: Optional[str] = None, **kwargs
+) -> str:
     """
     Get optimized prompt for specific task and model.
 
@@ -366,7 +374,8 @@ def get_optimized_prompt(prompt_type: str, model_name: Optional[str] = None, **k
     # Fall back to standard prompt
     if prompt_type not in GROK_PROMPTS:
         raise ValueError(
-            f"Unknown prompt type: {prompt_type}. Available: {list(GROK_PROMPTS.keys())}")
+            f"Unknown prompt type: {prompt_type}. Available: {list(GROK_PROMPTS.keys())}"
+        )
 
     return GROK_PROMPTS[prompt_type].format(**kwargs)
 
@@ -375,11 +384,12 @@ def get_available_prompt_types() -> List[str]:
     """Get list of available base prompt types (without _reasoning suffix)."""
     base_types = set()
     for prompt_key in GROK_PROMPTS.keys():
-        if prompt_key.endswith('_reasoning'):
-            base_types.add(prompt_key[:-len('_reasoning')])
+        if prompt_key.endswith("_reasoning"):
+            base_types.add(prompt_key[: -len("_reasoning")])
         else:
             base_types.add(prompt_key)
     return sorted(list(base_types))
+
 
 # Usage example for setting up Grok-3-Mini configuration as primary
 
@@ -395,12 +405,12 @@ def setup_default_grok_system(api_key: str) -> Dict[str, Any]:
         Dictionary with LLMConfig, LegalAISettings, available prompts, and notes.
     """
     llm_config = create_grok_config(api_key=api_key)  # Uses DEFAULT_GROK_MODEL
-    settings = create_grok_legal_settings(
-        api_key=api_key)  # Uses DEFAULT_GROK_MODEL
+    settings = create_grok_legal_settings(api_key=api_key)  # Uses DEFAULT_GROK_MODEL
 
     if DEFAULT_GROK_MODEL not in GROK_MODELS_CONFIG:
         raise ValueError(
-            f"Default Grok model '{DEFAULT_GROK_MODEL}' is not defined in GROK_MODELS_CONFIG.")
+            f"Default Grok model '{DEFAULT_GROK_MODEL}' is not defined in GROK_MODELS_CONFIG."
+        )
     default_model_details = GROK_MODELS_CONFIG[DEFAULT_GROK_MODEL]
 
     return {
@@ -412,8 +422,8 @@ def setup_default_grok_system(api_key: str) -> Dict[str, Any]:
             f"Context window: {default_model_details['context_length']} tokens.",
             f"Primary use case: {default_model_details['use_case']}.",
             "Lower temperature settings generally recommended for legal precision.",
-            "Ollama fallback configured for sensitive documents or API issues."
-        ]
+            "Ollama fallback configured for sensitive documents or API issues.",
+        ],
     }
 
 
