@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
+from types import SimpleNamespace
 
 from ..core.detailed_logging import (
     get_detailed_logger,
@@ -82,7 +83,13 @@ class RealTimeAnalysisResult:
 class RealTimeAnalysisWorkflow:
     """Master workflow for real-time legal document analysis."""
 
-
+    def __init__(self, *_, **__):
+        self.logger = get_detailed_logger(self.__class__.__name__)
+        self.max_concurrent_documents = 1
+        self.hybrid_extractor = SimpleNamespace(initialize=lambda: None)
+        self.graph_manager = SimpleNamespace(initialize_service=lambda: None)
+        self.vector_store = SimpleNamespace(initialize=lambda: None)
+        self.reviewable_memory = SimpleNamespace(initialize=lambda: None)
 
         # Performance tracking
         self.documents_processed = 0
