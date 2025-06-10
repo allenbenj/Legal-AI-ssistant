@@ -23,13 +23,16 @@ for name in [
     "asyncpg",
     "legal_ai_system.utils.user_repository",
     "legal_ai_system.services.security_manager",
-    "legal_ai_system.services.service_container",
     "legal_ai_system.services.workflow_orchestrator",
     "legal_ai_system.services.realtime_analysis_workflow",
     "yaml",
 ]:
     if name not in sys.modules:
         sys.modules[name] = ModuleType(name)
+
+sys.modules["legal_ai_system.services.realtime_analysis_workflow"].RealTimeAnalysisWorkflow = object
+
+# Stub package with submodule used by memory_manager
 
 sys.modules["faiss"].StandardGpuResources = object
 sys.modules["faiss"].index_cpu_to_gpu = lambda *a, **k: None
@@ -67,10 +70,6 @@ sec_mod.SecurityManager = object
 sec_mod.User = User
 sys.modules["legal_ai_system.utils.user_repository"].UserRepository = object
 
-svc_mod = sys.modules["legal_ai_system.services.service_container"]
-class ServiceContainer:
-    pass
-svc_mod.ServiceContainer = ServiceContainer
 
 sys.modules["legal_ai_system.services.workflow_orchestrator"].WorkflowOrchestrator = object
 

@@ -1,5 +1,16 @@
 import asyncio
+import sys
+from types import ModuleType
+
 import pytest
+
+# Stub heavy realtime workflow dependency before importing service_container
+stub = sys.modules.setdefault(
+    "legal_ai_system.services.realtime_analysis_workflow",
+    ModuleType("legal_ai_system.services.realtime_analysis_workflow"),
+)
+if not hasattr(stub, "RealTimeAnalysisWorkflow"):
+    stub.RealTimeAnalysisWorkflow = object
 
 from legal_ai_system.services.service_container import ServiceContainer
 

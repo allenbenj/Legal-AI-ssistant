@@ -55,6 +55,7 @@ try:
         RealTimeAnalysisResult,
     )
 except Exception:  # pragma: no cover - optional dependency may be missing
+    sys.modules.pop("legal_ai_system.services.service_container", None)
     pytest.skip("workflow module unavailable", allow_module_level=True)
 
 
@@ -158,4 +159,7 @@ async def test_process_document_realtime_uses_provided_document_id() -> None:
     )
 
     assert result.document_id == "custom_id"
+
+
+sys.modules.pop("legal_ai_system.services.service_container", None)
 
