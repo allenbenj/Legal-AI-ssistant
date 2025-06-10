@@ -219,37 +219,70 @@ class DetailedLogger:
 
         return entry
 
+    def _build_extra(
+        self, entry: DetailedLogEntry, extra: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """Construct extra dictionary for LogRecord."""
+        base_extra = {
+            "category_val": entry.category,
+            "parameters_val": entry.parameters,
+            "result_val": entry.result,
+            "execution_time_val": entry.execution_time,
+            "error_details_val": entry.error_details,
+        }
+        if extra:
+            base_extra.update(extra)
+        return base_extra
+
     def trace(
-        self, message: str, parameters: Optional[Dict[str, Any]] = None, **kwargs
-    ):  # Added parameters for direct use
+        self,
+        message: str,
+        parameters: Optional[Dict[str, Any]] = None,
+        *,
+        extra: Optional[Dict[str, Any]] = None,
+        **kwargs,
+    ):
         """Most detailed logging - every operation"""
         kwargs["parameters"] = parameters
         entry = self._create_log_entry(LogLevel.TRACE, message, **kwargs)
         self.logger.log(
             LogLevel.TRACE.value,
             f"[{self.category.value}] {message} {json.dumps(entry.parameters) if entry.parameters else ''}",
+            extra=self._build_extra(entry, extra),
         )
         return entry
 
     def debug(
-        self, message: str, parameters: Optional[Dict[str, Any]] = None, **kwargs
-    ):  # Added parameters
+        self,
+        message: str,
+        parameters: Optional[Dict[str, Any]] = None,
+        *,
+        extra: Optional[Dict[str, Any]] = None,
+        **kwargs,
+    ):
         """Debug level - function calls and parameters"""
         kwargs["parameters"] = parameters
         entry = self._create_log_entry(LogLevel.DEBUG, message, **kwargs)
         self.logger.debug(
-            f"[{self.category.value}] {message} {json.dumps(entry.parameters) if entry.parameters else ''}"
+            f"[{self.category.value}] {message} {json.dumps(entry.parameters) if entry.parameters else ''}",
+            extra=self._build_extra(entry, extra),
         )
         return entry
 
     def info(
-        self, message: str, parameters: Optional[Dict[str, Any]] = None, **kwargs
-    ):  # Added parameters
+        self,
+        message: str,
+        parameters: Optional[Dict[str, Any]] = None,
+        *,
+        extra: Optional[Dict[str, Any]] = None,
+        **kwargs,
+    ):
         """Info level - normal operation flow"""
         kwargs["parameters"] = parameters
         entry = self._create_log_entry(LogLevel.INFO, message, **kwargs)
         self.logger.info(
-            f"[{self.category.value}] {message} {json.dumps(entry.parameters) if entry.parameters else ''}"
+            f"[{self.category.value}] {message} {json.dumps(entry.parameters) if entry.parameters else ''}",
+            extra=self._build_extra(entry, extra),
         )
         return entry
 
@@ -258,8 +291,10 @@ class DetailedLogger:
         message: str,
         parameters: Optional[Dict[str, Any]] = None,
         exception: Optional[Exception] = None,
+        *,
+        extra: Optional[Dict[str, Any]] = None,
         **kwargs,
-    ):  # Added parameters and exception
+    ):
         """Warning level - recoverable issues"""
         kwargs["parameters"] = parameters
         if exception:
@@ -271,6 +306,7 @@ class DetailedLogger:
         self.logger.warning(
             f"[{self.category.value}] {message} {json.dumps(entry.parameters) if entry.parameters else ''}",
             exc_info=exception is not None,
+            extra=self._build_extra(entry, extra),
         )
         return entry
 
@@ -279,8 +315,10 @@ class DetailedLogger:
         message: str,
         parameters: Optional[Dict[str, Any]] = None,
         exception: Optional[Exception] = None,
+        *,
+        extra: Optional[Dict[str, Any]] = None,
         **kwargs,
-    ):  # Added parameters
+    ):
         """Error level - error conditions"""
         kwargs["parameters"] = parameters
         error_details_payload = {}
@@ -296,6 +334,7 @@ class DetailedLogger:
         self.logger.error(
             f"[{self.category.value}] {message} {json.dumps(entry.parameters) if entry.parameters else ''}",
             exc_info=exception is not None,
+            extra=self._build_extra(entry, extra),
         )
         return entry
 
@@ -304,8 +343,10 @@ class DetailedLogger:
         message: str,
         parameters: Optional[Dict[str, Any]] = None,
         exception: Optional[Exception] = None,
+        *,
+        extra: Optional[Dict[str, Any]] = None,
         **kwargs,
-    ):  # Added parameters
+    ):
         """Critical level - system failure"""
         kwargs["parameters"] = parameters
         error_details_payload = {}
@@ -321,6 +362,7 @@ class DetailedLogger:
         self.logger.critical(
             f"[{self.category.value}] {message} {json.dumps(entry.parameters) if entry.parameters else ''}",
             exc_info=exception is not None,
+            extra=self._build_extra(entry, extra),
         )
         return entry
 
