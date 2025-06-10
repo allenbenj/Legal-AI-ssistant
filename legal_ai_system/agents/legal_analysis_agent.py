@@ -17,6 +17,7 @@ from ..utils.ontology import LegalEntityType  # Assuming LegalEntityType is an E
 from ..core.llm_providers import LLMManager, LLMProviderError, LLMProviderEnum
 from ..core.model_switcher import ModelSwitcher, TaskComplexity
 from ..core.agent_unified_config import create_agent_memory_mixin
+from ..utils.json_utils import extract_json_from_llm_response
 
 # Create memory mixin for agents
 MemoryMixin = create_agent_memory_mixin()
@@ -206,17 +207,11 @@ Ensure thorough analysis with high confidence scores (≥{min_confidence}). Focu
 
     def _parse_analysis_response(self, response_content: str) -> Dict[str, Any]:
         """Parse LLM response into structured analysis data."""
-        # ... (logic remains similar, ensure robust JSON parsing)
         try:
-            json_content = response_content
-            if '```json' in response_content:
-                json_content = response_content.split('```json')[1].split('```')[0]
-            elif '```' in response_content and response_content.strip().startswith('```') and response_content.strip().endswith('```'):
-                json_content = response_content.strip()[3:-3]
-            
-            parsed_data = json.loads(json_content.strip())
-            
-            # Basic validation and normalization
+            parsed_data = extract_json_from_llm_response(response_content)
+            if not parsed_data:
+                raise ValueError("No JSON content found")
+
             validated_data = {
                 'irac_summary': parsed_data.get('irac_summary', {}),
                 'contradictions': self._validate_list_of_dicts(parsed_data.get('contradictions', [])),
@@ -225,19 +220,27 @@ Ensure thorough analysis with high confidence scores (≥{min_confidence}). Focu
                 'overall_confidence': float(parsed_data.get('overall_confidence', 0.0)),
                 'analysis_notes': parsed_data.get('analysis_notes', '')
             }
-            # Ensure IRAC summary has default components
             irac = validated_data['irac_summary']
-            if not isinstance(irac, dict): irac = {}; validated_data['irac_summary'] = irac
+            if not isinstance(irac, dict):
+                irac = {}
+                validated_data['irac_summary'] = irac
             for comp in ['issues', 'rules', 'application', 'conclusion']:
-                if comp not in irac: irac[comp] = [] if comp in ['issues', 'rules'] else ""
-            
+                if comp not in irac:
+                    irac[comp] = [] if comp in ['issues', 'rules'] else ""
+
             return validated_data
-        except (json.JSONDecodeError, ValueError, TypeError) as e:
-            self.logger.warning(f"Failed to parse LLM analysis response. Content: {response_content[:200]}...", exception=e)
-            return { # Return default structure
-                'irac_summary': {'issues': [], 'rules': [], 'application': "", 'conclusion': ""},
-                'contradictions': [], 'causal_chains': [], 'legal_concepts': [], 'overall_confidence': 0.0,
-                'analysis_notes': f"Response parsing error: {str(e)}"
+        except (ValueError, TypeError) as e:
+            self.logger.warning(
+                f"Failed to parse LLM analysis response. Content: {response_content[:200]}...",
+                exception=e,
+            )
+            return {
+                'irac_summary': {'issues': [], 'rules': [], 'application': '', 'conclusion': ''},
+                'contradictions': [],
+                'causal_chains': [],
+                'legal_concepts': [],
+                'overall_confidence': 0.0,
+                'analysis_notes': f"Response parsing error: {str(e)}",
             }
 
     def _validate_list_of_dicts(self, data_list: Any) -> List[Dict[str, Any]]:
