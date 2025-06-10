@@ -488,34 +488,96 @@ function AgentManagement() {
 
 // Workflow Designer
 function WorkflowDesigner() {
-  const [workflows] = useState([
-    { id: 1, name: 'Document Analysis Pipeline', status: 'active', steps: 5, lastRun: '2 hours ago' },
-    { id: 2, name: 'Entity Extraction Workflow', status: 'active', steps: 3, lastRun: '30 min ago' },
-    { id: 3, name: 'Legal Violation Detection', status: 'inactive', steps: 7, lastRun: '1 day ago' }
-  ]);
+  const [workflows, setWorkflows] = useState<any[]>([]);
+  const [selected, setSelected] = useState<any | null>(null);
+  const [enableNer, setEnableNer] = useState(true);
+  const [enableLlm, setEnableLlm] = useState(true);
+  const [confidence, setConfidence] = useState(0.75);
+
+  useEffect(() => {
+    fetch('/api/v1/workflows')
+      .then(res => res.json())
+      .then(data => setWorkflows(Array.isArray(data) ? data : []));
+  }, []);
+
+  const editWorkflow = (wf: any) => {
+    setSelected(wf);
+    setEnableNer(wf?.config?.enable_ner ?? true);
+    setEnableLlm(wf?.config?.enable_llm_extraction ?? true);
+    setConfidence(wf?.config?.confidence_threshold ?? 0.75);
+  };
+
+  const saveWorkflow = () => {
+    const body = {
+      id: selected?.id,
+      name: selected?.name || 'New Workflow',
+      config: {
+        enable_ner: enableNer,
+        enable_llm_extraction: enableLlm,
+        confidence_threshold: confidence,
+      },
+    };
+    fetch(`/api/v1/workflows${selected?.id ? '/' + selected.id : ''}`, {
+      method: selected?.id ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+      .then(res => res.json())
+      .then(() => {
+        fetch('/api/v1/workflows')
+          .then(res => res.json())
+          .then(data => setWorkflows(Array.isArray(data) ? data : []));
+      });
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">Workflow Designer</h2>
-        <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2">
+        <button
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+          onClick={() => editWorkflow({ name: 'New Workflow', config: {} })}
+        >
           <Plus className="w-4 h-4" />
           Create Workflow
         </button>
       </div>
 
-      {/* Workflow Canvas */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-lg font-semibold mb-4">Workflow Canvas</h3>
-        <div className="h-96 bg-gray-50 rounded border-2 border-dashed border-gray-300 flex items-center justify-center">
-          <div className="text-center">
-            <Workflow className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-500">Drag and drop components to design workflow</p>
+      {selected && (
+        <div className="bg-white rounded-lg shadow p-6 space-y-4">
+          <h3 className="text-lg font-semibold">{selected.name}</h3>
+          <div className="flex items-center gap-4">
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={enableNer} onChange={e => setEnableNer(e.target.checked)} />
+              NER
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={enableLlm} onChange={e => setEnableLlm(e.target.checked)} />
+              LLM Extraction
+            </label>
+            <div className="flex items-center gap-2">
+              <span>Confidence</span>
+              <input
+                type="number"
+                min={0}
+                max={1}
+                step={0.05}
+                value={confidence}
+                onChange={e => setConfidence(parseFloat(e.target.value))}
+                className="border rounded px-2 py-1 w-24"
+              />
+            </div>
+            <button
+              onClick={saveWorkflow}
+              className="ml-auto px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
+            >
+              <Save className="w-4 h-4" />
+              Save Workflow
+            </button>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Saved Workflows */}
       <div className="bg-white rounded-lg shadow">
         <div className="p-6 border-b">
           <h3 className="text-lg font-semibold">Saved Workflows</h3>
@@ -525,17 +587,9 @@ function WorkflowDesigner() {
             <div key={workflow.id} className="border rounded-lg p-4 flex items-center justify-between">
               <div>
                 <div className="font-medium">{workflow.name}</div>
-                <div className="text-sm text-gray-500">
-                  {workflow.steps} steps • Last run: {workflow.lastRun}
-                </div>
               </div>
               <div className="flex items-center gap-3">
-                <span className={`text-sm px-2 py-1 rounded ${
-                  workflow.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
-                }`}>
-                  {workflow.status}
-                </span>
-                <button className="p-2 hover:bg-gray-100 rounded">
+                <button className="p-2 hover:bg-gray-100 rounded" onClick={() => editWorkflow(workflow)}>
                   <Edit className="w-4 h-4" />
                 </button>
                 <button className="p-2 hover:bg-gray-100 rounded">

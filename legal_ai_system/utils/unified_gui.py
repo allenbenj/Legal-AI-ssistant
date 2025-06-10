@@ -263,6 +263,59 @@ class DocumentProcessorTab:
                     st.switch_page("Analysis Dashboard")
 
 
+class WorkflowDesignerTab:
+    """Workflow Designer Tab - Configure analysis workflows"""
+
+    @staticmethod
+    def render():
+        st.header("🛠️ Workflow Designer")
+        SessionManager.init_session_state()
+        api_client = SessionManager.get_api_client()
+
+        workflows = api_client.list_workflows()
+        workflow_names = [w.get("name", f"Workflow {w.get('id')}") for w in workflows]
+        selected_name = st.selectbox(
+            "Select Workflow", ["New Workflow"] + workflow_names
+        )
+
+        if selected_name == "New Workflow":
+            workflow = {"config": {}}
+        else:
+            workflow = workflows[workflow_names.index(selected_name)]
+
+        config = workflow.get("config", {})
+
+        enable_ner = st.checkbox("Enable NER", value=config.get("enable_ner", True))
+        enable_llm = st.checkbox(
+            "Enable LLM Extraction",
+            value=config.get("enable_llm_extraction", True),
+        )
+        confidence = st.slider(
+            "Confidence Threshold",
+            0.0,
+            1.0,
+            float(config.get("confidence_threshold", 0.75)),
+            0.05,
+        )
+
+        if st.button("💾 Save Workflow"):
+            result = api_client.save_workflow(
+                {
+                    "id": workflow.get("id"),
+                    "name": selected_name,
+                    "config": {
+                        "enable_ner": enable_ner,
+                        "enable_llm_extraction": enable_llm,
+                        "confidence_threshold": confidence,
+                    },
+                }
+            )
+            if result.get("status") != "ERROR":
+                ErrorHandler.display_success("Workflow saved")
+            else:
+                ErrorHandler.display_error("Failed to save", result.get("message"))
+
+
 class MemoryBrainTab:
     """Memory Brain Tab - AI memory management and visualization"""
 
@@ -1420,6 +1473,7 @@ def main():
     tab_options = {
         "📊 Analysis Dashboard": "dashboard",
         "📄 Document Processor": "processor",
+        "🛠️ Workflow Designer": "workflows",
         "🧠 Memory Brain": "memory",
         "⚠️ Violation Review": "violations",
         "🕸️ Knowledge Graph": "graph",
@@ -1461,6 +1515,8 @@ def main():
         AnalysisDashboardTab.render()
     elif tab_key == "processor":
         DocumentProcessorTab.render()
+    elif tab_key == "workflows":
+        WorkflowDesignerTab.render()
     elif tab_key == "memory":
         MemoryBrainTab.render()
     elif tab_key == "violations":
