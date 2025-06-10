@@ -1316,15 +1316,6 @@ async def process_document_background_task(  # Renamed
             )
 
 
-    app.mount(
-        "/",
-        StaticFiles(directory=str(frontend_dist_path), html=True),
-        name="static_frontend",
-    )
-    main_api_logger.info(
-    )
-
-
 if __name__ == "__main__":
     # This allows running the FastAPI app directly using `python main.py`
     # Ensure detailed_logging is configured before uvicorn starts for its logs to be captured.
