@@ -869,7 +869,7 @@ async def create_service_container(
     await container.register_service(
         "workflow_orchestrator",
         factory=lambda sc, topic=workflow_topic: WorkflowOrchestrator(
-            sc, workflow_topic=topic
+            sc, topic=topic
         ),
         is_async_factory=False,
     )
@@ -907,7 +907,9 @@ async def create_service_container(
     await container.register_service(
         "workflow_orchestrator",
         factory=lambda sc: WorkflowOrchestrator(
-            sc, workflow_config=WorkflowConfig(**sc.get_active_workflow_config())
+            sc,
+            topic=workflow_topic,
+            workflow_config=WorkflowConfig(**sc.get_active_workflow_config()),
         ),
         is_async_factory=False,
     )
