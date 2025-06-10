@@ -446,7 +446,10 @@ class LegalAISettings(BaseSettings):
 
     # =================== AGENT CONFIGS ===================
     agents: Dict[str, Any] = Field(
-        default_factory=lambda: {"legal_reasoning_engine_config": {}},
+        default_factory=lambda: {
+            "legal_reasoning_engine_config": {},
+            "knowledge_graph_reasoning_agent_config": {},
+        },
         env="AGENTS_CONFIG",
     )
 
