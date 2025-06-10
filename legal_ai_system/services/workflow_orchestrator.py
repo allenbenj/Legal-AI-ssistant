@@ -11,22 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from ..utils.document_utils import extract_text
-from ..workflows.case_workflow_state import CaseWorkflowState
-try:  # pragma: no cover - optional LangGraph dependency
-    from ..workflows.langgraph_setup import build_graph as _default_build_graph
-except Exception:  # fallback during tests when stubbed module missing
-    def _default_build_graph(topic: str):  # type: ignore
-        raise RuntimeError("LangGraph is required to build workflows")
 
-try:  # pragma: no cover - optional fastapi dependency
-    from ..api.websocket_manager import ConnectionManager
-except Exception:  # pragma: no cover - if fastapi is unavailable
-    ConnectionManager = None  # type: ignore
-
-
-def build_graph(topic: str):
-    """Return a basic LangGraph pipeline for the given topic."""
-    return _default_build_graph(topic)
 
 
 from ..core.detailed_logging import (
@@ -58,6 +43,7 @@ class WorkflowOrchestrator:
         self.config = config
         self.topic = topic
         self.builder_topic = builder_topic or topic
+
         self.graph_builder = build_graph
         self._graph = None
 
@@ -128,7 +114,6 @@ class WorkflowOrchestrator:
     def _create_builder_graph(self, topic: Optional[str] = None):
         """Return a LangGraph graph for the provided topic."""
         actual_topic = topic or self.builder_topic
-        return self.graph_builder(actual_topic)
 
     @detailed_log_function(LogCategory.SYSTEM)
     async def execute_workflow_instance(
