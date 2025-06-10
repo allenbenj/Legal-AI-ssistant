@@ -494,6 +494,32 @@ function WorkflowDesigner() {
     { id: 3, name: 'Legal Violation Detection', status: 'inactive', steps: 7, lastRun: '1 day ago' }
   ]);
 
+  // Available component choices. In a real app this would be fetched from the
+  // backend via ``AGENT_CLASS_REGISTRY``.
+  const componentOptions = {
+    document_processor: ['DocumentProcessorAgent'],
+    document_rewriter: ['DocumentRewriterAgent'],
+    ontology_extractor: ['OntologyExtractionAgent'],
+    hybrid_extractor: ['HybridLegalExtractor'],
+    graph_manager: ['RealTimeGraphManager'],
+    vector_store: ['OptimizedVectorStore'],
+    reviewable_memory: ['ReviewableMemory']
+  };
+
+  const [selectedComponents, setSelectedComponents] = useState({
+    document_processor: 'DocumentProcessorAgent',
+    document_rewriter: 'DocumentRewriterAgent',
+    ontology_extractor: 'OntologyExtractionAgent',
+    hybrid_extractor: 'HybridLegalExtractor',
+    graph_manager: 'RealTimeGraphManager',
+    vector_store: 'OptimizedVectorStore',
+    reviewable_memory: 'ReviewableMemory'
+  });
+
+  const handleSelectChange = (key: string, value: string) => {
+    setSelectedComponents(prev => ({ ...prev, [key]: value }));
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -512,6 +538,24 @@ function WorkflowDesigner() {
             <Workflow className="w-16 h-16 text-gray-400 mx-auto mb-4" />
             <p className="text-gray-500">Drag and drop components to design workflow</p>
           </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+          {Object.keys(componentOptions).map(key => (
+            <div key={key} className="flex flex-col">
+              <label className="text-sm font-medium mb-1 capitalize">
+                {key.replace(/_/g, ' ')}
+              </label>
+              <select
+                className="border rounded p-2"
+                value={selectedComponents[key]}
+                onChange={e => handleSelectChange(key, e.target.value)}
+              >
+                {componentOptions[key].map(opt => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+            </div>
+          ))}
         </div>
       </div>
 

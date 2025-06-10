@@ -13,17 +13,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from ..agents.document_processor_agent import DocumentProcessorAgent
-from ..agents.document_rewriter_agent import DocumentRewriterAgent
-from ..agents.ontology_extraction_agent import OntologyExtractionAgent
-from ..core.optimized_vector_store import OptimizedVectorStore
-from ..utils.hybrid_extractor import HybridLegalExtractor
 from ..utils.reviewable_memory import (
     ReviewableMemory,
     ReviewDecision,
     ReviewStatus,
 )
-from .realtime_graph_manager import RealTimeGraphManager
 
 
 @dataclass
@@ -82,10 +76,17 @@ class RealTimeAnalysisWorkflow:
     - Performance monitoring and optimization
     """
 
-    def __init__(self, services, **config):
+    def __init__(self, services, workflow_config=None, **config):
+        """Create the workflow using the provided component configuration."""
+        from ..config.workflow_config import WorkflowConfig
+
         self.services = services
         self.config = config
         self.logger = services.logger
+
+        if workflow_config is None:
+            workflow_config = config.get("workflow_config", WorkflowConfig())
+        self.workflow_config: WorkflowConfig = workflow_config
 
         # Workflow configuration
         self.enable_real_time_sync = config.get("enable_real_time_sync", True)
@@ -100,14 +101,22 @@ class RealTimeAnalysisWorkflow:
             "auto_optimization_threshold", 100
         )
 
-        # Initialize components
-        self.document_processor = DocumentProcessorAgent(services, **config)
-        self.document_rewriter = DocumentRewriterAgent(services, **config)
-        self.ontology_extractor = OntologyExtractionAgent(services, **config)
-        self.hybrid_extractor = HybridLegalExtractor(services, **config)
-        self.graph_manager = RealTimeGraphManager(services, **config)
-        self.vector_store = OptimizedVectorStore(services, **config)
-        self.reviewable_memory = ReviewableMemory(services, **config)
+        # Initialize components based on workflow configuration
+        dp_cls = self.workflow_config.resolve_class("document_processor")
+        dr_cls = self.workflow_config.resolve_class("document_rewriter")
+        oe_cls = self.workflow_config.resolve_class("ontology_extractor")
+        he_cls = self.workflow_config.resolve_class("hybrid_extractor")
+        gm_cls = self.workflow_config.resolve_class("graph_manager")
+        vs_cls = self.workflow_config.resolve_class("vector_store")
+        rm_cls = self.workflow_config.resolve_class("reviewable_memory")
+
+        self.document_processor = dp_cls(services, **config)
+        self.document_rewriter = dr_cls(services, **config)
+        self.ontology_extractor = oe_cls(services, **config)
+        self.hybrid_extractor = he_cls(services, **config)
+        self.graph_manager = gm_cls(services, **config)
+        self.vector_store = vs_cls(services, **config)
+        self.reviewable_memory = rm_cls(services, **config)
 
         # Performance tracking
         self.documents_processed = 0

@@ -20,10 +20,21 @@ class WorkflowOrchestrator:
     """High level service to run document workflows."""
 
     @detailed_log_function(LogCategory.SYSTEM)
-    def __init__(self, service_container, **config: Any) -> None:
+    def __init__(self, service_container, workflow_config=None, **config: Any) -> None:
+        """Initialize the orchestrator with optional workflow component config."""
+        from ..config.workflow_config import WorkflowConfig
+
         self.service_container = service_container
         self.config = config
-        self.workflow = RealTimeAnalysisWorkflow(service_container, **config)
+
+        if workflow_config is None:
+            workflow_config = config.get("workflow_config", WorkflowConfig())
+
+        self.workflow = RealTimeAnalysisWorkflow(
+            service_container,
+            workflow_config=workflow_config,
+            **config,
+        )
         wo_logger.info("WorkflowOrchestrator initialized")
 
     @detailed_log_function(LogCategory.SYSTEM)
