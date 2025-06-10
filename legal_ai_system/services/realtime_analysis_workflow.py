@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -21,6 +22,7 @@ from ..core.detailed_logging import (
     LogCategory,
     detailed_log_function,
 )
+from .metrics_exporter import MetricsExporter, metrics_exporter
 
 
 try:  # Avoid heavy imports during tests
@@ -83,6 +85,9 @@ class RealTimeAnalysisResult:
 class RealTimeAnalysisWorkflow:
     """Master workflow for real-time legal document analysis."""
 
+    def __init__(self, *args, max_concurrent_documents: int = 1, **kwargs) -> None:
+        self.max_concurrent_documents = max_concurrent_documents
+        self.logger = get_detailed_logger("RealTimeAnalysisWorkflow", LogCategory.WORKFLOW)
 
         # Performance tracking
         self.documents_processed = 0
@@ -127,19 +132,28 @@ class RealTimeAnalysisWorkflow:
         Returns:
             RealTimeAnalysisResult with comprehensive analysis
         """
+        metrics = metrics_exporter
+
         start_time = time.time()
 
-        async with self.processing_lock:
-            # This method is largely a placeholder in the test environment.
-            # A real implementation would orchestrate the various node
-            # services to process the document, update the knowledge graph,
-            # and manage reviewable memory. We return a minimal result so
-            # that the module remains functional and flake8 compliant.
-            await asyncio.sleep(0)  # simulate async processing
+        try:
+            async with self.processing_lock:
+                # This method is largely a placeholder in the test environment.
+                # A real implementation would orchestrate the various node
+                # services to process the document, update the knowledge graph,
+                # and manage reviewable memory. We return a minimal result so
+                # that the module remains functional and flake8 compliant.
+                await asyncio.sleep(0)  # simulate async processing
+        except Exception:
+            if isinstance(metrics, MetricsExporter):
+                metrics.inc_workflow_error()
+            raise
 
         document_id = kwargs.get("document_id") or f"doc_rt_{uuid.uuid4().hex}"
 
         total_processing_time = time.time() - start_time
+        if isinstance(metrics, MetricsExporter):
+            metrics.observe_workflow_time(total_processing_time)
         return RealTimeAnalysisResult(
             document_path=document_path,
             document_id=document_id,

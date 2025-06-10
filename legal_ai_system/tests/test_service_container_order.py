@@ -1,7 +1,8 @@
 import asyncio
+import importlib
 import pytest
 
-from legal_ai_system.services.service_container import ServiceContainer
+
 
 class DummyA:
     def __init__(self):

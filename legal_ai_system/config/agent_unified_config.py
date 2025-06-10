@@ -22,6 +22,8 @@ from ..services.realtime_graph_manager import RealTimeGraphManager
 from ..core.optimized_vector_store import OptimizedVectorStore
 from ..utils.reviewable_memory import ReviewableMemory
 
+# Registry of agent and utility classes exposed for dynamic configuration
+AGENT_CLASS_REGISTRY = {
     "DocumentProcessorAgent": DocumentProcessorAgent,
     "DocumentProcessorAgentV2": DocumentProcessorAgentV2,
     "DocumentRewriterAgent": DocumentRewriterAgent,
@@ -39,5 +41,6 @@ __all__ = [
     "get_agent_configuration_status",
     "setup_agents_example",
     "validate_agent_setup",
+    "AGENT_CLASS_REGISTRY",
 
 ]
