@@ -10,6 +10,8 @@ This guide outlines the five-phase plan for integrating the Legal AI System, com
 4. **Deployment** – Run the FastAPI app with Uvicorn or inside Docker. Ensure environment variables for database connections and secret keys are provided. Build the frontend once and serve the static files from `frontend/dist`.
 5. **Monitoring and Optimization** – Start the `RealtimePublisher` to broadcast system metrics and log performance. Tune database connections and vector stores based on load patterns.
 
+6. **Advanced LangGraph Workflows** – Install the optional `langgraph` package and see [advanced_langgraph.md](advanced_langgraph.md) for classification routing and WebSocket monitoring.
+
 ## WebSocket Patterns
 
 The `ConnectionManager` manages connections, subscriptions, and topic-based broadcasts:
