@@ -2,6 +2,7 @@
 
 from .agent_workflow import AgentWorkflow
 from .legal_workflow_builder import LegalWorkflowBuilder
+from .nodes.legal_error_handling_node import LegalErrorHandlingNode
 from ..workflow_engine.merge import (
     MergeStrategy,
     ConcatMerge,
@@ -16,5 +17,5 @@ __all__ = [
     "MergeStrategy",
     "ConcatMerge",
     "ListMerge",
-
+    "LegalErrorHandlingNode",
 ]
