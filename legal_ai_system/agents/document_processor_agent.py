@@ -13,6 +13,9 @@ import asyncio
 import hashlib
 import io
 import mimetypes
+import json
+import zipfile
+import email
 import re
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -88,6 +91,10 @@ class DocumentContentType(Enum):
     WAV = "audio/wav"
     MP4 = "video/mp4"
     MOV = "video/quicktime"
+    EML = "message/rfc822"
+    ZIP = "application/zip"
+    JSON = "application/json"
+    YAML = "application/x-yaml"
     UNKNOWN = "application/octet-stream"
 
     @classmethod
@@ -116,6 +123,11 @@ class DocumentContentType(Enum):
             ".wav": cls.WAV,
             ".mp4": cls.MP4,
             ".mov": cls.MOV,
+            ".eml": cls.EML,
+            ".zip": cls.ZIP,
+            ".json": cls.JSON,
+            ".yaml": cls.YAML,
+            ".yml": cls.YAML,
         }
         return ext_map.get(ext.lower(), cls.UNKNOWN)
 
@@ -133,6 +145,14 @@ class DocumentContentType(Enum):
             return cls.XLSX
         if "presentation" in mime:
             return cls.PPTX
+        if "rfc822" in mime or "message" in mime:
+            return cls.EML
+        if "zip" in mime:
+            return cls.ZIP
+        if "json" in mime:
+            return cls.JSON
+        if "yaml" in mime or "yml" in mime:
+            return cls.YAML
         if "audio" in mime:
             if "mpeg" in mime:
                 return cls.MP3
@@ -345,6 +365,26 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
                 "strategy": ProcessingStrategy.METADATA_ONLY,
                 "handler_method": "_process_video_async",
                 "deps": ["moviepy"],
+            },
+            DocumentContentType.EML: {
+                "strategy": ProcessingStrategy.FULL_PROCESSING,
+                "handler_method": "_process_eml_async",
+                "deps": [],
+            },
+            DocumentContentType.ZIP: {
+                "strategy": ProcessingStrategy.METADATA_ONLY,
+                "handler_method": "_process_zip_async",
+                "deps": [],
+            },
+            DocumentContentType.JSON: {
+                "strategy": ProcessingStrategy.FULL_PROCESSING,
+                "handler_method": "_process_json_async",
+                "deps": [],
+            },
+            DocumentContentType.YAML: {
+                "strategy": ProcessingStrategy.FULL_PROCESSING,
+                "handler_method": "_process_yaml_async",
+                "deps": ["yaml"],
             },
         }
 
@@ -1247,6 +1287,138 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
         return {
             "text_content": text_content,
             "extracted_metadata": extracted_meta,
+            "processing_notes": notes,
+        }
+
+    # ---- Additional Formats ----
+
+    def _process_eml_async(self, file_path: Path, options: Dict[str, Any]) -> Dict[str, Any]:
+        return self._sync_process_eml(file_path, options)
+
+    def _sync_process_eml(self, file_path: Path, options: Dict[str, Any]) -> Dict[str, Any]:
+        file_logger.info(f"Processing EML (sync): {file_path.name}")
+        notes: List[str] = []
+        text_content = ""
+        metadata: Dict[str, Any] = {"source_format": "eml"}
+        try:
+            with open(file_path, "rb") as f:
+                msg = email.message_from_binary_file(f)
+            metadata.update({
+                "from": msg.get("From"),
+                "to": msg.get("To"),
+                "subject": msg.get("Subject"),
+                "date": msg.get("Date"),
+            })
+            attachments: List[str] = []
+            body_parts: List[str] = []
+            if msg.is_multipart():
+                for part in msg.walk():
+                    if part.get_content_maintype() == "multipart":
+                        continue
+                    disp = part.get("Content-Disposition", "")
+                    if disp.startswith("attachment"):
+                        if part.get_filename():
+                            attachments.append(part.get_filename())
+                        continue
+                    if part.get_content_type() == "text/plain":
+                        charset = part.get_content_charset() or "utf-8"
+                        payload = part.get_payload(decode=True)
+                        if payload:
+                            body_parts.append(payload.decode(charset, errors="ignore"))
+            else:
+                payload = msg.get_payload(decode=True)
+                if payload:
+                    charset = msg.get_content_charset() or "utf-8"
+                    body_parts.append(payload.decode(charset, errors="ignore"))
+            if attachments:
+                metadata["attachments"] = attachments
+            text_content = "\n".join(body_parts)
+        except Exception as e:
+            notes.append(f"Error parsing email: {str(e)}")
+            file_logger.error(f"Error processing EML {file_path.name}.", exception=e)
+
+        if options.get("clean_text", True) and text_content:
+            text_content = self._common_text_cleaning(text_content) or ""
+
+        return {
+            "text_content": text_content,
+            "extracted_metadata": metadata,
+            "processing_notes": notes,
+        }
+
+    def _process_zip_async(self, file_path: Path, options: Dict[str, Any]) -> Dict[str, Any]:
+        return self._sync_process_zip(file_path, options)
+
+    def _sync_process_zip(self, file_path: Path, options: Dict[str, Any]) -> Dict[str, Any]:
+        file_logger.info(f"Processing ZIP (sync): {file_path.name}")
+        notes: List[str] = []
+        extracted_meta: Dict[str, Any] = {"source_format": "zip"}
+        files_info: List[Dict[str, Any]] = []
+        try:
+            with zipfile.ZipFile(file_path, "r") as zf:
+                for info in zf.infolist():
+                    files_info.append({"name": info.filename, "size": info.file_size})
+            extracted_meta["contained_files"] = files_info
+            notes.append(f"Zip contains {len(files_info)} entries.")
+        except zipfile.BadZipFile:
+            notes.append("Invalid ZIP archive.")
+            file_logger.error(f"BadZipFile: {file_path.name}")
+            raise DocumentProcessingError("Invalid ZIP archive", file_path=file_path)
+        except Exception as e:
+            notes.append(f"Error processing ZIP: {str(e)}")
+            file_logger.error(f"Error processing ZIP {file_path.name}.", exception=e)
+
+        return {"extracted_metadata": extracted_meta, "processing_notes": notes}
+
+    def _process_json_async(self, file_path: Path, options: Dict[str, Any]) -> Dict[str, Any]:
+        return self._sync_process_json(file_path, options)
+
+    def _sync_process_json(self, file_path: Path, options: Dict[str, Any]) -> Dict[str, Any]:
+        file_logger.info(f"Processing JSON (sync): {file_path.name}")
+        notes: List[str] = []
+        text_content = ""
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            text_content = json.dumps(data, indent=2)
+        except Exception as e:
+            notes.append(f"Error parsing JSON: {str(e)}")
+            file_logger.error(f"Error processing JSON {file_path.name}.", exception=e)
+
+        if options.get("clean_text", True) and text_content:
+            text_content = self._common_text_cleaning(text_content) or ""
+
+        return {
+            "text_content": text_content,
+            "extracted_metadata": {"source_format": "json"},
+            "processing_notes": notes,
+        }
+
+    def _process_yaml_async(self, file_path: Path, options: Dict[str, Any]) -> Dict[str, Any]:
+        return self._sync_process_yaml(file_path, options)
+
+    def _sync_process_yaml(self, file_path: Path, options: Dict[str, Any]) -> Dict[str, Any]:
+        file_logger.info(f"Processing YAML (sync): {file_path.name}")
+        notes: List[str] = []
+        text_content = ""
+        if not dep_manager.is_available("yaml"):
+            notes.append("PyYAML unavailable.")
+            raise DocumentProcessingError("PyYAML not installed", file_path=file_path)
+        try:
+            import yaml  # type: ignore
+            with open(file_path, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f)
+            text_content = yaml.safe_dump(data)
+        except Exception as e:
+            notes.append(f"Error parsing YAML: {str(e)}")
+            file_logger.error(f"Error processing YAML {file_path.name}.", exception=e)
+
+        if options.get("clean_text", True) and text_content:
+            text_content = self._common_text_cleaning(text_content) or ""
+
+        return {
+            "text_content": text_content,
+            "extracted_metadata": {"source_format": "yaml"},
             "processing_notes": notes,
         }
 

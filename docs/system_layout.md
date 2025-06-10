@@ -20,7 +20,7 @@ For details on REST endpoints, see the [API reference](api_endpoints.md) and the
 The project defines several specialized agents under `legal_ai_system/agents`:
 
 - **DocumentProcessorAgent** – extracts text and metadata from a variety of file types.  See `document_processor_agent.py` lines 1‑8.
-- Handles PDFs, DOCX, HTML, and image formats using optional dependencies for parsing.  Returns structured content for downstream agents.
+- Handles PDFs, DOCX, HTML, image formats, emails, zip archives, and structured JSON/YAML using optional dependencies.  Returns structured content for downstream agents.
 - **DocumentProcessorAgentV2** – advanced processor returning a `MultiModalDocument`. See `document_processor_agent_v2.py` lines 25-132.
 - Supports `process_video_depositions`, `process_legal_forms`, and `process_contract_redlines` for specialized legal content.
 - **DocumentRewriterAgent** – performs lightweight spelling correction on extracted text.  See `document_rewriter_agent.py` lines 1‑7.
