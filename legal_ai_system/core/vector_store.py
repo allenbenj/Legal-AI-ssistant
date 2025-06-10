@@ -285,11 +285,24 @@ class VectorStore:
         embedding_provider: EmbeddingProviderVS,
         default_index_type: IndexType = IndexType.HNSW,
         enable_gpu_faiss: bool = False,
-
+        *,
+        document_index_path: str | None = None,
+        entity_index_path: str | None = None,
+        service_config: Optional[Dict[str, Any]] = None,
     ):
         vector_store_logger.info("=== VectorStore: Instance Creation START ===")
         self.config = service_config or {}
         self.storage_path = Path(storage_path_str)
+        self.document_index_path = (
+            Path(document_index_path)
+            if document_index_path is not None
+            else self.storage_path / "document_index.faiss"
+        )
+        self.entity_index_path = (
+            Path(entity_index_path)
+            if entity_index_path is not None
+            else self.storage_path / "entity_index.faiss"
+        )
 
         if not isinstance(embedding_provider, EmbeddingProviderVS):
             raise ConfigurationError(
@@ -620,6 +633,8 @@ class VectorStore:
 
     def _load_faiss_indexes_sync(self):
         """Synchronous part of loading FAISS indexes from disk."""
+        doc_index_path = self.document_index_path
+        entity_index_path = self.entity_index_path
 
             if doc_index_path.exists():
                 try:
@@ -859,6 +874,11 @@ class VectorStore:
 
     def _save_faiss_indexes_sync(self):
         with self._sync_lock:  # Thread lock for FAISS C++ object access
+            doc_idx_path = self.document_index_path
+            tmp_doc_idx_path = doc_idx_path.with_suffix(".tmp")
+            ent_idx_path = self.entity_index_path
+            tmp_ent_idx_path = ent_idx_path.with_suffix(".tmp")
+
             self._update_disk_usage_stats()  # Update before saving
             if self.document_index and self.document_index.ntotal > 0:
 
@@ -2194,6 +2214,8 @@ def create_vector_store(
         embedding_provider=embedding_provider_instance,  # Pass the initialized provider
         default_index_type=IndexType(vs_cfg.get("DEFAULT_INDEX_TYPE", "HNSW").upper()),
         enable_gpu_faiss=bool(vs_cfg.get("ENABLE_GPU_FAISS", False)),
-
+        document_index_path=vs_cfg.get("DOCUMENT_INDEX_PATH"),
+        entity_index_path=vs_cfg.get("ENTITY_INDEX_PATH"),
+        service_config=vs_cfg,
     )
     return vs_instance
