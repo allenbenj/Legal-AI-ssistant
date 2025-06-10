@@ -25,16 +25,15 @@ sentry_sdk.init(
 )
 try:
     from legal_ai_system.core.constants import Constants
-except ImportError:
-    # Fallback for when package structure isn't available
-    class Constants:
+except ImportError:  # pragma: no cover - fallback for standalone execution
+    class FallbackConstants:
         class Version:
             APP_VERSION = "2.1.0"
 
-import subprocess
+    Constants = FallbackConstants
+
 import logging  # Using standard logging for this standalone part initially
 from pathlib import Path
-from typing import Optional
 import time  # For simulate processing
 
 # Using standard logging initially, can be augmented by detailed_logging if main system is run first
