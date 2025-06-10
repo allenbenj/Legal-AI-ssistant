@@ -2,6 +2,7 @@ import sys
 import asyncio
 import builtins
 from types import ModuleType, SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -209,7 +210,11 @@ async def test_launch_workflow_success(tmp_path):
     container = DummyContainer({"workflow_orchestrator": orch})
     svc = LegalAIIntegrationService(container)
 
-    await svc._launch_workflow(tmp_path / "doc.txt", {"document_id": "d"})
+    await svc._launch_workflow(
+        tmp_path / "doc.txt",
+        {"document_id": "d"},
+        progress_cb=None,
+    )
 
     assert len(container.background_tasks) == 1
     coro = container.background_tasks[0]
@@ -222,7 +227,11 @@ async def test_launch_workflow_no_service(tmp_path):
     svc = LegalAIIntegrationService(container)
 
     with pytest.raises(ServiceLayerError):
-        await svc._launch_workflow(tmp_path / "doc.txt", {"document_id": "d"})
+        await svc._launch_workflow(
+            tmp_path / "doc.txt",
+            {"document_id": "d"},
+            progress_cb=None,
+        )
 
 
 @pytest.mark.asyncio
@@ -237,4 +246,39 @@ async def test_launch_workflow_error(monkeypatch, tmp_path):
     svc = LegalAIIntegrationService(container)
 
     with pytest.raises(ServiceLayerError):
-        await svc._launch_workflow(tmp_path / "doc.txt", {"document_id": "d"})
+        await svc._launch_workflow(
+            tmp_path / "doc.txt",
+            {"document_id": "d"},
+            progress_cb=None,
+        )
+
+
+@pytest.mark.asyncio
+async def test_upload_and_process_document_success(tmp_path):
+    orch = DummyOrchestrator()
+    container = DummyContainer({"workflow_orchestrator": orch})
+    svc = LegalAIIntegrationService(container)
+
+    svc._save_uploaded_file = AsyncMock(return_value=(tmp_path / "f.txt", "f.txt"))
+    svc._create_document_metadata = AsyncMock(return_value=("docid", {"document_id": "docid"}))
+    svc._launch_workflow = AsyncMock()
+
+    user = sec_mod.User("u1")
+    result = await svc.upload_and_process_document(b"x", "f.txt", user, progress_cb=None)
+
+    assert result["document_id"] == "docid"
+    svc._save_uploaded_file.assert_awaited_once()
+    svc._create_document_metadata.assert_awaited_once()
+    svc._launch_workflow.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_upload_and_process_document_error(tmp_path):
+    container = DummyContainer()
+    svc = LegalAIIntegrationService(container)
+
+    svc._save_uploaded_file = AsyncMock(side_effect=ServiceLayerError("fail"))
+
+    user = sec_mod.User("u1")
+    with pytest.raises(ServiceLayerError):
+        await svc.upload_and_process_document(b"x", "f.txt", user, progress_cb=None)

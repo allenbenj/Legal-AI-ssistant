@@ -102,6 +102,7 @@ try:
     )
     from legal_ai_system.api.websocket_manager import ConnectionManager
     from legal_ai_system.services.realtime_publisher import RealtimePublisher
+    from legal_ai_system import LegalAIIntegrationService
 
     SERVICES_AVAILABLE = True
 except Exception:  # pragma: no cover - optional service dependencies
@@ -118,6 +119,7 @@ except Exception:  # pragma: no cover - optional service dependencies
 
     ConnectionManager = None  # type: ignore
     RealtimePublisher = None  # type: ignore
+    LegalAIIntegrationService = None  # type: ignore
     SERVICES_AVAILABLE = False
 
 
@@ -146,6 +148,7 @@ service_container_instance: Optional["ServiceContainer"] = None
 security_manager_instance: Optional["SecurityManager"] = None
 websocket_manager_instance: Optional[ConnectionManager] = None
 realtime_publisher_instance: Optional[RealtimePublisher] = None
+integration_service_instance: Optional["LegalAIIntegrationService"] = None
 
 
 def get_service_container() -> ServiceContainer:
@@ -203,7 +206,7 @@ def save_workflow_configs() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager for startup and shutdown."""
-    global service_container_instance, security_manager_instance, websocket_manager_instance, realtime_publisher_instance
+    global service_container_instance, security_manager_instance, websocket_manager_instance, realtime_publisher_instance, integration_service_instance
 
     # --- Startup events ---
     # Log startup and initialize all dynamic components such as the
@@ -224,6 +227,20 @@ async def lifespan(app: FastAPI):
                 await create_service_container()
             )  # If it's async
             main_api_logger.info("✅ Service container initialized successfully.")
+            try:
+                integration_service_instance = await service_container_instance.get_service(
+                    "integration_service"
+                )
+                main_api_logger.info(
+                    "✅ Integration service initialized.",
+                    parameters={"service": type(integration_service_instance).__name__},
+                )
+            except Exception as e:
+                main_api_logger.error(
+                    "Failed to initialize IntegrationService.",
+                    exception=e,
+                )
+                integration_service_instance = None
         except Exception as e:
             main_api_logger.error(
                 "Failed to initialize service container.", exception=e
@@ -808,52 +825,46 @@ async def upload_document_rest(  # Renamed to avoid conflict
         "Document upload request received.",
         parameters={"filename": file.filename, "content_type": file.content_type},
     )
-    # For MVP, save locally. In prod, use secure storage (e.g., S3) via a storage service.
-    # This path should come from ConfigurationManager.
-    upload_dir = Path("./storage/documents/uploads_api")
-    upload_dir.mkdir(parents=True, exist_ok=True)
+    if not service_container_instance:
+        main_api_logger.error("Service container unavailable.")
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE)
 
-    # Sanitize filename
-    safe_filename = "".join(
-        c if c.isalnum() or c in [".", "-", "_"] else "_"
-        for c in file.filename or "unknown_file"
-    )
-    timestamp = datetime.datetime.now(tz=datetime.timezone.utc).strftime(
-        "%Y%m%d%H%M%S%f"
-    )
-    unique_filename = f"{timestamp}_{uuid.uuid4().hex[:8]}_{safe_filename}"
-    file_path = upload_dir / unique_filename
+    global integration_service_instance
 
     try:
         content = await file.read()
-        with open(file_path, "wb") as f:
-            f.write(content)
 
-        doc_size = len(content)
-        # Generate a unique document ID (e.g., using UUID or a hash of content+timestamp)
-        document_id = f"doc_{uuid.uuid4().hex}"
+        if integration_service_instance is None:
+            integration_service_instance = await service_container_instance.get_service(
+                "integration_service"
+            )
 
-        # Here, you would typically store metadata about the uploaded document in a database.
-        # For example, linking document_id to file_path, user_id, upload_time, status='uploaded'.
-        # This is mocked in the original `minimal_api.py`.
+        user = AuthUser(
+            user_id="api_uploader",
+            username="api_uploader",
+            email="uploader@example.com",
+            access_level=AccessLevel.ADMIN,
+            last_login=datetime.datetime.now(tz=datetime.timezone.utc),
+        )
+
+        result = await integration_service_instance.upload_and_process_document(
+            content,
+            file.filename,
+            user,
+        )
+
+        global_processing_states[result["document_id"]] = {
+            "status": "processing",
+            "progress": 0.0,
+            "stage": "starting",
+        }
 
         main_api_logger.info(
-            "Document uploaded successfully.",
-            parameters={
-                "document_id": document_id,
-                "filename": unique_filename,
-                "path": str(file_path),
-                "size_bytes": doc_size,
-            },
+            "Document uploaded and workflow initiated.",
+            parameters={"document_id": result["document_id"]},
         )
 
-        return DocumentUploadResponse(
-            document_id=document_id,
-            filename=unique_filename,  # Return the unique, safe filename
-            size_bytes=doc_size,
-            status="uploaded",
-            message="Document uploaded successfully. Ready for processing.",
-        )
+        return DocumentUploadResponse(**result)
     except Exception as e:
         main_api_logger.error(
             "Document upload failed.",

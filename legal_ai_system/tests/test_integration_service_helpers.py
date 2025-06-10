@@ -165,7 +165,11 @@ async def test_launch_workflow_adds_task(tmp_path):
     container = DummyContainer({"workflow_orchestrator": orchestrator})
     service = LegalAIIntegrationService(container)
 
-    await service._launch_workflow(tmp_path / "file.txt", {"document_id": "d"})
+    await service._launch_workflow(
+        tmp_path / "file.txt",
+        {"document_id": "d"},
+        progress_cb=None,
+    )
     orchestrator.execute_workflow_instance.assert_awaited_once()
     assert container.tasks
 
@@ -179,5 +183,9 @@ async def test_launch_workflow_error(tmp_path):
     service = LegalAIIntegrationService(container)
 
     with pytest.raises(ServiceLayerError):
-        await service._launch_workflow(tmp_path / "file.txt", {"document_id": "d"})
+        await service._launch_workflow(
+            tmp_path / "file.txt",
+            {"document_id": "d"},
+            progress_cb=None,
+        )
 

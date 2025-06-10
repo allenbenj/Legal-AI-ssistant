@@ -14,7 +14,7 @@ import hashlib
 import json
 
 # import logging # Replaced by detailed_logging
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, Callable, Awaitable
 
 from legal_ai_system.services.memory_manager import MemoryManager
 from legal_ai_system.core.enhanced_persistence import EnhancedPersistenceManager
@@ -148,7 +148,10 @@ class LegalAIIntegrationService:
             raise ServiceLayerError("Failed to create document metadata.") from e
 
     async def _launch_workflow(
-        self, file_path: Path, workflow_metadata: Dict[str, Any]
+        self,
+        file_path: Path,
+        workflow_metadata: Dict[str, Any],
+        progress_cb: Optional[Callable[[str, float], Awaitable[None]]] = None,
     ) -> None:
         """Start document workflow execution."""
         try:
@@ -160,6 +163,11 @@ class LegalAIIntegrationService:
                 self.workflow_orchestrator = orchestrator
             if not orchestrator:
                 raise ServiceLayerError("Workflow orchestrator service not available.")
+
+            if progress_cb:
+                workflow = getattr(orchestrator, "workflow", None)
+                if workflow and hasattr(workflow, "register_progress_callback"):
+                    workflow.register_progress_callback(progress_cb)
 
             self.service_container.add_background_task(
                 orchestrator.execute_workflow_instance(
@@ -274,6 +282,7 @@ class LegalAIIntegrationService:
         filename: str,
         user: AuthUser,
         options: Optional[Dict[str, Any]] = None,
+        progress_cb: Optional[Callable[[str, float], Awaitable[None]]] = None,
     ) -> Dict[str, Any]:
         """Handle an uploaded document and start processing."""
         integration_service_logger.info(
@@ -286,7 +295,16 @@ class LegalAIIntegrationService:
             document_id, workflow_metadata = await self._create_document_metadata(
                 file_path, unique_filename, user, options or {}
             )
-            await self._launch_workflow(file_path, workflow_metadata)
+
+            async def _cb(message: str, prog: float) -> None:
+                if progress_cb:
+                    await progress_cb(message, prog)
+
+            await self._launch_workflow(
+                file_path,
+                workflow_metadata,
+                progress_cb=_cb if progress_cb else None,
+            )
             return {
                 "document_id": document_id,
                 "filename": unique_filename,
