@@ -111,3 +111,5 @@ Documents move through several states as they are processed:
 4. **in_review** – human review is required for some extractions.
 5. **completed** – processing finished successfully and the document is searchable.
 6. **error** – an unrecoverable issue occurred during processing.
+
+Tracking these states helps the UI report progress and highlight any processing issues.
