@@ -6,6 +6,9 @@ import {
   BarChart, Network, Workflow, Eye, Download,
   Clock, Filter, Plus, Trash2, Edit, Save
 } from 'lucide-react';
+import TableSkeleton from '../../frontend/src/components/skeletons/TableSkeleton';
+import ProgressiveLoader, { LoaderStage } from '../../frontend/src/components/ProgressiveLoader';
+import useLoadingState from '../../frontend/src/hooks/useLoadingState';
 
 
 // Context for global state management
@@ -252,11 +255,19 @@ function Dashboard() {
 // Document Processing Interface
 function DocumentProcessing() {
   const { addNotification } = useContext(AppContext);
-  const [documents, setDocuments] = useState([
-    { id: 1, name: 'contract_agreement.pdf', status: 'processing', progress: 65 },
-    { id: 2, name: 'witness_statement.docx', status: 'completed', progress: 100 },
-    { id: 3, name: 'evidence_photos.zip', status: 'queued', progress: 0 }
-  ]);
+  const { isLoading, error, data: documents, executeAsync } =
+    useLoadingState<Array<{ id: number; name: string; status: string; progress: number }>>();
+
+  useEffect(() => {
+    executeAsync(() =>
+      fetch('data/sample_documents.json').then(res => {
+        if (!res.ok) {
+          throw new Error('Failed to load documents');
+        }
+        return res.json();
+      })
+    );
+  }, []);
 
   const handleFileUpload = () => {
     addNotification('File uploaded successfully', 'success');
@@ -298,7 +309,27 @@ function DocumentProcessing() {
           <h3 className="text-lg font-semibold">Processing Queue</h3>
         </div>
         <div className="p-6 space-y-4">
-          {documents.map(doc => (
+          {isLoading && <TableSkeleton rows={3} columns={3} />}
+          {error && (
+            <div className="text-red-600 space-x-2">
+              <span>Error loading documents</span>
+              <button
+                className="underline"
+                onClick={() =>
+                  executeAsync(() =>
+                    fetch('data/sample_documents.json').then(res => {
+                      if (!res.ok) throw new Error('Failed to load documents');
+                      return res.json();
+                    })
+                  )
+                }
+              >
+                Retry
+              </button>
+            </div>
+          )}
+          {documents &&
+            documents.map(doc => (
             <div key={doc.id} className="border rounded-lg p-4">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-3">
@@ -331,9 +362,17 @@ function DocumentProcessing() {
                     <span>{doc.progress}%</span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
+                    <div
                       className="bg-blue-600 h-2 rounded-full transition-all"
                       style={{ width: `${doc.progress}%` }}
+                    />
+                  </div>
+                  <div className="mt-2">
+                    <ProgressiveLoader
+                      stages={[
+                        { label: 'Uploaded', completed: true },
+                        { label: 'Processing', completed: doc.progress === 100 }
+                      ]}
                     />
                   </div>
                 </div>
