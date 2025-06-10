@@ -20,11 +20,7 @@ from legal_ai_system.core.unified_exceptions import (
     ThirdPartyError,
 )
 
-embedding_provider_logger = get_detailed_logger(
-
-)
-
-
+# Initialize module level logger once
 embedding_provider_logger = get_detailed_logger(
     "EmbeddingProvider", LogCategory.LLM
 )
