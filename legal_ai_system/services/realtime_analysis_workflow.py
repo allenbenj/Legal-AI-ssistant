@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
-from types import SimpleNamespace
+
 
 from ..core.detailed_logging import (
     get_detailed_logger,
@@ -83,13 +83,6 @@ class RealTimeAnalysisResult:
 class RealTimeAnalysisWorkflow:
     """Master workflow for real-time legal document analysis."""
 
-    def __init__(self, *_, **__):
-        self.logger = get_detailed_logger(self.__class__.__name__)
-        self.max_concurrent_documents = 1
-        self.hybrid_extractor = SimpleNamespace(initialize=lambda: None)
-        self.graph_manager = SimpleNamespace(initialize_service=lambda: None)
-        self.vector_store = SimpleNamespace(initialize=lambda: None)
-        self.reviewable_memory = SimpleNamespace(initialize=lambda: None)
 
         # Performance tracking
         self.documents_processed = 0
@@ -143,6 +136,8 @@ class RealTimeAnalysisWorkflow:
             # and manage reviewable memory. We return a minimal result so
             # that the module remains functional and flake8 compliant.
             await asyncio.sleep(0)  # simulate async processing
+
+        document_id = kwargs.get("document_id") or f"doc_rt_{uuid.uuid4().hex}"
 
         total_processing_time = time.time() - start_time
         return RealTimeAnalysisResult(
