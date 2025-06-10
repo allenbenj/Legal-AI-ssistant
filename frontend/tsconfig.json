@@ -14,12 +14,10 @@
     "noEmit": true,
     "baseUrl": "./src",
     "paths": {
-      "@/*": ["*"],
-      "legal-ai-gui": ["../../legal_ai_system/frontend/legal-ai-gui.tsx"]
+      "@/*": ["*"]
     }
   },
   "include": [
-    "src",
-    "../legal_ai_system/frontend/legal-ai-gui.tsx"
+    "src"
   ]
 }
