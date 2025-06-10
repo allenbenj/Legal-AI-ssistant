@@ -7,14 +7,4 @@ if str(ROOT) not in sys.path:
 
 import types
 
-for mod in [
-    "legal_ai_system.integration_ready",
-    "legal_ai_system.integration_ready.vector_store_enhanced",
-    "faiss",
-]:
-    if mod not in sys.modules:
-        sys.modules[mod] = types.ModuleType(mod)
 
-sys.modules[
-    "legal_ai_system.integration_ready.vector_store_enhanced"
-].MemoryStore = object

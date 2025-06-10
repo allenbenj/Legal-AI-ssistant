@@ -11,11 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from ..utils.document_utils import extract_text
-from ..workflows.langgraph_setup import build_advanced_legal_workflow
-try:
-    from ..api.websocket_manager import ConnectionManager
-except Exception:  # pragma: no cover - optional dependency
-    ConnectionManager = None  # type: ignore
+
 
 from ..core.detailed_logging import (
     get_detailed_logger,
@@ -103,6 +99,7 @@ class WorkflowOrchestrator:
         self,
         document_path_str: str,
         custom_metadata: Optional[Dict[str, Any]] = None,
+        case_state: "CaseWorkflowState" | None = None,
     ) -> str:
         """Run the workflow and return the generated document ID."""
 
@@ -112,12 +109,25 @@ class WorkflowOrchestrator:
             **(custom_metadata or {}),
         )
 
-        # 2. Execute the builder based graph for additional processing
         if self._graph is None:
             self._graph = self.graph_builder(self.topic)
+
+        # Prepare text to feed the graph. When a case state object is provided
+        # we keep a cumulative context so the graph can reason over multiple
+        # documents from the same case.
         text = extract_text(Path(document_path_str))
+        if case_state is not None:
+            case_state.process_new_document(result.document_id, text)
+            graph_input = case_state.get_case_context()
+        else:
+            graph_input = text
+
+        # 2. Execute the builder based graph for additional processing
         loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, self._graph.run, text)
+        await loop.run_in_executor(None, self._graph.run, graph_input)
+
+        if case_state is not None:
+            case_state.update_case_state({"last_processed": result.document_id})
 
         return result.document_id
 
