@@ -1,15 +1,13 @@
-"""Compatibility wrapper exposing constants from :mod:`config.constants`.
+"""Compatibility wrapper exposing constants from :mod:`legal_ai_system.constants`.
 
-This module previously duplicated the definitions found in
-``config.constants``.  To prevent code drift and simplify the import graph,
-it now re-exports those symbols directly from the unified public module.
-Existing import paths continue to work while new code should import from
-``config.constants`` instead.
+This module exists for backward compatibility with older import paths.
+New code should import directly from :mod:`legal_ai_system.constants` or
+:mod:`config.constants`.
 """
 
-from config import constants as _base
+from legal_ai_system import constants as _base
 
-# Re-export selected classes and helpers for backwards compatibility
+# Re-export selected classes and helpers for legacy consumers
 Constants = _base.Constants
 TimeConstants = _base.TimeConstants
 SizeConstants = _base.SizeConstants
