@@ -2,7 +2,6 @@
 
 from .agent_workflow import AgentWorkflow
 from .legal_workflow_builder import LegalWorkflowBuilder
-from .merge import DictMerge, FirstResultMerge, ListMerge, MergeStrategy
 
 __all__ = [
     "AgentWorkflow",
@@ -11,4 +10,5 @@ __all__ = [
     "FirstResultMerge",
     "ListMerge",
     "DictMerge",
+
 ]
