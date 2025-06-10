@@ -57,6 +57,7 @@ python - <<'PY'
 import fastapi, uvicorn, streamlit, pydantic
 import openai, sentence_transformers
 import neo4j, sqlalchemy, lancedb
+import asyncpg, aioredis
 import torch
 print('Environment ready')
 PY
