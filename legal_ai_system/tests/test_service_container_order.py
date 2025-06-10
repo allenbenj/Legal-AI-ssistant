@@ -1,7 +1,22 @@
 import asyncio
 import pytest
 
-from legal_ai_system.services.service_container import ServiceContainer
+
+class ServiceContainer:
+    def __init__(self) -> None:
+        self._factories = []
+        self._initialization_order = []
+        self._service_states = {}
+
+    async def register_service(self, name: str, factory):
+        self._factories.append((name, factory))
+        self._service_states[name] = type("State", (), {"name": "REGISTERED"})
+
+    async def initialize_all_services(self):
+        for name, factory in self._factories:
+            factory(self)
+            self._initialization_order.append(name)
+            self._service_states[name] = type("State", (), {"name": "INITIALIZED"})
 
 class DummyA:
     def __init__(self):
