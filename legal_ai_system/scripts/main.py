@@ -890,7 +890,7 @@ async def process_document_rest(  # Renamed
     user_id_for_task = "mock_user_for_processing"  # Placeholder if auth is off
 
     if service_container_instance:
-        service_container_instance.update_workflow_config(
+        await service_container_instance.update_workflow_config(
             processing_request.model_dump()
         )
     background_tasks.add_task(
@@ -1192,9 +1192,68 @@ async def process_document_background_task(  # Renamed
             "user_id": requesting_user_id,
         },
     )
+    # Initialize progress state
+    global_processing_states[document_id] = {
+        "status": "processing",
+        "progress": 0.0,
+        "stage": "starting",
+    }
+
+    async def _progress_cb(message: str, prog: float) -> None:
+        """Internal callback for workflow progress events."""
+        global_processing_states[document_id].update(
+            {"stage": message, "progress": float(prog)}
+        )
+        if websocket_manager_instance:
+            await websocket_manager_instance.broadcast_to_topic(
+                {
+                    "type": "processing_progress",
+                    "document_id": document_id,
+                    "stage": message,
+                    "progress": float(prog),
+                },
+                f"document_updates_{document_id}",
+            )
+
     try:
-        # TODO: implement actual document processing here
-        pass
+        if not service_container_instance:
+            raise RuntimeError("Service container unavailable")
+
+        orchestrator = await service_container_instance.get_service(
+            "workflow_orchestrator"
+        )
+
+        workflow = getattr(orchestrator, "workflow", None)
+        if workflow and hasattr(workflow, "register_progress_callback"):
+            workflow.register_progress_callback(_progress_cb)
+
+        global_processing_states[document_id].update(
+            {
+                "stage": "running_workflow",
+                "progress": 0.1,
+            }
+        )
+
+        await orchestrator.execute_workflow_instance(
+            document_path_str=document_file_path,
+            custom_metadata={
+                "document_id": document_id,
+                "user_id": requesting_user_id,
+                **processing_request_model.model_dump(),
+            },
+        )
+
+        global_processing_states[document_id].update(
+            {"status": "completed", "progress": 1.0, "stage": "completed"}
+        )
+        if websocket_manager_instance:
+            await websocket_manager_instance.broadcast_to_topic(
+                {
+                    "type": "processing_complete",
+                    "document_id": document_id,
+                },
+                f"document_updates_{document_id}",
+            )
     except Exception as e:
         main_api_logger.error(
             f"Background processing failed for document.",

@@ -257,20 +257,7 @@ class ServiceContainer:
 
             return self._services[name]
 
-    def get_active_workflow_config(self) -> Dict[str, Any]:
-        """Return the currently active workflow configuration."""
-        return dict(self._active_workflow_config)
 
-    @detailed_log_function(LogCategory.SYSTEM)
-    async def update_workflow_config(self, new_config: Dict[str, Any]) -> None:
-        """Update workflow configuration and propagate to the workflow service if initialized."""
-        async with self._lock:
-            self._active_workflow_config.update(new_config)
-            workflow = self._services.get("realtime_analysis_workflow")
-            if workflow and hasattr(workflow, "update_config"):
-                maybe = workflow.update_config(**self._active_workflow_config)
-                if asyncio.iscoroutine(maybe):
-                    await maybe
 
     @detailed_log_function(LogCategory.SYSTEM)
     async def initialize_all_services(self):
@@ -466,14 +453,17 @@ class ServiceContainer:
         """Return the currently active workflow configuration."""
         return self._active_workflow_config
 
-    def update_workflow_config(self, new_config: Dict[str, Any]) -> None:
+    async def update_workflow_config(self, new_config: Dict[str, Any]) -> None:
         """Update the workflow configuration and propagate to the workflow instance."""
-        for key, value in new_config.items():
-            setattr(self._active_workflow_config, key, value)
-        if "realtime_analysis_workflow" in self._services:
-            workflow = self._services["realtime_analysis_workflow"]
-            if hasattr(workflow, "update_config"):
-                workflow.update_config(**new_config)
+        async with self._lock:
+            for key, value in new_config.items():
+                setattr(self._active_workflow_config, key, value)
+            if "realtime_analysis_workflow" in self._services:
+                workflow = self._services["realtime_analysis_workflow"]
+                if hasattr(workflow, "update_config"):
+                    maybe = workflow.update_config(**new_config)
+                    if asyncio.iscoroutine(maybe):
+                        await maybe
 
 
 # Global factory function to create and populate the service container
