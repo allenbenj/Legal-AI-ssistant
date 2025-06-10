@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable, List
 
 try:  # pragma: no cover - optional dependency
     from langgraph.graph import StateGraph, END
@@ -54,7 +54,8 @@ def _merge_text(results: list[str]) -> str:
 
 
 def build_graph(topic: str) -> StateGraph:
-    """Build a simple LangGraph pipeline for a given topic."""
+    """Build a LangGraph pipeline demonstrating advanced features."""
+
     graph = StateGraph()
 
     graph.add_node("analysis", AnalysisNode(topic))
@@ -62,6 +63,10 @@ def build_graph(topic: str) -> StateGraph:
     graph.add_node("human_review", HumanReviewNode(review_memory))
     manager = ConnectionManager()
     graph.add_node("summary", SummaryNode())
+    graph.add_node("echo", lambda x: x)
+    graph.add_node("combine", lambda items: " ".join(items))
+    graph.add_node("final", lambda x: x)
+
 
     return graph
 
