@@ -342,32 +342,38 @@ class RealTimeAnalysisWorkflow:
             start_time = time.time()
 
             # Add document-level vector
+            doc_vector_kwargs = {
+                "index_target": "document",
+                "confidence_score": 0.9,
+                "source_file": hybrid_result.document_id,
+                "custom_metadata": {
+                    "extraction_timestamp": datetime.now().isoformat()
+                },
+            }
             await self.vector_store.add_vector_async(
                 content_to_embed=document_text[:1000],  # Limit size
                 document_id_ref=document_id,
-                index_target="document",
-                confidence_score=0.9,
-                source_file=hybrid_result.document_id,
-                custom_metadata={
-                    "extraction_timestamp": datetime.now().isoformat()
-                },
+                **doc_vector_kwargs,
             )
             vector_updates["vectors_added"] += 1
 
             # Add entity vectors
             for entity in hybrid_result.validated_entities:
                 if entity.confidence >= self.confidence_threshold:
-                    await self.vector_store.add_vector_async(
-                        content_to_embed=entity.entity_text,
-                        document_id_ref=document_id,
-                        index_target="entity",
-                        vector_id_override=f"{entity.consensus_type}_{hash(entity.entity_text) % 10000}",
-                        confidence_score=entity.confidence,
-                        source_file=document_id,
-                        custom_metadata={
+                    entity_vector_kwargs = {
+                        "index_target": "entity",
+                        "vector_id_override": f"{entity.consensus_type}_{hash(entity.entity_text) % 10000}",
+                        "confidence_score": entity.confidence,
+                        "source_file": document_id,
+                        "custom_metadata": {
                             "extraction_method": "hybrid",
                             "discrepancy": entity.discrepancy,
                         },
+                    }
+                    await self.vector_store.add_vector_async(
+                        content_to_embed=entity.entity_text,
+                        document_id_ref=document_id,
+                        **entity_vector_kwargs,
                     )
                     vector_updates["vectors_added"] += 1
 
@@ -375,17 +381,20 @@ class RealTimeAnalysisWorkflow:
             for extraction_type, results in hybrid_result.targeted_extractions.items():
                 for result in results:
                     if result.get("confidence", 0) >= self.confidence_threshold:
-                        await self.vector_store.add_vector_async(
-                            content_to_embed=result.get("description", ""),
-                            document_id_ref=document_id,
-                            index_target="entity",
-                            vector_id_override=f"{extraction_type}_{hash(str(result)) % 10000}",
-                            confidence_score=result.get("confidence", 0.8),
-                            source_file=document_id,
-                            custom_metadata={
+                        targeted_vector_kwargs = {
+                            "index_target": "entity",
+                            "vector_id_override": f"{extraction_type}_{hash(str(result)) % 10000}",
+                            "confidence_score": result.get("confidence", 0.8),
+                            "source_file": document_id,
+                            "custom_metadata": {
                                 "targeted_extraction": True,
                                 "extraction_type": extraction_type,
                             },
+                        }
+                        await self.vector_store.add_vector_async(
+                            content_to_embed=result.get("description", ""),
+                            document_id_ref=document_id,
+                            **targeted_vector_kwargs,
                         )
                         vector_updates["vectors_added"] += 1
 
