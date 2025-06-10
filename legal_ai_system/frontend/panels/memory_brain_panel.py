@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 """Streamlit panel for managing memory entries."""
-from pathlib import Path
-import json
-import os
 from typing import Any, Dict, List
+import asyncio
 
 import streamlit as st
 
 from ...tools.contradiction_detector import ContradictionDetector, MemoryEntry
 from ...tools import run_tool, register_tool, ToolGuide
+from ...services.memory_service import memory_manager_context
 
 
 class MemoryBrainPanel:
@@ -21,24 +20,24 @@ class MemoryBrainPanel:
         self._register_tools()
 
     def _load_memory_entries(self) -> None:
-        """Load memory entries from JSON if available."""
-        env_path = os.getenv("MEMORY_BRAIN_DATA")
-        if env_path:
-            data_path = Path(env_path)
-        else:
-            data_path = (
-                Path(__file__).resolve().parent.parent
-                / "data"
-                / "sample_memory_entries.json"
-            )
-        if data_path.exists():
-            try:
-                with open(data_path, "r", encoding="utf-8") as f:
-                    raw_entries: List[Dict[str, Any]] = json.load(f)
-                self.memory_entries = [MemoryEntry(**entry) for entry in raw_entries]
-            except json.JSONDecodeError:
-                self.memory_entries = []
-        else:
+        """Load memory entries from the :class:`UnifiedMemoryManager`."""
+
+        async def _load() -> None:
+            async with memory_manager_context() as manager:
+                entries = await manager.get_context_window("memory_brain")
+                self.memory_entries = [
+                    MemoryEntry(
+                        speaker=e.get("metadata", {}).get("speaker", ""),
+                        statement=e.get("content", ""),
+                        source=e.get("metadata", {}).get("source", ""),
+                    )
+                    for e in entries
+                    if e.get("entry_type") == "statement"
+                ]
+
+        try:
+            asyncio.run(_load())
+        except Exception:
             self.memory_entries = []
 
     def _register_tools(self) -> None:
@@ -56,6 +55,23 @@ class MemoryBrainPanel:
 
         register_tool("contradiction_check", _contradiction_tool, guide)
 
+    def _persist_statement(self, entry: MemoryEntry) -> None:
+        """Persist a statement via :class:`UnifiedMemoryManager`."""
+
+        async def _store() -> None:
+            async with memory_manager_context() as manager:
+                await manager.add_context_window_entry(
+                    session_id="memory_brain",
+                    entry_type="statement",
+                    content=entry.statement,
+                    metadata={"speaker": entry.speaker, "source": entry.source},
+                )
+
+        try:
+            asyncio.run(_store())
+        except Exception:
+            pass
+
     def render(self) -> None:
         """Render the Memory Brain panel."""
         tabs = st.tabs(["Statement Intake", "Contradiction Check", "Merge & Curate"])
@@ -66,9 +82,9 @@ class MemoryBrainPanel:
             statement = st.text_area("Statement")
             source = st.text_input("Source")
             if st.button("Add Statement"):
-                self.memory_entries.append(
-                    MemoryEntry(speaker=speaker, statement=statement, source=source)
-                )
+                entry = MemoryEntry(speaker=speaker, statement=statement, source=source)
+                self.memory_entries.append(entry)
+                self._persist_statement(entry)
                 st.success("Statement added to memory.")
 
         with tabs[1]:

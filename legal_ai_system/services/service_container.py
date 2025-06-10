@@ -125,6 +125,7 @@ class ServiceContainer:
         self._lock = (
             asyncio.Lock()
         )  # For thread-safe registration and retrieval if needed (though primarily async)
+        self._active_workflow_config: Dict[str, Any] = {}
         service_container_logger.info("ServiceContainer instance created.")
 
     @detailed_log_function(LogCategory.SYSTEM)
@@ -251,6 +252,21 @@ class ServiceContainer:
                     )
 
             return self._services[name]
+
+    def get_active_workflow_config(self) -> Dict[str, Any]:
+        """Return the currently active workflow configuration."""
+        return dict(self._active_workflow_config)
+
+    @detailed_log_function(LogCategory.SYSTEM)
+    async def update_workflow_config(self, new_config: Dict[str, Any]) -> None:
+        """Update workflow configuration and propagate to the workflow service if initialized."""
+        async with self._lock:
+            self._active_workflow_config.update(new_config)
+            workflow = self._services.get("realtime_analysis_workflow")
+            if workflow and hasattr(workflow, "update_config"):
+                maybe = workflow.update_config(**self._active_workflow_config)
+                if asyncio.iscoroutine(maybe):
+                    await maybe
 
     @detailed_log_function(LogCategory.SYSTEM)
     async def initialize_all_services(self):
@@ -651,7 +667,7 @@ async def create_service_container(
         service_config=kg_conf,
     )
 
-    from ..core.vector_store import create_vector_store  # Standard one
+    from ..core.enhanced_vector_store import create_enhanced_vector_store  # Unified implementation
 
     vs_conf = {  # Fetch from config_manager
         "STORAGE_PATH": str(
@@ -665,7 +681,7 @@ async def create_service_container(
     # EmbeddingProvider instance can be fetched from EmbeddingManager if VectorStore is designed to take it
     # embedding_provider_instance = await container.get_service("embedding_manager").get_provider_instance() # Conceptual
     await container.register_service(
-        "vector_store", factory=create_vector_store, service_config=vs_conf
+        "vector_store", factory=create_enhanced_vector_store, service_config=vs_conf
     )
 
     from ..core.optimized_vector_store import (
@@ -726,6 +742,19 @@ async def create_service_container(
     await container.register_service(
         "violation_review_db",
         instance=ViolationReviewDB(db_path=violation_db_path),
+    )
+
+    from .workflow_config import WorkflowConfig
+    from .realtime_analysis_workflow import RealTimeAnalysisWorkflow
+
+    workflow_cfg_dict = config_manager_service.get("workflow_config", {})
+    await container.update_workflow_config(workflow_cfg_dict)
+    await container.register_service(
+        "realtime_analysis_workflow",
+        factory=lambda sc: RealTimeAnalysisWorkflow(
+            sc, config=WorkflowConfig(**sc.get_active_workflow_config())
+        ),
+        is_async_factory=False,
     )
 
     # Agents are often stateful per task, so factories are common.

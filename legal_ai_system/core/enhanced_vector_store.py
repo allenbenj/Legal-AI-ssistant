@@ -902,6 +902,21 @@ class EnhancedVectorStore:
             "cache_size": len(self.metadata_cache),
         }
 
+
+def create_enhanced_vector_store(
+    service_container: Any,
+    service_config: Optional[Dict[str, Any]] | None = None,
+) -> "EnhancedVectorStore":
+    """Factory function used by :class:`ServiceContainer`."""
+
+    cfg = service_config or {}
+    return EnhancedVectorStore(
+        storage_path=cfg.get("STORAGE_PATH", "./storage/vectors"),
+        embedding_model=cfg.get("embedding_model_name", "sentence-transformers/all-MiniLM-L6-v2"),
+        index_type=IndexType(cfg.get("DEFAULT_INDEX_TYPE", "HNSW")),
+        enable_gpu=cfg.get("ENABLE_GPU_FAISS", False),
+    )
+
     # ------------------------------------------------------------------
 
 if __name__ == "__main__":
