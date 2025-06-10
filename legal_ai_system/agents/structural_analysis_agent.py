@@ -76,7 +76,7 @@ class StructuralAnalysisAgent(BaseAgent, MemoryMixin):
         # Get optimized Grok-Mini configuration for this agent
         self.llm_config = self.get_optimized_llm_config()
         self.logger.info(
-            f"StructuralAnalysisAgentAgent configured with model: {self.llm_config.get('llm_model', 'default')}"
+            f"StructuralAnalysisAgent configured with model: {self.llm_config.get('llm_model', 'default')}"
         )
         self.llm_manager: Optional[LLMManager] = self.get_llm_manager()
         self.model_switcher: Optional[ModelSwitcher] = self._get_service(
