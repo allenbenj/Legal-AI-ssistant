@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
-import uuid
+
 
 from ..core.detailed_logging import (
     get_detailed_logger,
@@ -83,8 +83,7 @@ class RealTimeAnalysisResult:
 class RealTimeAnalysisWorkflow:
     """Master workflow for real-time legal document analysis."""
 
-    def __init__(self) -> None:
-        """Initialize runtime attributes."""
+
         # Performance tracking
         self.documents_processed = 0
         self.processing_times: List[float] = []

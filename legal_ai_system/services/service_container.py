@@ -728,7 +728,7 @@ async def create_service_container(
     from .realtime_analysis_workflow import RealTimeAnalysisWorkflow
 
     workflow_cfg_dict = config_manager_service.get("workflow_config", {})
-    await container.update_workflow_config(workflow_cfg_dict)
+    container.update_workflow_config(workflow_cfg_dict)
     await container.register_service(
         "realtime_analysis_workflow",
         factory=lambda sc: RealTimeAnalysisWorkflow(

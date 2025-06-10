@@ -7,7 +7,7 @@
 # current behaviour.
 USE_WORKFLOW_BUILDER: bool = False
 
-from ..services.workflow_config import WorkflowConfig
+
 
 
 
