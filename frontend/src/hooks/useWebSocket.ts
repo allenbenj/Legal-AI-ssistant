@@ -7,7 +7,7 @@ export interface WebSocketHook {
 
 export default function useWebSocket(url: string, onMessage: (msg: any) => void): WebSocketHook {
   const wsRef = useRef<WebSocket>();
-  const reconnectRef = useRef<NodeJS.Timeout>();
+  const reconnectRef = useRef<ReturnType<typeof setTimeout>>();
   const [connected, setConnected] = useState(false);
 
   const connect = () => {
