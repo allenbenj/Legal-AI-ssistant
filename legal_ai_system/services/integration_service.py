@@ -48,8 +48,14 @@ class LegalAIIntegrationService:
             raise ConfigurationError(msg)
 
         self.service_container = service_container
-        # Services are retrieved lazily since `get_service` is async
+        # Cached service references (may be None if not yet registered)
         self.security_manager: Optional[SecurityManager] = None
+        self.llm_manager: Optional[Any] = None
+
+        # Attempt to load services synchronously if already available
+        existing_services = getattr(service_container, "_services", {})
+        self.security_manager = existing_services.get("security_manager")
+        self.llm_manager = existing_services.get("llm_manager")
         # Example: self.realtime_workflow: Optional[RealTimeAnalysisWorkflow] = None
 
         integration_service_logger.info(
@@ -209,14 +215,16 @@ class LegalAIIntegrationService:
     @detailed_log_function(LogCategory.API)
     async def analyze_text(self, text: str, topic: str = "general") -> str:
         """Analyze text using the configured LLM manager."""
-        llm_manager = None
-        if self.service_container:
+        if not self.llm_manager and self.service_container:
             try:
-                llm_manager = await self.service_container.get_service("llm_manager")
+                self.llm_manager = await self.service_container.get_service(
+                    "llm_manager"
+                )
             except Exception as e:  # pragma: no cover - service retrieval issue
                 integration_service_logger.warning(
                     "LLMManager unavailable for analysis", exception=e
                 )
+        llm_manager = self.llm_manager
         if not llm_manager:
             return text
         prompt = f"Analyze the following text about {topic}:\n{text}"
@@ -230,14 +238,16 @@ class LegalAIIntegrationService:
     @detailed_log_function(LogCategory.API)
     async def summarize_text(self, text: str, max_tokens: int = 200) -> str:
         """Summarize text using the LLM manager."""
-        llm_manager = None
-        if self.service_container:
+        if not self.llm_manager and self.service_container:
             try:
-                llm_manager = await self.service_container.get_service("llm_manager")
+                self.llm_manager = await self.service_container.get_service(
+                    "llm_manager"
+                )
             except Exception as e:  # pragma: no cover - service retrieval issue
                 integration_service_logger.warning(
                     "LLMManager unavailable for summarization", exception=e
                 )
+        llm_manager = self.llm_manager
         if not llm_manager:
             return text[:max_tokens]
         prompt = (
@@ -291,7 +301,27 @@ class LegalAIIntegrationService:
         integration_service_logger.info(
             "LegalAIIntegrationService (async) initialize called."
         )
-        # Nothing specific to init here as it relies on service_container being ready.
+        # Attempt to retrieve core services now that the container is initializing
+        if not self.security_manager:
+            try:
+                self.security_manager = await self.service_container.get_service(
+                    "security_manager"
+                )
+            except Exception as e:
+                integration_service_logger.debug(
+                    "SecurityManager not available during initialization.",
+                    exception=e,
+                )
+        if not self.llm_manager:
+            try:
+                self.llm_manager = await self.service_container.get_service(
+                    "llm_manager"
+                )
+            except Exception as e:
+                integration_service_logger.debug(
+                    "LLMManager not available during initialization.",
+                    exception=e,
+                )
         return self
 
     async def get_service_status(self) -> Dict[str, Any]:  # For service container
