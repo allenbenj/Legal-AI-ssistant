@@ -9,7 +9,7 @@ specifically designed for legal document processing and analysis.
 
 import json
 from typing import Dict, List, Any, Optional
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from datetime import datetime
 import asyncio
 from pathlib import Path
@@ -26,7 +26,6 @@ from ..core.enhanced_persistence import (
 
 # Import detailed logging
 from ..core.detailed_logging import get_detailed_logger, LogCategory, detailed_log_function
-from ..core.enhanced_persistence import ConnectionPool
 
 # Initialize loggers
 kg_logger = get_detailed_logger("Knowledge_Graph_Manager", LogCategory.KNOWLEDGE_GRAPH)
@@ -154,6 +153,8 @@ class KnowledgeGraphManager:
         # Performance tracking
         self.query_cache: Dict[str, QueryResult] = {}
         self.cache_ttl = self.config.get('cache_ttl_seconds', 3600)
+        self.cache_manager = cache_manager
+        self.metrics = metrics_exporter
         self.query_history: List[Dict[str, Any]] = []
         
         # Thread safety
@@ -325,6 +326,24 @@ class KnowledgeGraphManager:
             'name_pattern': name_pattern,
             'limit': limit
         })
+
+        cache_key = None
+        if self.cache_manager:
+            base = {
+                "type": entity_type.value if entity_type else None,
+                "name": name_pattern,
+                "props": properties_filter,
+                "limit": limit,
+            }
+            cache_key = "kg_query:" + hashlib.sha256(str(base).encode()).hexdigest()
+            cached = await self.cache_manager.get(cache_key)
+            if cached:
+                if self.metrics:
+                    self.metrics.inc_kg_query(cache_hit=True)
+                return [Entity(**c) for c in cached]
+
+        if self.metrics:
+            self.metrics.inc_kg_query()
         
         if self.persistence and name_pattern:
             records = await self.persistence.entity_repo.find_similar_entities(
@@ -367,6 +386,15 @@ class KnowledgeGraphManager:
                     break
 
             query_logger.info(f"Found {len(entities)} entities")
+            if cache_key and self.cache_manager:
+                try:
+                    await self.cache_manager.set(
+                        cache_key,
+                        [asdict(e) for e in entities],
+                        ttl_seconds=self.cache_ttl,
+                    )
+                except Exception:
+                    pass
             return entities
     
     # ==================== RELATIONSHIP OPERATIONS ====================
@@ -463,7 +491,7 @@ class KnowledgeGraphManager:
     # ==================== GRAPH QUERIES ====================
     
     @detailed_log_function(LogCategory.KNOWLEDGE_GRAPH)
-    async def find_connected_entities(self, entity_id: str, 
+    async def find_connected_entities(self, entity_id: str,
                                      relationship_types: Optional[List[RelationshipType]] = None,
                                      max_depth: int = 2) -> List[Entity]:
         """Find entities connected to the given entity."""
@@ -471,6 +499,23 @@ class KnowledgeGraphManager:
             'max_depth': max_depth,
             'relationship_types': [rt.value for rt in relationship_types] if relationship_types else None
         })
+
+        cache_key = None
+        if self.cache_manager:
+            base = {
+                "entity": entity_id,
+                "rel_types": [rt.value for rt in relationship_types] if relationship_types else None,
+                "depth": max_depth,
+            }
+            cache_key = "kg_connected:" + hashlib.sha256(str(base).encode()).hexdigest()
+            cached = await self.cache_manager.get(cache_key)
+            if cached:
+                if self.metrics:
+                    self.metrics.inc_kg_query(cache_hit=True)
+                return [Entity(**c) for c in cached]
+
+        if self.metrics:
+            self.metrics.inc_kg_query()
         
         connected_entities = set()
 
@@ -495,15 +540,6 @@ class KnowledgeGraphManager:
                         target_id = rel.source_entity_id
                     if target_id:
                         connected_entities.add(target_id)
-
-        result_entities = []
-        for ent_id in connected_entities:
-            entity = await self.get_entity(ent_id)
-            if entity:
-                result_entities.append(entity)
-
-        query_logger.info(f"Found {len(result_entities)} connected entities")
-        return result_entities
     
     # ==================== UTILITY METHODS ====================
     
@@ -630,10 +666,4 @@ class KnowledgeGraphManager:
 
 # Service container factory function
 def create_knowledge_graph_manager(
-    connection_pool: ConnectionPool,
-    config: Optional[Dict[str, Any]] = None,
-) -> KnowledgeGraphManager:
-    """Factory function for service container integration."""
-    return KnowledgeGraphManager(
-        service_config=config or {}, connection_pool=connection_pool
     )

@@ -20,6 +20,7 @@ from pathlib import Path # Not directly used but good for potential path ops
 
 # Use detailed_logging
 from ..core.detailed_logging import get_detailed_logger, LogCategory, detailed_log_function
+from ..core.agent_unified_config import _get_service_sync
 # Import exceptions
 from ..core.unified_exceptions import DatabaseError, ConfigurationError
 
@@ -895,9 +896,6 @@ class CacheManager:
 
 class EnhancedPersistenceManager:
     """Central persistence manager coordinating all data operations."""
-
-    def __init__(self, connection_pool: ConnectionPool,
-                 config: Optional[Dict[str, Any]] = None):
         self.config = config or {}
         cache_ttl = self.config.get("cache_default_ttl_seconds", 3600)
 
@@ -906,6 +904,7 @@ class EnhancedPersistenceManager:
         self.relationship_repo = RelationshipRepository(self.connection_pool)
         self.workflow_repo = WorkflowRepository(self.connection_pool)
         self.cache_manager = CacheManager(self.connection_pool, default_ttl_seconds=cache_ttl)
+        self.metrics = metrics_exporter
         self.initialized = False
         self.logger = persistence_logger.getChild("Manager")
 
@@ -1103,6 +1102,15 @@ class EnhancedPersistenceManager:
             },
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
+        if self.metrics:
+            try:
+                self.metrics.update_pool_metrics(
+                    pg_in_use=health_report["connection_pool_stats"]["pg_pool_current_size"],
+                    pg_free=health_report["connection_pool_stats"]["pg_pool_free_size"],
+                    redis_in_use=cache_info.get("connected_clients", 0),
+                )
+            except Exception:
+                pass
         self.logger.info("Persistence health check complete.", parameters=health_report)
         return health_report
     
@@ -1122,11 +1130,5 @@ class EnhancedPersistenceManager:
 
 # Factory function for service container
 def create_enhanced_persistence_manager(
-    connection_pool: ConnectionPool, config: Dict[str, Any]
-) -> EnhancedPersistenceManager:
-    """Factory for :class:`EnhancedPersistenceManager`."""
 
-    return EnhancedPersistenceManager(
-        connection_pool,
-        config=config.get("persistence_config"),
     )
