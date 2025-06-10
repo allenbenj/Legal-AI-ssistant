@@ -8,6 +8,7 @@ The core dependencies for running the tests are listed below. They can be instal
 
 - `pytest` and `pytest-asyncio` – main test framework with asyncio support
 - `pytest-mock` – utilities for mocking during tests
+- `pytest-cov` – required because coverage reporting is enabled by default
 - `typer` – required to test the CLI script
 - `streamlit` – used by the GUI script (tests mock this module)
 
@@ -19,8 +20,7 @@ Additional packages from `requirements.txt` are needed for the application itsel
 python3 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
-pip install -r requirements.txt
-pip install pytest pytest-asyncio pytest-mock typer streamlit
+pip install -e .[dev]
 pytest
 ```
 

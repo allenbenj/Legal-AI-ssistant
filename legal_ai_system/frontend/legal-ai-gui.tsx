@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React, { useState, useEffect, createContext, useContext } from 'react';
+import React, { useState, useEffect, createContext, useContext, useRef, useCallback } from 'react';
 import {
   Search, Upload, FileText, Users, Settings, Shield,
   Activity, Database, Cpu, AlertCircle, CheckCircle,
@@ -12,8 +12,7 @@ import {
   DashboardErrorBoundary,
   DocumentProcessingErrorBoundary,
 } from '../../frontend/src/components/AsyncErrorBoundary';
-import Login from '../../frontend/src/components/Login';
-import { useAuth } from '../../frontend/src/contexts/AuthContext';
+
 
 
 
@@ -221,7 +220,7 @@ function NotificationArea({ notifications }) {
 // Dashboard Component
 function Dashboard() {
   const { systemStatus, setSystemStatus } = useContext(AppContext);
-  const idRef = React.useRef<string>('client-' + Math.random().toString(36).slice(2));
+  const idRef = useRef<string>('client-' + Math.random().toString(36).slice(2));
   const { status, connected } = useRealtimeSystemStatus(idRef.current);
 
   React.useEffect(() => {
@@ -303,8 +302,14 @@ function Dashboard() {
 // Document Processing Interface
 function DocumentProcessing() {
   const { addNotification } = useContext(AppContext);
-  const { isLoading, error, data: documents, executeAsync } =
-    useLoadingState<Array<{ id: number; name: string; status: string; progress: number }>>();
+  const {
+    isLoading,
+    error,
+    data: documents,
+    executeAsync,
+    setData,
+  } = useLoadingState<Array<{ id: number; name: string; status: string; progress: number }>>();
+  const idRef = useRef<string>('client-' + Math.random().toString(36).slice(2));
 
   useEffect(() => {
     executeAsync(() =>
@@ -320,6 +325,41 @@ function DocumentProcessing() {
   const handleFileUpload = () => {
     addNotification('File uploaded successfully', 'success');
   };
+
+  const updateHandler = useCallback(
+    (update: any) => {
+      if (update.type === 'processing_error') {
+        addNotification(`Processing failed for document ${update.document_id}`, 'error');
+      } else if (update.type === 'processing_progress') {
+        setData(prev =>
+          prev?.map(doc =>
+            doc.id === update.document_id
+              ? {
+                  ...doc,
+                  progress: Math.round((update.progress ?? 0) * 100),
+                  status: update.progress === 1 ? 'completed' : 'processing',
+                }
+              : doc
+          ) ?? prev
+        );
+        if (update.progress === 1) {
+          addNotification(`Document ${update.document_id} processed`, 'success');
+        }
+      }
+    },
+    [addNotification, setData]
+  );
+
+  useDocumentUpdates(
+    idRef.current,
+    documents ? documents.map(d => d.id) : [],
+    updateHandler,
+    msg => {
+      if (msg.message) {
+        addNotification(msg.message, 'info');
+      }
+    }
+  );
 
   return (
     <div className="space-y-6">

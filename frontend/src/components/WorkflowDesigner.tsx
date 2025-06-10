@@ -3,6 +3,8 @@ import apiFetch from "../apiClient";
 import { Plus, Edit } from "lucide-react";
 import useLoadingState from "../hooks/useLoadingState";
 import TableSkeleton from "./skeletons/TableSkeleton";
+import { listWorkflows } from "../api/client";
+import { WorkflowConfig } from "../types/workflow";
 
 export interface WorkflowNode {
   id: string;
@@ -15,27 +17,16 @@ export interface WorkflowConnection {
   to: string;
 }
 
-export interface Workflow {
-  id: string;
-  name: string;
-  nodes: WorkflowNode[];
-  connections: WorkflowConnection[];
-}
+// Alias to maintain compatibility with earlier placeholder interface
+export type Workflow = WorkflowConfig;
 
 const WorkflowDesigner: React.FC = () => {
   const { isLoading, error, data: workflows, executeAsync } =
-    useLoadingState<Workflow[]>();
-  const [selected, setSelected] = useState<Workflow | null>(null);
+    useLoadingState<WorkflowConfig[]>();
+  const [selected, setSelected] = useState<WorkflowConfig | null>(null);
 
   useEffect(() => {
-    executeAsync(() =>
-      apiFetch("/api/v1/workflows").then((res) => {
-        if (!res.ok) {
-          throw new Error("Failed to load workflows");
-        }
-        return res.json();
-      })
-    );
+
   }, []);
 
   const editWorkflow = (wf: Workflow) => {
@@ -70,14 +61,7 @@ const WorkflowDesigner: React.FC = () => {
               <span>Error loading workflows</span>
               <button
                 className="underline"
-                onClick={() =>
-                  executeAsync(() =>
-                    apiFetch("/api/v1/workflows").then((res) => {
-                      if (!res.ok) throw new Error("Failed to load workflows");
-                      return res.json();
-                    })
-                  )
-                }
+
               >
                 Retry
               </button>
