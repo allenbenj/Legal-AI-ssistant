@@ -25,9 +25,6 @@ embedding_provider_logger = get_detailed_logger(
 )
 
 
-embedding_provider_logger = get_detailed_logger(
-    "EmbeddingProvider", LogCategory.LLM
-)
 
 class EmbeddingProviderVS(ABC):
     """Abstract base class for embedding providers."""
