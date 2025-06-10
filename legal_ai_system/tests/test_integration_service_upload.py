@@ -32,6 +32,7 @@ for name in [
         sys.modules[name] = ModuleType(name)
 
 
+
 sys.modules["faiss"].StandardGpuResources = object
 sys.modules["faiss"].index_cpu_to_gpu = lambda *a, **k: None
 sys.modules["faiss"].IndexFlatL2 = object
@@ -73,14 +74,6 @@ sec_mod.SecurityManager = object
 sec_mod.User = User
 sys.modules["legal_ai_system.utils.user_repository"].UserRepository = object
 
-
-
-import pytest
-
-@pytest.fixture(autouse=True, scope="module")
-def _restore_service_container():
-    yield
-    svc_mod.ServiceContainer = _orig_container_cls
 
 sys.modules["legal_ai_system.services.workflow_orchestrator"].WorkflowOrchestrator = object
 

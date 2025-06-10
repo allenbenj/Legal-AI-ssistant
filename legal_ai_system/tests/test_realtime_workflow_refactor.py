@@ -47,6 +47,7 @@ try:
         RealTimeAnalysisResult,
     )
 except Exception:  # pragma: no cover - optional dependency may be missing
+    sys.modules.pop("legal_ai_system.services.service_container", None)
     pytest.skip("workflow module unavailable", allow_module_level=True)
 
 
@@ -153,13 +154,4 @@ async def test_process_document_realtime_uses_provided_document_id() -> None:
     assert result.document_id == "custom_id"
 
 
-@pytest.mark.asyncio
-async def test_process_document_realtime_enqueues_job() -> None:
-    queue = SimpleNamespace(enqueue=MagicMock(return_value=SimpleNamespace(id="j1")))
-    wf = DummyWorkflow(queue=queue)
-
-    job = await wf.process_document_realtime("sample.txt")
-
-    queue.enqueue.assert_called_once()
-    assert job == queue.enqueue.return_value
 

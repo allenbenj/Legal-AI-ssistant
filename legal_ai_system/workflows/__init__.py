@@ -17,6 +17,5 @@ __all__ = [
     "MergeStrategy",
     "ConcatMerge",
     "ListMerge",
-    "CaseWorkflowState",
 
 ]

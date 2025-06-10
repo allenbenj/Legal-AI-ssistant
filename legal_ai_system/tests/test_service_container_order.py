@@ -1,7 +1,4 @@
 import asyncio
-import importlib
-import pytest
-
 
 
 class DummyA:
