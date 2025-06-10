@@ -14,16 +14,14 @@ import logging
 import os
 import sys
 import uuid  # For generating IDs
-from collections import defaultdict
 
 # import logging # Replaced by detailed_logging
 from contextlib import asynccontextmanager
 import datetime
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Union
-from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
 
 from jose import jwt
 
@@ -173,7 +171,11 @@ def save_workflow_configs() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager for startup and shutdown."""
-    global service_container_instance, security_manager_instance, websocket_manager_instance, realtime_publisher_instance
+    global \
+        service_container_instance, \
+        security_manager_instance, \
+        websocket_manager_instance, \
+        realtime_publisher_instance
 
     main_api_logger.info("🚀 Starting Legal AI System API lifespan...")
 
@@ -190,6 +192,7 @@ async def lifespan(app: FastAPI):
             service_container_instance = (
                 await create_service_container()
             )  # If it's async
+            await service_container_instance.initialize_all_services()
             main_api_logger.info("✅ Service container initialized successfully.")
         except Exception as e:
             main_api_logger.error(
@@ -929,7 +932,10 @@ async def get_document_status_rest(  # Renamed
     # In a real system, this would come from a database or a state manager.
     # Check if the document ID is in a (hypothetical) processing state tracker
     # global_processing_states is a placeholder for actual state management
-    if "global_processing_states" in globals() and document_id in global_processing_states:  # type: ignore
+    if (
+        "global_processing_states" in globals()
+        and document_id in global_processing_states
+    ):  # type: ignore
         state = global_processing_states[document_id]  # type: ignore
         return DocumentStatusResponse(
             document_id=document_id,
