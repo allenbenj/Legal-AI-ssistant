@@ -6,7 +6,7 @@ Uses centralized constants to eliminate magic numbers.
 """
 
 from pathlib import Path
-from typing import List, Optional, Any, Union, cast
+from typing import List, Optional, Any, Union, cast, Dict
 
 try:
     from pydantic_settings import BaseSettings
@@ -137,6 +137,7 @@ except ImportError:
             "enable_test_mode": False,
             "enable_agent_debugging": False,
             "save_intermediate_results": False,
+            "agents": {"legal_reasoning_engine_config": {}},
         }
 
 
@@ -441,6 +442,12 @@ class LegalAISettings(BaseSettings):
     # =================== FRONTEND ===================
     frontend_dist_path: Optional[Path] = Field(
         default=None, env="FRONTEND_DIST_PATH"
+    )
+
+    # =================== AGENT CONFIGS ===================
+    agents: Dict[str, Any] = Field(
+        default_factory=lambda: {"legal_reasoning_engine_config": {}},
+        env="AGENTS_CONFIG",
     )
 
     class Config:
