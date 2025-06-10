@@ -285,6 +285,7 @@ class VectorStore:
         embedding_provider: EmbeddingProviderVS,
         default_index_type: IndexType = IndexType.HNSW,
         enable_gpu_faiss: bool = False,
+
     ):
         vector_store_logger.info("=== VectorStore: Instance Creation START ===")
         self.config = service_config or {}
@@ -619,6 +620,7 @@ class VectorStore:
 
     def _load_faiss_indexes_sync(self):
         """Synchronous part of loading FAISS indexes from disk."""
+
             if doc_index_path.exists():
                 try:
 
@@ -859,6 +861,7 @@ class VectorStore:
         with self._sync_lock:  # Thread lock for FAISS C++ object access
             self._update_disk_usage_stats()  # Update before saving
             if self.document_index and self.document_index.ntotal > 0:
+
                 try:
                     faiss.write_index(self.document_index, str(tmp_doc_idx_path))
                     os.replace(tmp_doc_idx_path, doc_idx_path)
