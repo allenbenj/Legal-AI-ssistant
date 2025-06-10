@@ -30,7 +30,8 @@ from ..core.detailed_logging import (
 )
 from ..core.unified_exceptions import AgentExecutionError, DocumentProcessingError
 from ..utils.dependency_manager import DependencyManager
-from ..utils.document_utils import DocumentChunker, LegalDocumentClassifier
+from ..utils.document_utils import DocumentChunker
+from ..utils.nlp_classifier import NLPDocumentClassifier
 
 MemoryMixin = create_agent_memory_mixin()
 file_logger = get_detailed_logger("File_Processing", LogCategory.DOCUMENT)
@@ -213,8 +214,8 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
             f"DocumentProcessorAgent configured with model: {self.llm_config.get('llm_model', 'default')}"
         )
         # Shared components (can be injected or fetched)
-        # Assuming classifier has its own config or uses defaults
-        self.classifier = LegalDocumentClassifier()
+        # NLP classifier uses ML model when available and falls back to keywords
+        self.classifier = NLPDocumentClassifier()
         self.chunker = DocumentChunker(
             chunk_size=self.config.get("dp_chunk_size", 4000),
             overlap=self.config.get("dp_chunk_overlap", 400),
@@ -495,7 +496,7 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
                     output.text_content.encode("utf-8", "ignore")
                 ).hexdigest()
 
-                # Perform classification using the shared LegalDocumentClassifier
+                # Perform classification using the shared NLPDocumentClassifier
                 classification_result = self.classifier.classify(
                     output.text_content, filename=file_path.name
                 )
