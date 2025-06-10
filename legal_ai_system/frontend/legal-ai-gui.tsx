@@ -12,6 +12,7 @@ import {
   DashboardErrorBoundary,
   DocumentProcessingErrorBoundary,
 } from '../../frontend/src/components/AsyncErrorBoundary';
+import WorkflowDesigner from "@/components/WorkflowDesigner";
 
 
 
