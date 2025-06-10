@@ -6,12 +6,16 @@ document processing, hybrid extraction, knowledge graph building, and
 agent memory integration with user feedback loops.
 """
 
+from __future__ import annotations
+
 import asyncio
 import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
+
+from .workflow_config import WorkflowConfig
 
 from ..agents.document_processor_agent import DocumentProcessorAgent
 from ..agents.document_rewriter_agent import DocumentRewriterAgent
@@ -82,32 +86,24 @@ class RealTimeAnalysisWorkflow:
     - Performance monitoring and optimization
     """
 
-    def __init__(self, services, **config):
+    def __init__(self, services, config: Optional["WorkflowConfig"] = None, **kwargs: Any):
         self.services = services
-        self.config = config
+        # Accept dataclass or plain dict
+        base_cfg = config.to_dict() if config else {}
+        base_cfg.update(kwargs)
+        self.config: Dict[str, Any] = base_cfg
         self.logger = services.logger
 
-        # Workflow configuration
-        self.enable_real_time_sync = config.get("enable_real_time_sync", True)
-        self.confidence_threshold = config.get("confidence_threshold", 0.75)
-        self.enable_user_feedback = config.get("enable_user_feedback", True)
-        self.parallel_processing = config.get("parallel_processing", True)
+        self._apply_config()
 
-        # Performance configuration
-        self.max_concurrent_documents = config.get("max_concurrent_documents", 3)
-        self.performance_monitoring = config.get("performance_monitoring", True)
-        self.auto_optimization_threshold = config.get(
-            "auto_optimization_threshold", 100
-        )
-
-        # Initialize components
-        self.document_processor = DocumentProcessorAgent(services, **config)
-        self.document_rewriter = DocumentRewriterAgent(services, **config)
-        self.ontology_extractor = OntologyExtractionAgent(services, **config)
-        self.hybrid_extractor = HybridLegalExtractor(services, **config)
-        self.graph_manager = RealTimeGraphManager(services, **config)
-        self.vector_store = OptimizedVectorStore(services, **config)
-        self.reviewable_memory = ReviewableMemory(services, **config)
+        # Initialize components using resolved configuration
+        self.document_processor = DocumentProcessorAgent(services, **self.config)
+        self.document_rewriter = DocumentRewriterAgent(services, **self.config)
+        self.ontology_extractor = OntologyExtractionAgent(services, **self.config)
+        self.hybrid_extractor = HybridLegalExtractor(services, **self.config)
+        self.graph_manager = RealTimeGraphManager(services, **self.config)
+        self.vector_store = OptimizedVectorStore(services, **self.config)
+        self.reviewable_memory = ReviewableMemory(services, **self.config)
 
         # Performance tracking
         self.documents_processed = 0
@@ -125,6 +121,24 @@ class RealTimeAnalysisWorkflow:
         # Synchronization
         self.processing_lock = asyncio.Semaphore(self.max_concurrent_documents)
         self.optimization_lock = asyncio.Lock()
+
+    def _apply_config(self) -> None:
+        """Apply configuration dictionary to instance attributes."""
+        cfg = self.config
+        self.enable_real_time_sync = cfg.get("enable_real_time_sync", True)
+        self.confidence_threshold = cfg.get("confidence_threshold", 0.75)
+        self.enable_user_feedback = cfg.get("enable_user_feedback", True)
+        self.parallel_processing = cfg.get("parallel_processing", True)
+        self.max_concurrent_documents = cfg.get("max_concurrent_documents", 3)
+        self.performance_monitoring = cfg.get("performance_monitoring", True)
+        self.auto_optimization_threshold = cfg.get("auto_optimization_threshold", 100)
+
+        self.processing_lock = asyncio.Semaphore(self.max_concurrent_documents)
+
+    def update_config(self, **new_config: Any) -> None:
+        """Update workflow configuration in-place."""
+        self.config.update(new_config)
+        self._apply_config()
 
     async def initialize(self):
         """Initialize the real-time analysis workflow."""
