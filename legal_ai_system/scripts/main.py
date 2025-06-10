@@ -1316,11 +1316,11 @@ async def process_document_background_task(  # Renamed
 
 
 # Serve compiled frontend if available
-frontend_dist_path = Path(settings.frontend_dist_path)
+frontend_dist_path = Path(settings.frontend_dist_path or "")
 if frontend_dist_path.exists():
     app.mount(
         "/",
-        StaticFiles(directory=str(frontend_dist_path), html=True),
+        StaticFiles(directory=frontend_dist_path, html=True),
         name="static_frontend",
     )
     main_api_logger.info(
