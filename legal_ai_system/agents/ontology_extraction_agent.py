@@ -25,19 +25,14 @@ from spacy.tokens import Span, SpanGroup
 from ..core.agent_unified_config import create_agent_memory_mixin
 from ..core.base_agent import BaseAgent
 from ..core.models import LegalDocument, ProcessingResult
+from ..core.unified_exceptions import AgentError, ConfigurationError
 
 # Create memory mixin for agents
 MemoryMixin = create_agent_memory_mixin()
-
-from ..core.unified_exceptions import ConfigurationError
 from ..utils.ontology import (
-    LegalEntityType,
-    LegalRelationshipType,
     get_entity_type_by_label,
-    get_entity_types_for_prompt,
     get_extraction_prompt,
     get_relationship_type_by_label,
-    get_relationship_types_for_prompt,
 )
 
 
@@ -89,7 +84,7 @@ class OntologyExtractionOutput:
         return data
 
 
-class OntologyExtractionAgent(BaseAgent):
+class OntologyExtractionAgent(BaseAgent, MemoryMixin):
 
     def __init__(self, services: Any, **config: Any):
         super().__init__(services, **config)
@@ -1142,7 +1137,7 @@ class OntologyExtractionAgent(BaseAgent):
                 ).append(entity)
 
             consolidated_pre_dedup_entities: List[ExtractedEntity] = []
-            for canon_id, mention_list in entities_grouped_by_canonical_id.items():
+            for _canon_id, mention_list in entities_grouped_by_canonical_id.items():
                 if not mention_list:
                     continue
                 # Choose the "best" mention as the canonical representative (e.g., highest confidence, longest snippet)
@@ -1343,7 +1338,7 @@ class OntologyExtractionAgent(BaseAgent):
         """Implementation of abstract method from :class:`BaseAgent`."""
         if isinstance(task_data, LegalDocument):
             result = await self.process(task_data, metadata)
-            return result.to_dict() if hasattr(result, "to_dict") else result
+            return asdict(result)
         raise AgentError("Invalid task data type for OntologyExtractionAgent")
 
     async def initialize(self):
