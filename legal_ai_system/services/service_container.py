@@ -370,7 +370,7 @@ async def create_service_container(app_settings: Optional[Any] = None) -> Servic
         # Handle this critical failure
     
     # Register UserRepository
-    from ..persistence.repositories.user_repository import UserRepository
+    from ..utils.user_repository import UserRepository
     if persistence_manager_service and persistence_manager_service.connection_pool:
         await container.register_service("user_repository", instance=UserRepository(persistence_manager_service.connection_pool))
     else:
