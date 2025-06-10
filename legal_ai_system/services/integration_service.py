@@ -267,8 +267,26 @@ class LegalAIIntegrationService:
             )
 
 
+    @detailed_log_function(LogCategory.API)
+    async def upload_and_process_document(
+        self,
+        file_content: bytes,
+        filename: str,
+        user: AuthUser,
+        options: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Handle an uploaded document and start processing."""
+        integration_service_logger.info(
+            "Handling document upload.", parameters={"filename": filename}
+        )
+        try:
+            file_path, unique_filename = await self._save_uploaded_file(
+                file_content, filename
+            )
+            document_id, workflow_metadata = await self._create_document_metadata(
+                file_path, unique_filename, user, options or {}
+            )
             await self._launch_workflow(file_path, workflow_metadata)
-
             return {
                 "document_id": document_id,
                 "filename": unique_filename,
@@ -276,10 +294,9 @@ class LegalAIIntegrationService:
                 "status": "processing_initiated",
                 "message": "Document accepted and processing started.",
             }
-
         except ServiceLayerError:
             raise
-        except Exception as e:
+        except Exception as e:  # pragma: no cover - error during processing
             integration_service_logger.error(
                 "Failed to handle document upload and initiate processing.",
                 parameters={"filename": filename},

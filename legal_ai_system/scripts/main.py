@@ -78,28 +78,58 @@ try:
 except ImportError:  # pragma: no cover - optional web dependency
     print("FastAPI not installed; exiting.")
     sys.exit(0)
+
 from pydantic import BaseModel
 from pydantic import Field as PydanticField  # Alias Field
 from strawberry.fastapi import GraphQLRouter  # type: ignore
 
+try:
+    from legal_ai_system.services.service_container import ServiceContainer
+    from legal_ai_system.services.security_manager import (
+        SecurityManager,
+        AccessLevel,
+        User as AuthUser,
+    )
+    from legal_ai_system.api.websocket_manager import ConnectionManager
+    from legal_ai_system.services.realtime_publisher import RealtimePublisher
 
-    class _SettingsFallback:
-        """Minimal settings fallback when core settings are unavailable."""
+    SERVICES_AVAILABLE = True
+except Exception:  # pragma: no cover - optional service dependencies
+    ServiceContainer = None  # type: ignore
+    SecurityManager = None  # type: ignore
 
-        base_dir = Path(__file__).resolve().parent.parent
-        data_dir = base_dir / "storage"
-        frontend_dist_path = base_dir / "frontend" / "dist"
-        logs_dir = base_dir / "logs"
+    class AccessLevel(Enum):  # type: ignore
+        READ = "read"
+        WRITE = "write"
+        ADMIN = "admin"
 
-    try:
-        from legal_ai_system.core.settings import LegalAISettings
+    class AuthUser:  # type: ignore
+        pass
 
-        settings = LegalAISettings()
-    except Exception:  # pragma: no cover - fallback for missing dependencies
-        settings = _SettingsFallback()
+    ConnectionManager = None  # type: ignore
+    RealtimePublisher = None  # type: ignore
+    SERVICES_AVAILABLE = False
 
 
+class _SettingsFallback:
+    """Minimal settings fallback when core settings are unavailable."""
 
+    base_dir = Path(__file__).resolve().parent.parent
+    data_dir = base_dir / "storage"
+    frontend_dist_path = base_dir / "frontend" / "dist"
+    logs_dir = base_dir / "logs"
+
+
+try:
+    from legal_ai_system.core.settings import LegalAISettings
+
+    settings = LegalAISettings()
+except Exception:  # pragma: no cover - fallback for missing dependencies
+    settings = _SettingsFallback()
+
+# Location for storing workflow presets
+WORKFLOW_CONFIG_FILE = Path(settings.data_dir) / "workflow_configs.json"
+workflow_configs: Dict[str, Any] = {}
 
 # Global state (will be initialized in lifespan)
 service_container_instance: Optional["ServiceContainer"] = None
