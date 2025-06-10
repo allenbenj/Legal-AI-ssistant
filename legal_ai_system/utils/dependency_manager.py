@@ -19,6 +19,11 @@ class DependencyManager:
         "markdown": {"import": "markdown", "package": "markdown"},
         "bs4": {"import": "bs4", "package": "beautifulsoup4"},
         "striprtf": {"import": "striprtf", "package": "striprtf"},
+        "pdfplumber": {"import": "pdfplumber", "package": "pdfplumber"},
+        "ffmpeg": {"import": "ffmpeg", "package": "ffmpeg-python"},
+        "openai-whisper": {"import": "whisper", "package": "openai-whisper"},
+        "whisperx": {"import": "whisperx", "package": "whisperx"},
+        "pyannote.audio": {"import": "pyannote.audio", "package": "pyannote.audio"},
     }
 
     def __init__(self) -> None:
