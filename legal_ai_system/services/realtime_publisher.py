@@ -33,8 +33,9 @@ from legal_ai_system.api.websocket_manager import ConnectionManager
 class RealtimePublisher:
     """Publish system metrics periodically over WebSocket."""
 
-    def __init__(self, manager: ConnectionManager) -> None:
+    def __init__(self, manager: ConnectionManager, metrics_exporter: Optional[Any] = None) -> None:
         self.manager = manager
+        self.metrics = metrics_exporter
         self.logger = get_detailed_logger("RealtimePublisher", LogCategory.SYSTEM)
         self._task: Optional[asyncio.Task] = None
 
@@ -55,6 +56,8 @@ class RealtimePublisher:
         while True:
             metrics = self._collect_metrics()
             await self.manager.broadcast("system_status", metrics)
+            if self.metrics:
+                await self.manager.broadcast("health_metrics", self.metrics.snapshot())
             await asyncio.sleep(interval)
 
     def _collect_metrics(self) -> Dict[str, Any]:

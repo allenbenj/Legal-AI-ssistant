@@ -30,6 +30,7 @@ import tenacity  # For retries
 
 # Core imports
 from .detailed_logging import LogCategory, detailed_log_function, get_detailed_logger
+from .agent_unified_config import _get_service_sync
 from .unified_exceptions import ConfigurationError, DatabaseError, VectorStoreError
 
 # Initialize loggers for this module
@@ -290,9 +291,13 @@ class VectorStore:
         document_index_path: str | None = None,
         entity_index_path: str | None = None,
         service_config: Optional[Dict[str, Any]] = None,
+        cache_manager: Optional[Any] = None,
+        metrics_exporter: Optional[Any] = None,
     ):
         vector_store_logger.info("=== VectorStore: Instance Creation START ===")
         self.config = service_config or {}
+        self.cache_manager = cache_manager
+        self.metrics = metrics_exporter
         self.storage_path = Path(storage_path_str)
         self.document_index_path = (
             Path(document_index_path)
@@ -1338,6 +1343,17 @@ class VectorStore:
                 duration_add,
                 {"content_len": len(content_to_embed)},
             )
+            if self.metrics:
+                self.metrics.observe_vector_add(duration_add)
+            if self.cache_manager:
+                try:
+                    await self.cache_manager.set(
+                        f"vec_meta:{vector_id}",
+                        metadata_to_store.to_dict(),
+                        ttl_seconds=self.config.get("metadata_cache_ttl", 3600),
+                    )
+                except Exception:
+                    pass
             return vector_id
 
     def _generate_unique_vector_id(self, index_target: str, doc_ref: str) -> str:
@@ -1600,6 +1616,8 @@ class VectorStore:
                     "faiss_time_sec": search_duration_faiss,
                 },
             )
+            if self.metrics:
+                self.metrics.observe_vector_search(total_search_pipeline_duration)
             return results
 
     async def _get_metadata_by_faiss_internal_id_async(
@@ -1607,13 +1625,26 @@ class VectorStore:
     ) -> Optional[VectorMetadata]:
 
         """Retrieves metadata for a given vector_id, checking cache first."""
+        vector_id = await self._get_vector_id_by_faiss_id_async(faiss_id, index_target)
+        if not vector_id:
+            return None
+
+        # Check in-memory cache
         if vector_id in self.metadata_mem_cache:
             self.stats.cache_hits_session += 1
-            self.metadata_mem_cache[vector_id].last_accessed_iso = datetime.now(
-                timezone.utc
-            ).isoformat()
-            self.metadata_mem_cache[vector_id].access_count += 1
-            return self.metadata_mem_cache[vector_id]
+            meta = self.metadata_mem_cache[vector_id]
+            meta.last_accessed_iso = datetime.now(timezone.utc).isoformat()
+            meta.access_count += 1
+            return meta
+
+        # Check Redis cache
+        if self.cache_manager:
+            cached = await self.cache_manager.get(f"vec_meta:{vector_id}")
+            if cached:
+                self.stats.cache_hits_session += 1
+                meta = VectorMetadata.from_row_dict(cached)
+                self.metadata_mem_cache[vector_id] = meta
+                return meta
 
         self.stats.cache_misses_session += 1
         vs_cache_logger.debug(
@@ -1627,6 +1658,13 @@ class VectorStore:
         if row_dict:
             metadata = VectorMetadata.from_row_dict(row_dict)
             self.metadata_mem_cache[vector_id] = metadata  # Add to cache
+            if self.cache_manager:
+                try:
+                    await self.cache_manager.set(
+                        f"vec_meta:{vector_id}", metadata.to_dict(), ttl_seconds=self.config.get("metadata_cache_ttl", 3600)
+                    )
+                except Exception:
+                    pass
             return metadata
         return None
 
@@ -2217,5 +2255,7 @@ def create_vector_store(
         document_index_path=vs_cfg.get("DOCUMENT_INDEX_PATH"),
         entity_index_path=vs_cfg.get("ENTITY_INDEX_PATH"),
         service_config=vs_cfg,
+        cache_manager=getattr(_get_service_sync(service_container, "persistence_manager"), "cache_manager", None),
+        metrics_exporter=_get_service_sync(service_container, "metrics_exporter"),
     )
     return vs_instance
