@@ -37,6 +37,7 @@ from ..core.shared_components import (
     UIComponents,
 )
 from ..services.violation_review import ViolationReviewDB, ViolationReviewEntry
+from ..services.database_manager import DatabaseManager
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -1290,19 +1291,27 @@ class AnalysisDashboardTab:
         # Key metrics
         st.subheader("System Overview")
 
-        # Real analytics data from database
-        analytics_data = {
-            "documents_processed": 0,
-            "documents_delta": "+0",
-            "entities_extracted": 0,
-            "entities_delta": "+0",
-            "violations_detected": 0,
-            "violations_delta": "+0",
-            "avg_processing_time": "0.0s",
-            "processing_delta": "+0.0s",
+        # Retrieve analytics metrics from the database
+        db = DatabaseManager()
+        raw_metrics = db.get_analytics_data()
+
+        metrics = {
+            "documents_processed": raw_metrics.get("documents", {}).get(
+                "processed", 0
+            ),
+            "documents_delta": 0,
+            "active_workflows": raw_metrics.get("knowledge_graph", {}).get(
+                "nodes", 0
+            ),
+            "workflows_delta": 0,
+            "pending_reviews": raw_metrics.get("violations", {}).get(
+                "pending", 0
+            ),
+            "reviews_delta": 0,
+            "system_health": f"{raw_metrics.get('documents', {}).get('success_rate', 0):.0f}%",
         }
 
-        DataVisualization.create_metrics_dashboard(analytics_data)
+        DataVisualization.create_metrics_dashboard(metrics)
 
         # Recent activity
         st.subheader("Recent Activity")
@@ -1328,29 +1337,37 @@ class AnalysisDashboardTab:
 
         col1, col2 = st.columns(2)
 
+        documents = db.get_documents()
+        docs_df = pd.DataFrame(documents)
+
         with col1:
             # Processing volume over time
-            dates = pd.date_range(start="2025-05-01", end="2025-06-03", freq="D")
-            volumes = [10 + i % 20 + (i // 7) * 2 for i in range(len(dates))]
-
-            fig_volume = px.line(
-                x=dates,
-                y=volumes,
-                title="Daily Processing Volume",
-                labels={"x": "Date", "y": "Documents Processed"},
-            )
+            if not docs_df.empty and "upload_time" in docs_df.columns:
+                docs_df["date"] = pd.to_datetime(docs_df["upload_time"]).dt.date
+                volume_series = docs_df["date"].value_counts().sort_index()
+                fig_volume = px.line(
+                    x=volume_series.index,
+                    y=volume_series.values,
+                    title="Daily Processing Volume",
+                    labels={"x": "Date", "y": "Documents Processed"},
+                )
+            else:
+                fig_volume = go.Figure().add_annotation(
+                    text="No documents", showarrow=False
+                )
             st.plotly_chart(fig_volume, use_container_width=True)
 
         with col2:
             # Entity type distribution
-            # Real entities would fetch from database
-            entities_mock = []
-            entity_counts = pd.Series([e["type"] for e in entities_mock]).value_counts()
+            entities: list[dict] = []
+            for doc in documents:
+                results = doc.get("results", {})
+                for ent in results.get("entities", []):
+                    if isinstance(ent, dict):
+                        entities.append(ent)
 
-            fig_entities = px.pie(
-                values=entity_counts.values,
-                names=entity_counts.index,
-                title="Entity Type Distribution",
+            fig_entities = DataVisualization.create_entity_distribution_chart(
+                entities
             )
             st.plotly_chart(fig_entities, use_container_width=True)
 
@@ -1361,8 +1378,6 @@ class AnalysisDashboardTab:
 
         with col1:
             # Recent documents table
-            # Real documents would fetch from database
-            documents = []
             docs_df = pd.DataFrame(documents)
 
             st.write("**Recent Documents**")
@@ -1389,60 +1404,59 @@ class AnalysisDashboardTab:
         # Violations and compliance
         st.subheader("Violations & Compliance")
 
-        # Real violations would fetch from database
-        violations = []
+        # Retrieve violations from database
+        violations = [asdict(v) for v in db.get_violations()]
         violations_df = pd.DataFrame(violations)
 
         col1, col2, col3 = st.columns(3)
 
         with col1:
             # Severity distribution
-            severity_counts = violations_df["severity"].value_counts()
-            fig_severity = px.pie(
-                values=severity_counts.values,
-                names=severity_counts.index,
-                title="Violation Severity",
-            )
+            if not violations_df.empty and "severity" in violations_df.columns:
+                severity_counts = violations_df["severity"].value_counts()
+                fig_severity = px.pie(
+                    values=severity_counts.values,
+                    names=severity_counts.index,
+                    title="Violation Severity",
+                )
+            else:
+                fig_severity = go.Figure().add_annotation(
+                    text="No violations", showarrow=False
+                )
             st.plotly_chart(fig_severity, use_container_width=True)
 
         with col2:
             # Violation trends
-            violation_dates = pd.date_range(
-                start="2025-05-01", end="2025-06-03", freq="D"
-            )
-            violation_counts = [2 + i % 5 for i in range(len(violation_dates))]
-
-            fig_trends = px.line(
-                x=violation_dates,
-                y=violation_counts,
-                title="Daily Violations Detected",
-                labels={"x": "Date", "y": "Violations"},
-            )
+            if not violations_df.empty and "detected_time" in violations_df.columns:
+                vdates = pd.to_datetime(violations_df["detected_time"]).dt.date
+                trend_series = vdates.value_counts().sort_index()
+                fig_trends = px.line(
+                    x=trend_series.index,
+                    y=trend_series.values,
+                    title="Daily Violations Detected",
+                    labels={"x": "Date", "y": "Violations"},
+                )
+            else:
+                fig_trends = go.Figure().add_annotation(
+                    text="No violations", showarrow=False
+                )
             st.plotly_chart(fig_trends, use_container_width=True)
 
         with col3:
-            # Compliance score
-            compliance_score = 87.5
+            # Compliance score derived from pending violations
+            total_v = raw_metrics.get("violations", {}).get("total", 0)
+            pending_v = raw_metrics.get("violations", {}).get("pending", 0)
+            if total_v:
+                compliance_score = max(0.0, 100 - (pending_v / total_v) * 100)
+            else:
+                compliance_score = 100.0
             fig_compliance = go.Figure(
                 go.Indicator(
-                    mode="gauge+number+delta",
+                    mode="gauge+number",
                     value=compliance_score,
                     domain={"x": [0, 1], "y": [0, 1]},
                     title={"text": "Compliance Score"},
-                    delta={"reference": 85},
-                    gauge={
-                        "axis": {"range": [None, 100]},
-                        "bar": {"color": "darkblue"},
-                        "steps": [
-                            {"range": [0, 50], "color": "lightgray"},
-                            {"range": [50, 85], "color": "gray"},
-                        ],
-                        "threshold": {
-                            "line": {"color": "red", "width": 4},
-                            "thickness": 0.75,
-                            "value": 90,
-                        },
-                    },
+                    gauge={"axis": {"range": [None, 100]}}
                 )
             )
             st.plotly_chart(fig_compliance, use_container_width=True)
