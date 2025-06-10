@@ -31,6 +31,7 @@ except Exception:  # pragma: no cover - fallback for tests
     ReviewDecision = object  # type: ignore[misc]
     ReviewStatus = object  # type: ignore[misc]
 
+    pass
 
 # Node classes are imported lazily by the workflow builder during tests.
 
@@ -79,38 +80,9 @@ class RealTimeAnalysisResult:
 
 
 class RealTimeAnalysisWorkflow:
-    """
-    Master workflow for real-time legal document analysis.
+    """Master workflow for real-time legal document analysis."""
 
-    Features:
-    - Real-time document processing and entity extraction
-    - Hybrid NER+LLM extraction with validation
-    - Automatic knowledge graph building and synchronization
-    - Vector store optimization with intelligent caching
-    - Agent memory integration with user feedback loops
-    - Performance monitoring and optimization
-    """
-    @detailed_log_function(LogCategory.WORKFLOW)
-    def __init__(self, service_container: Any, config: WorkflowConfig) -> None:
-        """Initialize the workflow with required services and configuration."""
-        self.service_container = service_container
-        self.config = config
 
-        # Core settings
-        self.max_concurrent_documents = config.max_concurrent_documents
-        self.confidence_threshold = config.confidence_threshold
-        self.enable_real_time_sync = config.enable_real_time_sync
-
-        # Components retrieved from the service container
-        # These lookups are synchronous because the container caches
-        # instances created during startup.
-        self.logger = get_detailed_logger(
-            "RealTimeAnalysisWorkflow", LogCategory.WORKFLOW
-        )
-        self.hybrid_extractor = service_container._services.get("hybrid_extractor")
-        self.graph_manager = service_container._services.get("realtime_graph_manager")
-        self.vector_store = service_container._services.get("vector_store")
-        self.reviewable_memory = service_container._services.get("reviewable_memory")
 
         # Performance tracking
         self.documents_processed = 0
@@ -156,7 +128,6 @@ class RealTimeAnalysisWorkflow:
             RealTimeAnalysisResult with comprehensive analysis
         """
         start_time = time.time()
-        document_id = Path(document_path).stem
 
         async with self.processing_lock:
             # This method is largely a placeholder in the test environment.
