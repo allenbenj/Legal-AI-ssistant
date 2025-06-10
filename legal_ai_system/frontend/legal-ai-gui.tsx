@@ -6,7 +6,7 @@ import {
   BarChart, Network, Workflow, Eye, Download,
   Clock, Filter, Plus, Trash2, Edit, Save
 } from 'lucide-react';
-import { Button } from '../../frontend/src/design-system';
+
 
 // Context for global state management
 const AppContext = createContext({});
@@ -169,11 +169,25 @@ function NotificationArea({ notifications }) {
 
 // Dashboard Component
 function Dashboard() {
-  const { systemStatus } = useContext(AppContext);
+  const { systemStatus, setSystemStatus } = useContext(AppContext);
+  const idRef = React.useRef<string>('client-' + Math.random().toString(36).slice(2));
+  const { status, connected } = useRealtimeSystemStatus(idRef.current);
+
+  React.useEffect(() => {
+    if (status) {
+      setSystemStatus(prev => ({
+        ...prev,
+        performance: { cpu: status.cpu, memory: status.memory, disk: status.disk }
+      }));
+    }
+  }, [status]);
   
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold">System Dashboard</h2>
+      <h2 className="text-2xl font-bold flex items-center gap-2">
+        System Dashboard
+        <span className={`text-sm ${connected ? 'text-green-600' : 'text-red-600'}`}>{connected ? 'connected' : 'disconnected'}</span>
+      </h2>
       
       {/* System Status Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
