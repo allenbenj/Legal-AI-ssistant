@@ -10,9 +10,13 @@ Integrates optional dependencies gracefully and uses shared components.
 from __future__ import annotations
 
 import asyncio
+import aiofiles
 import hashlib
 import io
 import mimetypes
+import json
+import zipfile
+import email
 import re
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -30,7 +34,6 @@ from ..core.detailed_logging import (
 )
 from ..core.unified_exceptions import AgentExecutionError, DocumentProcessingError
 from ..utils.dependency_manager import DependencyManager
-from ..utils.document_utils import DocumentChunker, LegalDocumentClassifier
 
 MemoryMixin = create_agent_memory_mixin()
 file_logger = get_detailed_logger("File_Processing", LogCategory.DOCUMENT)
@@ -88,6 +91,10 @@ class DocumentContentType(Enum):
     WAV = "audio/wav"
     MP4 = "video/mp4"
     MOV = "video/quicktime"
+    EML = "message/rfc822"
+    ZIP = "application/zip"
+    JSON = "application/json"
+    YAML = "application/x-yaml"
     UNKNOWN = "application/octet-stream"
 
     @classmethod
@@ -116,6 +123,11 @@ class DocumentContentType(Enum):
             ".wav": cls.WAV,
             ".mp4": cls.MP4,
             ".mov": cls.MOV,
+            ".eml": cls.EML,
+            ".zip": cls.ZIP,
+            ".json": cls.JSON,
+            ".yaml": cls.YAML,
+            ".yml": cls.YAML,
         }
         return ext_map.get(ext.lower(), cls.UNKNOWN)
 
@@ -133,6 +145,14 @@ class DocumentContentType(Enum):
             return cls.XLSX
         if "presentation" in mime:
             return cls.PPTX
+        if "rfc822" in mime or "message" in mime:
+            return cls.EML
+        if "zip" in mime:
+            return cls.ZIP
+        if "json" in mime:
+            return cls.JSON
+        if "yaml" in mime or "yml" in mime:
+            return cls.YAML
         if "audio" in mime:
             if "mpeg" in mime:
                 return cls.MP3
@@ -213,8 +233,8 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
             f"DocumentProcessorAgent configured with model: {self.llm_config.get('llm_model', 'default')}"
         )
         # Shared components (can be injected or fetched)
-        # Assuming classifier has its own config or uses defaults
-        self.classifier = LegalDocumentClassifier()
+        # NLP classifier uses ML model when available and falls back to keywords
+        self.classifier = NLPDocumentClassifier()
         self.chunker = DocumentChunker(
             chunk_size=self.config.get("dp_chunk_size", 4000),
             overlap=self.config.get("dp_chunk_overlap", 400),
@@ -346,6 +366,26 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
                 "handler_method": "_process_video_async",
                 "deps": ["moviepy"],
             },
+            DocumentContentType.EML: {
+                "strategy": ProcessingStrategy.FULL_PROCESSING,
+                "handler_method": "_process_eml_async",
+                "deps": [],
+            },
+            DocumentContentType.ZIP: {
+                "strategy": ProcessingStrategy.METADATA_ONLY,
+                "handler_method": "_process_zip_async",
+                "deps": [],
+            },
+            DocumentContentType.JSON: {
+                "strategy": ProcessingStrategy.FULL_PROCESSING,
+                "handler_method": "_process_json_async",
+                "deps": [],
+            },
+            DocumentContentType.YAML: {
+                "strategy": ProcessingStrategy.FULL_PROCESSING,
+                "handler_method": "_process_yaml_async",
+                "deps": ["yaml"],
+            },
         }
 
     def get_config_summary_params(self) -> Dict[str, Any]:
@@ -467,9 +507,7 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
                 ),  # 'basic' or 'full'
             }
 
-            handler_result = await asyncio.to_thread(
-                handler_method, file_path, processing_options
-            )
+            handler_result = await handler_method(file_path, processing_options)
 
             # Populate output from handler result
             output.text_content = handler_result.get("text_content")
@@ -495,7 +533,7 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
                     output.text_content.encode("utf-8", "ignore")
                 ).hexdigest()
 
-                # Perform classification using the shared LegalDocumentClassifier
+                # Perform classification using the shared NLPDocumentClassifier
                 classification_result = self.classifier.classify(
                     output.text_content, filename=file_path.name
                 )
@@ -557,6 +595,200 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
         return output.to_dict()
 
     # --- ASYNC WRAPPERS FOR HANDLERS ---
+    async def _process_pdf_async(
+        self, file_path: Path, options: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        return await asyncio.to_thread(self._process_pdf_sync, file_path, options)
+
+    async def _process_docx_async(
+        self, file_path: Path, options: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        return await asyncio.to_thread(self._process_docx_sync, file_path, options)
+
+    async def _process_doc_async(
+        self, file_path: Path, options: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        try:
+            return await self._process_docx_async(file_path, options)
+        except Exception as e:
+            raise DocumentProcessingError(
+                "Legacy .doc files are not fully supported.", file_path=file_path, cause=e
+            )
+
+    async def _process_txt_async(
+        self, file_path: Path, options: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        file_logger.info(f"Processing TXT (async): {file_path.name}")
+        encodings_to_try = ["utf-8", "latin-1", "cp1252", "utf-16"]
+        content = None
+        encoding_used = "unknown"
+        notes = []
+
+        for enc in encodings_to_try:
+            try:
+                async with aiofiles.open(file_path, "r", encoding=enc) as f:
+                    content = await f.read()
+                encoding_used = enc
+                notes.append(f"Read with encoding: {enc}")
+                break
+            except (UnicodeDecodeError, LookupError):
+                continue
+
+        if content is None:
+            try:
+                async with aiofiles.open(file_path, "rb") as fb:
+                    raw_bytes = await fb.read()
+                content = raw_bytes.decode("utf-8", errors="replace")
+                encoding_used = "utf-8-replace"
+                notes.append("Read as UTF-8 replacing errors.")
+            except Exception as e:
+                raise DocumentProcessingError(
+                    f"Could not read TXT file {file_path.name}: {str(e)}",
+                    file_path=file_path,
+                    cause=e,
+                )
+
+        if options.get("clean_text", True):
+            content = self._common_text_cleaning(content) or ""
+        return {
+            "text_content": content,
+            "extracted_metadata": {"encoding": encoding_used, "source_format": "txt"},
+            "processing_notes": notes,
+        }
+
+    async def _process_markdown_async(
+        self, file_path: Path, options: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        file_logger.info(f"Processing Markdown (async): {file_path.name}")
+        notes = []
+        text_content = ""
+        if dep_manager.is_available("markdown") and dep_manager.is_available("bs4"):
+            try:
+                async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
+                    md_content = await f.read()
+                html = markdown.markdown(md_content, extensions=["extra", "tables", "fenced_code"])  # type: ignore
+                soup = BeautifulSoup(html, "html.parser")  # type: ignore
+                for element in soup.find_all(
+                    ["p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "pre", "code"]
+                ):
+                    text_content += element.get_text(separator=" ", strip=True) + "\n"
+                if not text_content.strip():
+                    text_content = soup.get_text(separator="\n", strip=True)
+                notes.append("Processed Markdown using python-markdown and BeautifulSoup.")
+            except Exception as e:
+                notes.append(f"Error processing Markdown with libraries: {str(e)}. Falling back to text.")
+                return await self._process_txt_async(file_path, options)
+        else:
+            notes.append("Markdown/BeautifulSoup unavailable. Reading as plain text.")
+            return await self._process_txt_async(file_path, options)
+
+        if options.get("clean_text", True):
+            text_content = self._common_text_cleaning(text_content) or ""
+        return {
+            "text_content": text_content,
+            "extracted_metadata": {"source_format": "markdown"},
+            "processing_notes": notes,
+        }
+
+    async def _process_html_async(
+        self, file_path: Path, options: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        file_logger.info(f"Processing HTML (async): {file_path.name}")
+        notes = []
+        text_content = ""
+        if not dep_manager.is_available("bs4"):
+            raise DocumentProcessingError(
+                "BeautifulSoup4 unavailable for HTML.", file_path=file_path
+            )
+
+        try:
+            async with aiofiles.open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                html_content = await f.read()
+            soup = BeautifulSoup(html_content, "html.parser")  # type: ignore
+
+            for script_or_style in soup(["script", "style"]):
+                script_or_style.decompose()
+
+            text_parts = []
+            for element in soup.find_all(
+                ["p", "h1", "h2", "h3", "h4", "h5", "h6", "div", "li", "td", "th"]
+            ):
+                block_text = element.get_text(separator=" ", strip=True)
+                if block_text:
+                    text_parts.append(block_text)
+            text_content = "\n\n".join(text_parts)
+
+            if not text_content.strip():
+                text_content = soup.get_text(separator="\n", strip=True)
+
+            extracted_meta = {
+                "source_format": "html",
+                "title": soup.title.string if soup.title else None,
+            }
+            notes.append("Processed HTML using BeautifulSoup.")
+        except Exception as e:
+            notes.append(f"Error processing HTML: {str(e)}. Reading as plain text.")
+            file_logger.error(f"Error processing HTML {file_path.name}.", exception=e)
+            return await self._process_txt_async(file_path, options)
+
+        if options.get("clean_text", True):
+            text_content = self._common_text_cleaning(text_content) or ""
+        return {
+            "text_content": text_content,
+            "extracted_metadata": extracted_meta,
+            "processing_notes": notes,
+        }
+
+    async def _process_rtf_async(
+        self, file_path: Path, options: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        file_logger.info(f"Processing RTF (async): {file_path.name}")
+        notes = []
+        text_content = ""
+        if dep_manager.is_available("striprtf"):
+            try:
+                async with aiofiles.open(file_path, "r", encoding="ascii", errors="ignore") as f:
+                    rtf_content = await f.read()
+                text_content = await asyncio.to_thread(rtf_to_text, rtf_content)  # type: ignore
+                notes.append("Processed RTF using striprtf library.")
+            except Exception as e:
+                notes.append(
+                    f"Error processing RTF with striprtf: {str(e)}. Fallback to text."
+                )
+                return await self._process_txt_async(file_path, options)
+        else:
+            notes.append(
+                "striprtf library not available for RTF. Reading as plain text (may include RTF markup)."
+            )
+            return await self._process_txt_async(file_path, options)
+
+        if options.get("clean_text", True):
+            text_content = self._common_text_cleaning(text_content) or ""
+        return {
+            "text_content": text_content,
+            "extracted_metadata": {"source_format": "rtf"},
+            "processing_notes": notes,
+        }
+
+    async def _process_excel_async(
+        self, file_path: Path, options: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        return await asyncio.to_thread(self._process_excel_sync, file_path, options)
+
+    async def _process_csv_async(
+        self, file_path: Path, options: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        return await asyncio.to_thread(self._process_csv_sync, file_path, options)
+
+    async def _process_powerpoint_async(
+        self, file_path: Path, options: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        return await asyncio.to_thread(self._process_powerpoint_sync, file_path, options)
+
+    async def _process_image_async(
+        self, file_path: Path, options: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        return await asyncio.to_thread(self._process_image_sync, file_path, options)
 
     # --- SYNCHRONOUS FILE PROCESSING LOGIC ---
     def _common_text_cleaning(self, text: Optional[str]) -> Optional[str]:
@@ -569,7 +801,7 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
         )  # Remove most control characters except \t, \n, \r
         return text.strip()
 
-    def _sync_process_pdf(
+    def _process_pdf_sync(
         self, file_path: Path, options: Dict[str, Any]
     ) -> Dict[str, Any]:
         file_logger.info(f"Processing PDF (sync): {file_path.name}")
@@ -583,6 +815,7 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
         notes: List[str] = []
         page_count = 0
         image_ocr_res: List[Dict[str, str]] = []
+        file_hash = ocr_cache.compute_file_hash(file_path)
 
         try:
             doc = fitz.open(str(file_path))  # type: ignore
@@ -598,57 +831,65 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
 
             for i in range(page_count):
                 page = doc.load_page(i)
-                page_text = page.get_text(  # type: ignore[attr-defined]
-                    "text", sort=True
-                ).strip()  # Added sort=True for reading order
-
-                # OCR attempt if no text or forced
-                needs_ocr = options.get("force_ocr", False) or (
-                    not page_text and options.get("ocr_if_needed", True)
-                )
-                if needs_ocr:
-                    if dep_manager.is_available(
-                        "pytesseract"
-                    ) and dep_manager.is_available("PIL"):
-                        notes.append(
-                            f"Page {i+1}: Attempting OCR (Reason: {'forced' if options.get('force_ocr') else 'no text layer'})."
-                        )
-                        try:
-                            pix = page.get_pixmap(  # type: ignore[attr-defined]
-                                dpi=options.get("ocr_dpi", 300)
-                            )
-                            img_bytes = pix.tobytes(  # type: ignore[attr-defined]
-                                "png"
-                            )  # Get bytes in a common format
-                            pil_img = Image.open(io.BytesIO(img_bytes))  # type: ignore
-                            ocr_text = pytesseract.image_to_string(pil_img, lang=options.get("ocr_language", "eng")).strip()  # type: ignore
-                            if ocr_text:
-                                page_text = (
-                                    ocr_text  # Replace page_text with OCR result
-                                )
-                                notes.append(
-                                    f"Page {i+1}: OCR successful, added {len(ocr_text)} chars."
-                                )
-                                image_ocr_res.append(
-                                    {
-                                        "page": str(i + 1),
-                                        "ocr_text_preview": ocr_text[:100] + "...",
-                                    }
-                                )
-                            else:
-                                notes.append(f"Page {i+1}: OCR yielded no text.")
-                        except Exception as ocr_e:
+                cached = ocr_cache.get(file_path, page=i + 1, file_hash=file_hash)
+                if cached and not options.get("force_ocr", False):
+                    page_text = cached
+                    notes.append(f"Page {i+1}: Loaded OCR text from cache.")
+                else:
+                    page_text = page.get_text(  # type: ignore[attr-defined]
+                        "text", sort=True
+                    ).strip()
+                    needs_ocr = options.get("force_ocr", False) or (
+                        not page_text and options.get("ocr_if_needed", True)
+                    )
+                    if needs_ocr:
+                        if dep_manager.is_available("pytesseract") and dep_manager.is_available("PIL"):
                             notes.append(
-                                f"Page {i+1}: OCR failed - {str(ocr_e)[:100]}."
-                            )  # Limit error message length
-                            file_logger.warning(
-                                f"OCR for page {i+1} of {file_path.name} failed.",
-                                exception=ocr_e,
+                                f"Page {i+1}: Attempting OCR (Reason: {'forced' if options.get('force_ocr') else 'no text layer'})."
                             )
-                    else:
-                        notes.append(
-                            f"Page {i+1}: OCR skipped (pytesseract/Pillow unavailable)."
-                        )
+                            try:
+                                pix = page.get_pixmap(  # type: ignore[attr-defined]
+                                    dpi=options.get("ocr_dpi", 300)
+                                )
+                                img_bytes = pix.tobytes(  # type: ignore[attr-defined]
+                                    "png"
+                                )
+                                pil_img = Image.open(io.BytesIO(img_bytes))  # type: ignore
+                                ocr_text = pytesseract.image_to_string(
+                                    pil_img,
+                                    lang=options.get("ocr_language", "eng"),
+                                ).strip()  # type: ignore
+                                if ocr_text:
+                                    page_text = ocr_text
+                                    ocr_cache.set(
+                                        file_path,
+                                        page=i + 1,
+                                        text=ocr_text,
+                                        file_hash=file_hash,
+                                    )
+                                    notes.append(
+                                        f"Page {i+1}: OCR successful, added {len(ocr_text)} chars."
+                                    )
+                                    image_ocr_res.append(
+                                        {
+                                            "page": str(i + 1),
+                                            "ocr_text_preview": ocr_text[:100] + "...",
+                                        }
+                                    )
+                                else:
+                                    notes.append(f"Page {i+1}: OCR yielded no text.")
+                            except Exception as ocr_e:
+                                notes.append(
+                                    f"Page {i+1}: OCR failed - {str(ocr_e)[:100]}."
+                                )
+                                file_logger.warning(
+                                    f"OCR for page {i+1} of {file_path.name} failed.",
+                                    exception=ocr_e,
+                                )
+                        else:
+                            notes.append(
+                                f"Page {i+1}: OCR skipped (pytesseract/Pillow unavailable)."
+                            )
 
                 if page_text:
                     text_content_parts.append(page_text)
@@ -671,7 +912,7 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
             "image_ocr_results": image_ocr_res if image_ocr_res else None,
         }
 
-    def _sync_process_docx(
+    def _process_docx_sync(
         self, file_path: Path, options: Dict[str, Any]
     ) -> Dict[str, Any]:
         file_logger.info(f"Processing DOCX (sync): {file_path.name}")
@@ -744,7 +985,7 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
             "table_count": len(tables_data),
         }
 
-    def _sync_process_txt(
+    def _process_txt_sync(
         self, file_path: Path, options: Dict[str, Any]
     ) -> Dict[str, Any]:
         file_logger.info(f"Processing TXT (sync): {file_path.name}")
@@ -785,7 +1026,7 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
             "processing_notes": notes,
         }
 
-    def _sync_process_markdown(
+    def _process_markdown_sync(
         self, file_path: Path, options: Dict[str, Any]
     ) -> Dict[str, Any]:
         file_logger.info(f"Processing Markdown (sync): {file_path.name}")
@@ -811,12 +1052,12 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
                 notes.append(
                     f"Error processing Markdown with libraries: {str(e)}. Falling back to text."
                 )
-                return self._sync_process_txt(
+                return self._process_txt_sync(
                     file_path, options
                 )  # Fallback to plain text reading
         else:
             notes.append("Markdown/BeautifulSoup unavailable. Reading as plain text.")
-            return self._sync_process_txt(file_path, options)
+            return self._process_txt_sync(file_path, options)
 
         if options.get("clean_text", True):
             text_content = self._common_text_cleaning(text_content) or ""
@@ -826,7 +1067,7 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
             "processing_notes": notes,
         }
 
-    def _sync_process_html(
+    def _process_html_sync(
         self, file_path: Path, options: Dict[str, Any]
     ) -> Dict[str, Any]:
         file_logger.info(f"Processing HTML (sync): {file_path.name}")
@@ -867,7 +1108,7 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
         except Exception as e:
             notes.append(f"Error processing HTML: {str(e)}. Reading as plain text.")
             file_logger.error(f"Error processing HTML {file_path.name}.", exception=e)
-            return self._sync_process_txt(file_path, options)  # Fallback
+            return self._process_txt_sync(file_path, options)  # Fallback
 
         if options.get("clean_text", True):
             text_content = self._common_text_cleaning(text_content) or ""
@@ -877,7 +1118,7 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
             "processing_notes": notes,
         }
 
-    def _sync_process_rtf(
+    def _process_rtf_sync(
         self, file_path: Path, options: Dict[str, Any]
     ) -> Dict[str, Any]:
         file_logger.info(f"Processing RTF (sync): {file_path.name}")
@@ -895,12 +1136,12 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
                 notes.append(
                     f"Error processing RTF with striprtf: {str(e)}. Fallback to text."
                 )
-                return self._sync_process_txt(file_path, options)
+                return self._process_txt_sync(file_path, options)
         else:
             notes.append(
                 "striprtf library not available for RTF. Reading as plain text (may include RTF markup)."
             )
-            return self._sync_process_txt(file_path, options)
+            return self._process_txt_sync(file_path, options)
 
         if options.get("clean_text", True):
             text_content = self._common_text_cleaning(text_content) or ""
@@ -910,7 +1151,7 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
             "processing_notes": notes,
         }
 
-    def _sync_process_excel(
+    def _process_excel_sync(
         self, file_path: Path, options: Dict[str, Any]
     ) -> Dict[str, Any]:
         file_logger.info(f"Processing Excel (sync): {file_path.name}")
@@ -1003,7 +1244,7 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
             "table_count": len(tables_data),
         }
 
-    def _sync_process_csv(
+    def _process_csv_sync(
         self, file_path: Path, options: Dict[str, Any]
     ) -> Dict[str, Any]:
         file_logger.info(f"Processing CSV (sync): {file_path.name}")
@@ -1087,7 +1328,7 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
             "table_count": len(tables_data),
         }
 
-    def _sync_process_powerpoint(
+    def _process_powerpoint_sync(
         self, file_path: Path, options: Dict[str, Any]
     ) -> Dict[str, Any]:
         file_logger.info(f"Processing PowerPoint (sync): {file_path.name}")
@@ -1178,13 +1419,15 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
             "processing_notes": notes,
         }
 
-    def _sync_process_image(
+    def _process_image_sync(
         self, file_path: Path, options: Dict[str, Any]
     ) -> Dict[str, Any]:
         file_logger.info(f"Processing Image for OCR (sync): {file_path.name}")
         notes = []
         text_content = ""
         extracted_meta: Dict[str, Any] = {"source_format": "image"}
+        file_hash = ocr_cache.compute_file_hash(file_path)
+        cached = ocr_cache.get(file_path, page=1, file_hash=file_hash)
 
         if not (
             dep_manager.is_available("pytesseract") and dep_manager.is_available("PIL")
@@ -1195,31 +1438,31 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
 
         try:
             pil_img = Image.open(str(file_path))  # type: ignore
-            # Store basic image metadata
             meta_info: Dict[str, Any] = {
                 "format": pil_img.format,
                 "mode": pil_img.mode,
                 "size": pil_img.size,
                 "info": pil_img.info,
             }
-            extracted_meta.update(meta_info)  # pil_img.info can be large
+            extracted_meta.update(meta_info)
 
-            # Pre-processing (optional, can improve OCR)
-            # img = img.convert('L') # Convert to grayscale
-            # img = img.filter(ImageFilter.MedianFilter()) # Example filter
-
-            text_content = pytesseract.image_to_string(
-                pil_img,
-                lang=options.get("ocr_language", "eng"),
-                config=f"--dpi {options.get('ocr_dpi',300)}",
-            )  # type: ignore
-            text_content = text_content.strip()
-            if text_content:
-                notes.append(
-                    f"OCR successful, extracted {len(text_content)} characters."
-                )
+            if cached and not options.get("force_ocr", False):
+                text_content = cached
+                notes.append("OCR text loaded from cache.")
             else:
-                notes.append("OCR performed, but no text detected.")
+                text_content = pytesseract.image_to_string(
+                    pil_img,
+                    lang=options.get("ocr_language", "eng"),
+                    config=f"--dpi {options.get('ocr_dpi',300)}",
+                )  # type: ignore
+                text_content = text_content.strip()
+                if text_content:
+                    notes.append(
+                        f"OCR successful, extracted {len(text_content)} characters."
+                    )
+                    ocr_cache.set(file_path, 1, text_content, file_hash=file_hash)
+                else:
+                    notes.append("OCR performed, but no text detected.")
         except UnidentifiedImageError:  # type: ignore
             notes.append(f"Cannot identify image file: {file_path.name}")
             file_logger.error(f"Pillow UnidentifiedImageError for {file_path.name}")
@@ -1247,6 +1490,138 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
         return {
             "text_content": text_content,
             "extracted_metadata": extracted_meta,
+            "processing_notes": notes,
+        }
+
+    # ---- Additional Formats ----
+
+    def _process_eml_async(self, file_path: Path, options: Dict[str, Any]) -> Dict[str, Any]:
+        return self._sync_process_eml(file_path, options)
+
+    def _sync_process_eml(self, file_path: Path, options: Dict[str, Any]) -> Dict[str, Any]:
+        file_logger.info(f"Processing EML (sync): {file_path.name}")
+        notes: List[str] = []
+        text_content = ""
+        metadata: Dict[str, Any] = {"source_format": "eml"}
+        try:
+            with open(file_path, "rb") as f:
+                msg = email.message_from_binary_file(f)
+            metadata.update({
+                "from": msg.get("From"),
+                "to": msg.get("To"),
+                "subject": msg.get("Subject"),
+                "date": msg.get("Date"),
+            })
+            attachments: List[str] = []
+            body_parts: List[str] = []
+            if msg.is_multipart():
+                for part in msg.walk():
+                    if part.get_content_maintype() == "multipart":
+                        continue
+                    disp = part.get("Content-Disposition", "")
+                    if disp.startswith("attachment"):
+                        if part.get_filename():
+                            attachments.append(part.get_filename())
+                        continue
+                    if part.get_content_type() == "text/plain":
+                        charset = part.get_content_charset() or "utf-8"
+                        payload = part.get_payload(decode=True)
+                        if payload:
+                            body_parts.append(payload.decode(charset, errors="ignore"))
+            else:
+                payload = msg.get_payload(decode=True)
+                if payload:
+                    charset = msg.get_content_charset() or "utf-8"
+                    body_parts.append(payload.decode(charset, errors="ignore"))
+            if attachments:
+                metadata["attachments"] = attachments
+            text_content = "\n".join(body_parts)
+        except Exception as e:
+            notes.append(f"Error parsing email: {str(e)}")
+            file_logger.error(f"Error processing EML {file_path.name}.", exception=e)
+
+        if options.get("clean_text", True) and text_content:
+            text_content = self._common_text_cleaning(text_content) or ""
+
+        return {
+            "text_content": text_content,
+            "extracted_metadata": metadata,
+            "processing_notes": notes,
+        }
+
+    def _process_zip_async(self, file_path: Path, options: Dict[str, Any]) -> Dict[str, Any]:
+        return self._sync_process_zip(file_path, options)
+
+    def _sync_process_zip(self, file_path: Path, options: Dict[str, Any]) -> Dict[str, Any]:
+        file_logger.info(f"Processing ZIP (sync): {file_path.name}")
+        notes: List[str] = []
+        extracted_meta: Dict[str, Any] = {"source_format": "zip"}
+        files_info: List[Dict[str, Any]] = []
+        try:
+            with zipfile.ZipFile(file_path, "r") as zf:
+                for info in zf.infolist():
+                    files_info.append({"name": info.filename, "size": info.file_size})
+            extracted_meta["contained_files"] = files_info
+            notes.append(f"Zip contains {len(files_info)} entries.")
+        except zipfile.BadZipFile:
+            notes.append("Invalid ZIP archive.")
+            file_logger.error(f"BadZipFile: {file_path.name}")
+            raise DocumentProcessingError("Invalid ZIP archive", file_path=file_path)
+        except Exception as e:
+            notes.append(f"Error processing ZIP: {str(e)}")
+            file_logger.error(f"Error processing ZIP {file_path.name}.", exception=e)
+
+        return {"extracted_metadata": extracted_meta, "processing_notes": notes}
+
+    def _process_json_async(self, file_path: Path, options: Dict[str, Any]) -> Dict[str, Any]:
+        return self._sync_process_json(file_path, options)
+
+    def _sync_process_json(self, file_path: Path, options: Dict[str, Any]) -> Dict[str, Any]:
+        file_logger.info(f"Processing JSON (sync): {file_path.name}")
+        notes: List[str] = []
+        text_content = ""
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            text_content = json.dumps(data, indent=2)
+        except Exception as e:
+            notes.append(f"Error parsing JSON: {str(e)}")
+            file_logger.error(f"Error processing JSON {file_path.name}.", exception=e)
+
+        if options.get("clean_text", True) and text_content:
+            text_content = self._common_text_cleaning(text_content) or ""
+
+        return {
+            "text_content": text_content,
+            "extracted_metadata": {"source_format": "json"},
+            "processing_notes": notes,
+        }
+
+    def _process_yaml_async(self, file_path: Path, options: Dict[str, Any]) -> Dict[str, Any]:
+        return self._sync_process_yaml(file_path, options)
+
+    def _sync_process_yaml(self, file_path: Path, options: Dict[str, Any]) -> Dict[str, Any]:
+        file_logger.info(f"Processing YAML (sync): {file_path.name}")
+        notes: List[str] = []
+        text_content = ""
+        if not dep_manager.is_available("yaml"):
+            notes.append("PyYAML unavailable.")
+            raise DocumentProcessingError("PyYAML not installed", file_path=file_path)
+        try:
+            import yaml  # type: ignore
+            with open(file_path, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f)
+            text_content = yaml.safe_dump(data)
+        except Exception as e:
+            notes.append(f"Error parsing YAML: {str(e)}")
+            file_logger.error(f"Error processing YAML {file_path.name}.", exception=e)
+
+        if options.get("clean_text", True) and text_content:
+            text_content = self._common_text_cleaning(text_content) or ""
+
+        return {
+            "text_content": text_content,
+            "extracted_metadata": {"source_format": "yaml"},
             "processing_notes": notes,
         }
 

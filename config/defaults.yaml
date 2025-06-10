@@ -95,12 +95,16 @@ cache_ttl_hours: null
 max_cache_size_mb: null
 rate_limit_per_minute: null
 enable_request_logging: true
-enable_data_encryption: false
-encryption_key_path: null
-test_data_dir: /workspace/Legal-AI-ssistant/legal_ai_system/tests/data
-enable_test_mode: false
-enable_agent_debugging: false
-save_intermediate_results: false
-agents:
-  legal_reasoning_engine_config: {}
-  knowledge_graph_reasoning_agent_config: {}
+  enable_data_encryption: false
+  encryption_key_path: null
+  test_data_dir: /workspace/Legal-AI-ssistant/legal_ai_system/tests/data
+  enable_test_mode: false
+  enable_agent_debugging: false
+  save_intermediate_results: false
+  enable_spacy_ner: false
+  spacy_ner_model: en_core_web_sm
+  enable_legal_bert: false
+  legal_bert_model_name: nlpaueb/legal-bert-base-uncased
+  agents:
+    legal_reasoning_engine_config: {}
+    knowledge_graph_reasoning_agent_config: {}
