@@ -489,92 +489,29 @@ function AgentManagement() {
 // Workflow Designer
 function WorkflowDesigner() {
   const [workflows, setWorkflows] = useState<any[]>([]);
-  const [selected, setSelected] = useState<any | null>(null);
-  const [enableNer, setEnableNer] = useState(true);
-  const [enableLlm, setEnableLlm] = useState(true);
-  const [confidence, setConfidence] = useState(0.75);
-
   useEffect(() => {
     fetch('/api/v1/workflows')
       .then(res => res.json())
-      .then(data => setWorkflows(Array.isArray(data) ? data : []));
   }, []);
 
   const editWorkflow = (wf: any) => {
     setSelected(wf);
-    setEnableNer(wf?.config?.enable_ner ?? true);
-    setEnableLlm(wf?.config?.enable_llm_extraction ?? true);
-    setConfidence(wf?.config?.confidence_threshold ?? 0.75);
-  };
-
-  const saveWorkflow = () => {
-    const body = {
-      id: selected?.id,
-      name: selected?.name || 'New Workflow',
-      config: {
-        enable_ner: enableNer,
-        enable_llm_extraction: enableLlm,
-        confidence_threshold: confidence,
-      },
-    };
-    fetch(`/api/v1/workflows${selected?.id ? '/' + selected.id : ''}`, {
-      method: selected?.id ? 'PUT' : 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-      .then(res => res.json())
-      .then(() => {
         fetch('/api/v1/workflows')
           .then(res => res.json())
           .then(data => setWorkflows(Array.isArray(data) ? data : []));
       });
   };
 
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">Workflow Designer</h2>
-        <button
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
-          onClick={() => editWorkflow({ name: 'New Workflow', config: {} })}
-        >
           <Plus className="w-4 h-4" />
           Create Workflow
         </button>
       </div>
 
-      {selected && (
-        <div className="bg-white rounded-lg shadow p-6 space-y-4">
-          <h3 className="text-lg font-semibold">{selected.name}</h3>
-          <div className="flex items-center gap-4">
-            <label className="flex items-center gap-2">
-              <input type="checkbox" checked={enableNer} onChange={e => setEnableNer(e.target.checked)} />
-              NER
-            </label>
-            <label className="flex items-center gap-2">
-              <input type="checkbox" checked={enableLlm} onChange={e => setEnableLlm(e.target.checked)} />
-              LLM Extraction
-            </label>
-            <div className="flex items-center gap-2">
-              <span>Confidence</span>
-              <input
-                type="number"
-                min={0}
-                max={1}
-                step={0.05}
-                value={confidence}
-                onChange={e => setConfidence(parseFloat(e.target.value))}
-                className="border rounded px-2 py-1 w-24"
-              />
-            </div>
-            <button
-              onClick={saveWorkflow}
-              className="ml-auto px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
-            >
-              <Save className="w-4 h-4" />
-              Save Workflow
-            </button>
-          </div>
         </div>
       )}
 
@@ -591,9 +528,6 @@ function WorkflowDesigner() {
               <div className="flex items-center gap-3">
                 <button className="p-2 hover:bg-gray-100 rounded" onClick={() => editWorkflow(workflow)}>
                   <Edit className="w-4 h-4" />
-                </button>
-                <button className="p-2 hover:bg-gray-100 rounded">
-                  <Play className="w-4 h-4" />
                 </button>
               </div>
             </div>

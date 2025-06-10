@@ -125,9 +125,6 @@ class APIClient:
             logger.error(f"Get knowledge graph failed: {e}")
             return {"nodes": [], "edges": []}
 
-    # --- Workflow Endpoints ---
-    def list_workflows(self) -> List[Dict[str, Any]]:
-        """Retrieve all saved workflows"""
         try:
             response = self.session.get(f"{self.base_url}/api/v1/workflows")
             response.raise_for_status()
@@ -136,37 +133,10 @@ class APIClient:
             logger.error(f"Get workflows failed: {e}")
             return []
 
-    def get_workflow(self, workflow_id: str) -> Dict[str, Any]:
-        """Retrieve a specific workflow by ID"""
-        try:
-            response = self.session.get(
-                f"{self.base_url}/api/v1/workflows/{workflow_id}"
             )
             response.raise_for_status()
             return response.json()
         except Exception as e:
-            logger.error(f"Get workflow {workflow_id} failed: {e}")
-            return {"status": "ERROR", "message": str(e)}
-
-    def save_workflow(self, workflow: Dict[str, Any]) -> Dict[str, Any]:
-        """Create or update a workflow configuration"""
-        try:
-            workflow_id = workflow.get("id")
-            if workflow_id:
-                response = self.session.put(
-                    f"{self.base_url}/api/v1/workflows/{workflow_id}", json=workflow
-                )
-            else:
-                response = self.session.post(
-                    f"{self.base_url}/api/v1/workflows", json=workflow
-                )
-            response.raise_for_status()
-            return response.json()
-        except Exception as e:
-            logger.error(f"Save workflow failed: {e}")
-            return {"status": "ERROR", "message": str(e)}
-
-
 class ErrorHandler:
     """Centralized error handling and user notifications"""
 
