@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from enum import Enum
-import threading
+import asyncio
 import hashlib
 
 # Import detailed logging
@@ -145,8 +145,8 @@ class KnowledgeGraphManager:
         self.cache_ttl = self.config.get('cache_ttl_seconds', 3600)
         self.query_history: List[Dict[str, Any]] = []
         
-        # Thread safety
-        self._lock = threading.RLock()
+        # Concurrency control
+        self._lock = asyncio.Lock()
         
         # Initialize storage
         self._init_storage()
@@ -250,7 +250,7 @@ class KnowledgeGraphManager:
         """Create a new entity in the knowledge graph."""
         entity_logger.info(f"Creating entity: {name} ({entity_type.value})")
         
-        with self._lock:
+        async with self._lock:
             # Generate unique ID
             entity_id = self._generate_entity_id(entity_type, name)
             
@@ -304,7 +304,7 @@ class KnowledgeGraphManager:
     @detailed_log_function(LogCategory.KNOWLEDGE_GRAPH)
     async def get_entity(self, entity_id: str) -> Optional[Entity]:
         """Get entity by ID."""
-        with self._lock:
+        async with self._lock:
             return self.entities.get(entity_id)
     
     @detailed_log_function(LogCategory.KNOWLEDGE_GRAPH)
@@ -319,7 +319,7 @@ class KnowledgeGraphManager:
             'limit': limit
         })
         
-        with self._lock:
+        async with self._lock:
             entities = []
             
             # Filter by type
@@ -364,7 +364,7 @@ class KnowledgeGraphManager:
         """Create a new relationship in the knowledge graph."""
         relationship_logger.info(f"Creating relationship: {source_entity_id} -{relationship_type.value}-> {target_entity_id}")
         
-        with self._lock:
+        async with self._lock:
             # Validate entities exist
             if source_entity_id not in self.entities:
                 raise ValueError(f"Source entity not found: {source_entity_id}")
@@ -435,7 +435,7 @@ class KnowledgeGraphManager:
             'relationship_types': [rt.value for rt in relationship_types] if relationship_types else None
         })
         
-        with self._lock:
+        async with self._lock:
             connected_entities = set()
             to_explore = [(entity_id, 0)]
             explored = set()
@@ -583,9 +583,9 @@ class KnowledgeGraphManager:
             kg_logger.error(f"Failed to sync relationship to Neo4j: {relationship.id}", exception=e)
     
     @detailed_log_function(LogCategory.KNOWLEDGE_GRAPH)
-    def get_statistics(self) -> Dict[str, Any]:
+    async def get_statistics(self) -> Dict[str, Any]:
         """Get knowledge graph statistics."""
-        with self._lock:
+        async with self._lock:
             entity_counts = {et.value: len(ids) for et, ids in self.entity_index.items() if ids}
             relationship_counts = {rt.value: len(ids) for rt, ids in self.relationship_index.items() if ids}
             

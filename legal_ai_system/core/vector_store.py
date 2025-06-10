@@ -14,7 +14,6 @@ import json
 import logging  # For tenacity's before_sleep_log
 import os
 import sqlite3
-import threading  # Retained for _sync_lock, though asyncio.Lock is primary
 import time
 from abc import ABC, abstractmethod
 from collections import deque
@@ -367,9 +366,8 @@ class VectorStore:
         )
 
         self._async_lock = asyncio.Lock()
-        self._sync_lock = (
-            threading.RLock()
-        )  # For purely synchronous, thread-sensitive internal ops
+        self.metadata_lock = asyncio.Lock()
+        self.faiss_lock = asyncio.Lock()
 
         self._optimization_task_internal: Optional[asyncio.Task] = None
         self._stop_background_tasks_event = (
@@ -616,10 +614,9 @@ class VectorStore:
 
     async def _load_all_existing_data_async(self):
         vector_store_logger.trace("Loading existing data from storage (async).")
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, self._load_faiss_indexes_sync)
-        await loop.run_in_executor(None, self._load_metadata_mem_cache_sync)
-        await loop.run_in_executor(None, self._load_id_mapping_cache_sync)
+        await self._load_faiss_indexes_async()
+        await self._load_metadata_mem_cache_async()
+        await self._load_id_mapping_cache_async()
 
         doc_vectors = self.document_index.ntotal if self.document_index else 0
         ent_vectors = self.entity_index.ntotal if self.entity_index else 0
@@ -714,7 +711,7 @@ class VectorStore:
         vs_cache_logger.trace("Loading metadata into memory cache (sync).")
         max_cache_size = self.config.get("metadata_memory_cache_size", 10000)
         try:
-            with self._sync_lock, sqlite3.connect(
+            with sqlite3.connect(
                 self.metadata_db_path, timeout=5
             ) as conn:
                 conn.row_factory = sqlite3.Row
@@ -751,7 +748,7 @@ class VectorStore:
     def _load_id_mapping_cache_sync(self):
         vs_cache_logger.trace("Loading FAISS ID mappings into memory cache.")
         try:
-            with self._sync_lock, sqlite3.connect(
+            with sqlite3.connect(
                 self.metadata_db_path, timeout=5
             ) as conn:
                 cursor = conn.execute(
@@ -786,6 +783,21 @@ class VectorStore:
                 exc_info=True,
             )
 
+    async def _load_metadata_mem_cache_async(self):
+        async with self.metadata_lock:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, self._load_metadata_mem_cache_sync)
+
+    async def _load_id_mapping_cache_async(self):
+        async with self.metadata_lock:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, self._load_id_mapping_cache_sync)
+
+    async def _load_faiss_indexes_async(self):
+        async with self.faiss_lock:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, self._load_faiss_indexes_sync)
+
     def _start_background_optimization_task(self):
         if (
             self._optimization_task_internal
@@ -819,7 +831,7 @@ class VectorStore:
                             compact_storage=task_data.get("compact_storage", True),
                         )
                     elif task_type == "SAVE_INDEXES_NOW":  # Explicit save request
-                        await self._save_faiss_indexes_async_wrapper()
+                        await self._save_faiss_indexes_async()
                     else:
                         vs_index_logger.warning(
                             f"Unknown optimization task type received: {task_type}"
@@ -879,9 +891,9 @@ class VectorStore:
                     self._periodic_save_interval_sec // 2
                 )  # Shorter wait after error
 
-    async def _save_faiss_indexes_async_wrapper(self):
-        """Async wrapper for the synchronous FAISS index saving method with lock."""
-        async with self._async_lock:
+    async def _save_faiss_indexes_async(self):
+        """Save FAISS indexes using an asyncio lock for thread safety."""
+        async with self.faiss_lock:
             loop = asyncio.get_event_loop()
             vs_index_logger.debug("Acquired lock for saving FAISS indexes.")
             try:
@@ -890,56 +902,54 @@ class VectorStore:
                 vs_index_logger.debug("Released lock after saving FAISS indexes.")
 
     def _save_faiss_indexes_sync(self):
-        with self._sync_lock:  # Thread lock for FAISS C++ object access
-            doc_idx_path = self.document_index_path
-            tmp_doc_idx_path = doc_idx_path.with_suffix(".tmp")
-            ent_idx_path = self.entity_index_path
-            tmp_ent_idx_path = ent_idx_path.with_suffix(".tmp")
+        doc_idx_path = self.document_index_path
+        tmp_doc_idx_path = doc_idx_path.with_suffix(".tmp")
+        ent_idx_path = self.entity_index_path
+        tmp_ent_idx_path = ent_idx_path.with_suffix(".tmp")
 
-            self._update_disk_usage_stats()  # Update before saving
-            if self.document_index and self.document_index.ntotal > 0:
+        self._update_disk_usage_stats()  # Update before saving
+        if self.document_index and self.document_index.ntotal > 0:
+            try:
+                faiss.write_index(self.document_index, str(tmp_doc_idx_path))
+                os.replace(tmp_doc_idx_path, doc_idx_path)
+                vs_index_logger.info(
+                    "Document FAISS index saved.",
+                    parameters={"path": str(doc_idx_path)},
+                )
+            except Exception as e:
+                vs_index_logger.error(
+                    "Failed to save document FAISS index.",
+                    exception=e,
+                    exc_info=True,
+                )
+                if tmp_doc_idx_path.exists():
+                    os.remove(tmp_doc_idx_path)
 
-                try:
-                    faiss.write_index(self.document_index, str(tmp_doc_idx_path))
-                    os.replace(tmp_doc_idx_path, doc_idx_path)
-                    vs_index_logger.info(
-                        "Document FAISS index saved.",
-                        parameters={"path": str(doc_idx_path)},
-                    )
-                except Exception as e:
-                    vs_index_logger.error(
-                        "Failed to save document FAISS index.",
-                        exception=e,
-                        exc_info=True,
-                    )
-                    if tmp_doc_idx_path.exists():
-                        os.remove(tmp_doc_idx_path)
-
-            if self.entity_index and self.entity_index.ntotal > 0:
-
-                try:
-                    faiss.write_index(self.entity_index, str(tmp_ent_idx_path))
-                    os.replace(tmp_ent_idx_path, ent_idx_path)
-                    vs_index_logger.info(
-                        "Entity FAISS index saved.",
-                        parameters={"path": str(ent_idx_path)},
-                    )
-                except Exception as e:
-                    vs_index_logger.error(
-                        "Failed to save entity FAISS index.", exception=e, exc_info=True
-                    )
-                    if tmp_ent_idx_path.exists():
-                        os.remove(tmp_ent_idx_path)
+        if self.entity_index and self.entity_index.ntotal > 0:
+            try:
+                faiss.write_index(self.entity_index, str(tmp_ent_idx_path))
+                os.replace(tmp_ent_idx_path, ent_idx_path)
+                vs_index_logger.info(
+                    "Entity FAISS index saved.",
+                    parameters={"path": str(ent_idx_path)},
+                )
+            except Exception as e:
+                vs_index_logger.error(
+                    "Failed to save entity FAISS index.", exception=e, exc_info=True
+                )
+                if tmp_ent_idx_path.exists():
+                    os.remove(tmp_ent_idx_path)
 
     @detailed_log_function(LogCategory.VECTOR_STORE_DB)
-    async def _store_metadata_sync_via_executor(self, metadata: VectorMetadata):
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, self._store_metadata_sync, metadata)
+    async def _store_metadata_async(self, metadata: VectorMetadata):
+        async with self.metadata_lock:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, self._store_metadata_sync, metadata)
 
     def _store_metadata_sync(self, metadata: VectorMetadata):
         db_path = self.metadata_db_path
         try:
-            with self._sync_lock, sqlite3.connect(db_path, timeout=5) as conn:
+            with sqlite3.connect(db_path, timeout=5) as conn:
                 conn.execute(
                     """
                     INSERT OR REPLACE INTO vector_metadata (
@@ -1003,7 +1013,7 @@ class VectorStore:
 
     def _find_by_content_hash_sync(self, content_hash: str) -> Optional[str]:
         try:
-            with self._sync_lock, sqlite3.connect(
+            with sqlite3.connect(
                 self.metadata_db_path, timeout=5
             ) as conn:
                 cursor = conn.execute(
@@ -1040,7 +1050,7 @@ class VectorStore:
             if index_target.lower() == "document"
             else self.faissid_to_vectorid_entity
         )
-        with self._sync_lock, sqlite3.connect(self.metadata_db_path, timeout=5) as conn:
+        with sqlite3.connect(self.metadata_db_path, timeout=5) as conn:
             conn.execute(
                 "INSERT OR REPLACE INTO faiss_id_map (vector_id, index_target, faiss_id) VALUES (?,?,?)",
                 (vector_id, index_target, faiss_id),
@@ -1050,7 +1060,7 @@ class VectorStore:
         mapping_f2v[faiss_id] = vector_id
 
     def _delete_id_mapping_sync(self, vector_id: str) -> None:
-        with self._sync_lock, sqlite3.connect(self.metadata_db_path, timeout=5) as conn:
+        with sqlite3.connect(self.metadata_db_path, timeout=5) as conn:
             conn.execute("DELETE FROM faiss_id_map WHERE vector_id = ?", (vector_id,))
             conn.commit()
         if vector_id in self.vectorid_to_faissid_doc:
@@ -1071,7 +1081,7 @@ class VectorStore:
         if vector_id in mapping:
             return mapping[vector_id]
         try:
-            with self._sync_lock, sqlite3.connect(
+            with sqlite3.connect(
                 self.metadata_db_path, timeout=5
             ) as conn:
                 cursor = conn.execute(
@@ -1105,7 +1115,7 @@ class VectorStore:
         if faiss_id in reverse_map:
             return reverse_map[faiss_id]
         try:
-            with self._sync_lock, sqlite3.connect(
+            with sqlite3.connect(
                 self.metadata_db_path, timeout=5
             ) as conn:
                 cursor = conn.execute(
@@ -1305,7 +1315,7 @@ class VectorStore:
                     dimension=self.dimension,
                 )
 
-            await self._store_metadata_sync_via_executor(metadata_to_store)
+            await self._store_metadata_async(metadata_to_store)
             await self._store_id_mapping_async(vector_id, faiss_id, index_target)
             self.stats.total_vectors = (
                 self.document_index.ntotal if self.document_index else 0
@@ -1633,7 +1643,7 @@ class VectorStore:
     def _get_metadata_from_db_sync(self, vector_id: str) -> Optional[Dict[str, Any]]:
         """Synchronously fetches a single metadata record from SQLite."""
         try:
-            with self._sync_lock, sqlite3.connect(
+            with sqlite3.connect(
                 self.metadata_db_path, timeout=5
             ) as conn:
                 conn.row_factory = sqlite3.Row
@@ -1705,7 +1715,7 @@ class VectorStore:
 
     def _update_access_stats_sync(self, vector_id: str, new_last_accessed_iso: str):
         try:
-            with self._sync_lock, sqlite3.connect(
+            with sqlite3.connect(
                 self.metadata_db_path, timeout=5
             ) as conn:
                 conn.execute(
@@ -1733,7 +1743,7 @@ class VectorStore:
             )
             return
 
-        async with self._async_lock:  # Ensure atomicity with cache and DB
+        async with self.metadata_lock:
             vs_cache_logger.debug(
                 f"Updating metadata for vector_id '{vector_id}'.",
                 parameters=metadata_updates,
@@ -1815,7 +1825,7 @@ class VectorStore:
 
         query = f"UPDATE vector_metadata SET {', '.join(set_clauses)}, last_accessed_iso = ?, access_count = access_count + 1 WHERE vector_id = ?"
         try:
-            with self._sync_lock, sqlite3.connect(
+            with sqlite3.connect(
                 self.metadata_db_path, timeout=5
             ) as conn:
                 conn.execute(query, tuple(params))
@@ -1833,17 +1843,14 @@ class VectorStore:
     @detailed_log_function(LogCategory.VECTOR_STORE)
     async def delete_vector_async(self, vector_id: str, index_target: str = "document"):
         async with self._async_lock:
-            loop = asyncio.get_event_loop()
-
-
             # Delete metadata and mapping
-            await loop.run_in_executor(None, self._delete_metadata_sync, vector_id)
+            await self._delete_metadata_async(vector_id)
             await self._delete_id_mapping_async(vector_id)
             self.metadata_mem_cache.pop(vector_id, None)
 
     def _delete_metadata_sync(self, vector_id: str):
         try:
-            with self._sync_lock, sqlite3.connect(
+            with sqlite3.connect(
                 self.metadata_db_path, timeout=5
             ) as conn:
                 conn.execute(
@@ -1859,6 +1866,11 @@ class VectorStore:
                 database_type="sqlite",
                 cause=e,
             )
+
+    async def _delete_metadata_async(self, vector_id: str) -> None:
+        async with self.metadata_lock:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, self._delete_metadata_sync, vector_id)
 
     def _update_disk_usage_stats(self):
         """Updates statistics about disk usage for indexes and metadata DB."""
@@ -1944,7 +1956,7 @@ class VectorStore:
         vector_store_logger.info(
             "Performing final save of FAISS indexes before shutdown."
         )
-        await self._save_faiss_indexes_async_wrapper()
+        await self._save_faiss_indexes_async()
 
         vector_store_logger.info("VectorStore shutdown complete.")
 
