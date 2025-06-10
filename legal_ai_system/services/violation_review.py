@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
@@ -128,11 +128,19 @@ class ViolationReviewDB:
     def update_violation_status(
         self, violation_id: str, status: str, reviewed_by: Optional[str] = None
     ) -> bool:
-        """Update the status and review metadata for a violation."""
+        """Update the status and review metadata for a violation.
+
+        The ``review_time`` is stored in ISO format using UTC.
+        """
         with self._get_conn() as conn:
             conn.execute(
                 "UPDATE violations SET status = ?, reviewed_by = ?, review_time = ? WHERE id = ?",
-                (status, reviewed_by, datetime.now().isoformat(), violation_id),
+                (
+                    status,
+                    reviewed_by,
+                    datetime.now(timezone.utc).isoformat(),
+                    violation_id,
+                ),
             )
             conn.commit()
             return conn.total_changes > 0
