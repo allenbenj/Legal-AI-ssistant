@@ -6,21 +6,20 @@ vector_store_enhanced.py, and optimized_vector_store.py with comprehensive
 detailed logging of every operation, every search, every data change.
 """
 
-import os
 import json
 import time
 import faiss
+from faiss import StandardGpuResources, index_cpu_to_gpu
 import numpy as np
 import threading
 import sqlite3
 import hashlib
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Tuple, Union
+from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-import concurrent.futures
-from queue import Queue, Empty
+from queue import Queue
 
 # Import detailed logging system
 from .detailed_logging import (
@@ -200,7 +199,7 @@ class EmbeddingProvider:
             if isinstance(self.model, object) and hasattr(self.model, 'encode'):
                 # SentenceTransformers
                 embedding_logger.trace("Using SentenceTransformers for embedding")
-                embedding = self.model.encode([text])[0]
+                embedding = np.asarray(self.model.encode([text])[0])
                 
             elif self.model == "ollama":
                 # Ollama API
@@ -229,13 +228,16 @@ class EmbeddingProvider:
             self.total_embeddings += 1
             self.total_embedding_time += embedding_time
             
-            embedding_logger.info("Embedding generated successfully", parameters={
-                'text_length': len(text),
-                'embedding_dimension': len(embedding),
-                'embedding_time': embedding_time,
-                'cache_hit_rate': self.cache_hits / (self.cache_hits + self.cache_misses),
-                'total_embeddings': self.total_embeddings
-            })
+            embedding_logger.info(
+                "Embedding generated successfully",
+                parameters={
+                    'text_length': len(text),
+                    'embedding_dimension': len(embedding),
+                    'embedding_time': embedding_time,
+                    'cache_hit_rate': self.cache_hits / (self.cache_hits + self.cache_misses),
+                    'total_embeddings': self.total_embeddings,
+                },
+            )
             
             return embedding
             
@@ -266,7 +268,7 @@ class EmbeddingProvider:
     def _get_fallback_embedding(self, text: str) -> np.ndarray:
         """Generate simple fallback embedding"""
         # Simple character-based embedding for fallback
-        embedding = np.zeros(self.dimension)
+        embedding = np.zeros((self.dimension,))
         
         for i, char in enumerate(text[:self.dimension]):
             embedding[i] = ord(char) / 255.0
@@ -308,6 +310,9 @@ class EnhancedVectorStore:
         # Metadata storage
         self.metadata_db_path = self.storage_path / "metadata.db"
         self.metadata_cache = {}
+        # Mapping between FAISS index positions and vector IDs
+        self.index_id_map: Dict[int, str] = {}
+        self.vector_id_to_index: Dict[str, int] = {}
         
         # Performance tracking
         self.statistics = IndexStatistics()
@@ -414,10 +419,10 @@ class EnhancedVectorStore:
             # Enable GPU if requested and available
             if self.enable_gpu and faiss.get_num_gpus() > 0:
                 index_logger.info("Enabling GPU acceleration for FAISS indexes")
-                gpu_resource = faiss.StandardGpuResources()
-                
-                self.document_index = faiss.index_cpu_to_gpu(gpu_resource, 0, self.document_index)
-                self.entity_index = faiss.index_cpu_to_gpu(gpu_resource, 0, self.entity_index)
+                gpu_resource = StandardGpuResources()
+
+                self.document_index = index_cpu_to_gpu(gpu_resource, 0, self.document_index)
+                self.entity_index = index_cpu_to_gpu(gpu_resource, 0, self.entity_index)
                 
                 index_logger.info("GPU acceleration enabled")
             
@@ -441,8 +446,10 @@ class EnhancedVectorStore:
         if doc_index_path.exists():
             try:
                 self.document_index = faiss.read_index(str(doc_index_path))
-                vector_logger.info("Document index loaded from disk", 
-                                 parameters={'vectors_count': self.document_index.ntotal})
+                vector_logger.info(
+                    "Document index loaded from disk",
+                    parameters={"vectors_count": self.document_index.ntotal},
+                )
             except Exception as e:
                 vector_logger.warning("Failed to load document index", exception=e)
         
@@ -451,8 +458,10 @@ class EnhancedVectorStore:
         if entity_index_path.exists():
             try:
                 self.entity_index = faiss.read_index(str(entity_index_path))
-                vector_logger.info("Entity index loaded from disk",
-                                 parameters={'vectors_count': self.entity_index.ntotal})
+                vector_logger.info(
+                    "Entity index loaded from disk",
+                    parameters={"vectors_count": self.entity_index.ntotal},
+                )
             except Exception as e:
                 vector_logger.warning("Failed to load entity index", exception=e)
         
@@ -460,12 +469,21 @@ class EnhancedVectorStore:
         self._load_metadata_cache()
         
         # Update statistics
-        self.statistics.total_vectors = self.document_index.ntotal + self.entity_index.ntotal
+        doc_total = self.document_index.ntotal if self.document_index else 0
+        ent_total = self.entity_index.ntotal if self.entity_index else 0
+        self.statistics.total_vectors = doc_total + ent_total
+
+        # Build index mapping from loaded metadata cache
+        self.index_id_map.clear()
+        self.vector_id_to_index.clear()
+        for idx, vector_id in enumerate(self.metadata_cache.keys()):
+            self.index_id_map[idx] = vector_id
+            self.vector_id_to_index[vector_id] = idx
         
         vector_logger.info("Existing data loaded successfully", parameters={
             'total_vectors': self.statistics.total_vectors,
-            'document_vectors': self.document_index.ntotal,
-            'entity_vectors': self.entity_index.ntotal
+            'document_vectors': doc_total,
+            'entity_vectors': ent_total
         })
     
     @detailed_log_function(LogCategory.VECTOR_STORE)
@@ -515,8 +533,8 @@ class EnhancedVectorStore:
         content: str,
         source_file: Optional[str] = None,
         document_type: Optional[str] = None,
-        tags: List[str] = None,
-        custom_metadata: Dict[str, Any] = None
+        tags: Optional[List[str]] = None,
+        custom_metadata: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Add document to vector store with comprehensive logging"""
         vector_logger.info(f"Adding document to vector store: {document_id}")
@@ -565,6 +583,9 @@ class EnhancedVectorStore:
                 
                 # Add to FAISS index
                 self.document_index.add(embedding.reshape(1, -1))
+                new_idx = self.document_index.ntotal - 1
+                self.index_id_map[new_idx] = vector_id
+                self.vector_id_to_index[vector_id] = new_idx
                 
                 # Store metadata
                 self._store_metadata(metadata)
@@ -632,17 +653,20 @@ class EnhancedVectorStore:
                 else:
                     raise ValueError(f"Invalid search type: {search_type}")
                 
-                search_logger.trace(f"Using {index_name} for search", parameters={
-                    'total_vectors': index.ntotal,
-                    'k': k
-                })
+                if index is None:
+                    raise RuntimeError(f"{index_name} is not initialized")
+
+                search_logger.trace(
+                    f"Using {index_name} for search",
+                    parameters={'total_vectors': index.ntotal, 'k': k},
+                )
                 
                 # Perform search
                 distances, indices = index.search(query_embedding.reshape(1, -1), k * 2)  # Get extra for filtering
                 
                 # Process results
                 results = []
-                for i, (distance, idx) in enumerate(zip(distances[0], indices[0])):
+                for _, (distance, idx) in enumerate(zip(distances[0], indices[0])):
                     if idx == -1:  # No more results
                         break
                     
@@ -735,9 +759,150 @@ class EnhancedVectorStore:
                 'k': k
             })
             raise
-    
-    # Additional methods continue with same detailed logging pattern...
-    # [Implementation continues with remaining methods]
+
+    # ------------------------------------------------------------------
+    # Helper and maintenance methods
+
+    def _start_background_optimization(self) -> None:
+        """Start a simple background thread for optimization tasks."""
+        thread = threading.Thread(
+            target=self._optimization_worker, name="vector_opt", daemon=True
+        )
+        thread.start()
+
+    def _optimization_worker(self) -> None:
+        """Process queued optimization requests."""
+        while True:
+            try:
+                task = self.optimization_queue.get(timeout=5)
+            except Exception:
+                continue
+            if task is None:
+                break
+            # Placeholder for future optimization logic
+            time.sleep(0.1)
+            self.optimization_queue.task_done()
+
+    def _store_metadata(self, metadata: VectorMetadata) -> None:
+        """Persist metadata to the SQLite database."""
+        with sqlite3.connect(self.metadata_db_path) as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO vector_metadata (
+                    vector_id, document_id, content_hash, content_preview,
+                    vector_norm, dimension, created_at, last_accessed,
+                    access_count, source_file, document_type, tags,
+                    confidence_score, embedding_model, custom_metadata
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """,
+                (
+                    metadata.vector_id,
+                    metadata.document_id,
+                    metadata.content_hash,
+                    metadata.content_preview,
+                    metadata.vector_norm,
+                    metadata.dimension,
+                    metadata.created_at.isoformat(),
+                    metadata.last_accessed.isoformat(),
+                    metadata.access_count,
+                    metadata.source_file,
+                    metadata.document_type,
+                    json.dumps(metadata.tags),
+                    metadata.confidence_score,
+                    metadata.embedding_model,
+                    json.dumps(metadata.custom_metadata),
+                ),
+            )
+            conn.commit()
+
+    def _find_by_content_hash(self, content_hash: str) -> Optional[str]:
+        """Return vector_id matching the given content hash if it exists."""
+        for meta in self.metadata_cache.values():
+            if meta.content_hash == content_hash:
+                return meta.vector_id
+        with sqlite3.connect(self.metadata_db_path) as conn:
+            cursor = conn.execute(
+                "SELECT vector_id FROM vector_metadata WHERE content_hash=?",
+                (content_hash,),
+            )
+            row = cursor.fetchone()
+            return row[0] if row else None
+
+    def _get_vector_id_by_index(self, idx: int, search_type: str) -> Optional[str]:
+        """Lookup vector_id by FAISS index position."""
+        return self.index_id_map.get(idx)
+
+    def _get_metadata(self, vector_id: str) -> Optional[VectorMetadata]:
+        """Retrieve metadata from cache or database."""
+        metadata = self.metadata_cache.get(vector_id)
+        if metadata:
+            return metadata
+        with sqlite3.connect(self.metadata_db_path) as conn:
+            cursor = conn.execute(
+                "SELECT * FROM vector_metadata WHERE vector_id=?", (vector_id,)
+            )
+            row = cursor.fetchone()
+            if not row:
+                return None
+            metadata = VectorMetadata(
+                vector_id=row[0],
+                document_id=row[1],
+                content_hash=row[2],
+                content_preview=row[3],
+                vector_norm=row[4],
+                dimension=row[5],
+                created_at=datetime.fromisoformat(row[6]),
+                last_accessed=datetime.fromisoformat(row[7]),
+                access_count=row[8],
+                source_file=row[9],
+                document_type=row[10],
+                tags=json.loads(row[11]) if row[11] else [],
+                confidence_score=row[12],
+                embedding_model=row[13],
+                custom_metadata=json.loads(row[14]) if row[14] else {},
+            )
+            self.metadata_cache[vector_id] = metadata
+            return metadata
+
+    def _apply_filters(self, metadata: VectorMetadata, filters: Dict[str, Any]) -> bool:
+        """Simple filtering implementation."""
+        for key, value in filters.items():
+            attr_val = getattr(metadata, key, None)
+            if attr_val != value and metadata.custom_metadata.get(key) != value:
+                return False
+        return True
+
+    def _update_access_stats(self, vector_id: str) -> None:
+        """Update access statistics for a vector."""
+        metadata = self.metadata_cache.get(vector_id)
+        if not metadata:
+            return
+        metadata.access_count += 1
+        metadata.last_accessed = datetime.now()
+        with sqlite3.connect(self.metadata_db_path) as conn:
+            conn.execute(
+                "UPDATE vector_metadata SET last_accessed=?, access_count=? WHERE vector_id=?",
+                (
+                    metadata.last_accessed.isoformat(),
+                    metadata.access_count,
+                    vector_id,
+                ),
+            )
+            conn.commit()
+
+    def get_system_status(self) -> Dict[str, Any]:
+        """Return a basic health summary of the vector store."""
+        doc_total = self.document_index.ntotal if self.document_index else 0
+        ent_total = self.entity_index.ntotal if self.entity_index else 0
+        return {
+            "state": self.state.value,
+            "dimension": self.dimension,
+            "index_type": self.index_type.value,
+            "total_vectors": doc_total + ent_total,
+            "cache_size": len(self.metadata_cache),
+        }
+
+    # ------------------------------------------------------------------
 
 if __name__ == "__main__":
     # Test the enhanced vector store
