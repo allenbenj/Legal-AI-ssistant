@@ -10,6 +10,7 @@ from pathlib import Path
 from datetime import datetime
 from enum import Enum
 import os
+import yaml
 
 # Import detailed logging system
 from .detailed_logging import get_detailed_logger, LogCategory, detailed_log_function
@@ -40,10 +41,12 @@ class ConfigurationManager:
         """Initialize configuration manager with optional custom settings instance"""
         config_manager_logger.info("=== INITIALIZING CONFIGURATION MANAGER ===")
         
-        self._settings: LegalAISettings = custom_settings_instance or global_settings
+        self._settings: LegalAISettings = (
+            custom_settings_instance or self._load_defaults()
+        )
         self._config_cache: Dict[str, Any] = {} # For potentially computed or frequently accessed transformed configs
         self._environment_overrides: Dict[str, Any] = {}
-        
+
         self._load_environment_overrides()
         
         config_manager_logger.info("ConfigurationManager initialized", parameters={
@@ -54,6 +57,29 @@ class ConfigurationManager:
             'vector_store_type': self._settings.vector_store_type,
             'environment_overrides_count': len(self._environment_overrides)
         })
+
+    @detailed_log_function(LogCategory.CONFIG)
+    def _load_defaults(self) -> LegalAISettings:
+        """Load default settings from YAML file."""
+        defaults_path = Path(__file__).resolve().parents[2] / "config" / "defaults.yaml"
+        if defaults_path.exists():
+            try:
+                with defaults_path.open("r") as f:
+                    data = yaml.safe_load(f) or {}
+                config_manager_logger.info(
+                    "Defaults loaded from YAML", parameters={"path": str(defaults_path)}
+                )
+                return LegalAISettings(**data)
+            except Exception as e:
+                config_manager_logger.error(
+                    "Failed to load defaults YAML", parameters={"path": str(defaults_path)}, exception=e
+                )
+        else:
+            config_manager_logger.warning(
+                "Defaults YAML not found, falling back to package defaults",
+                parameters={"path": str(defaults_path)}
+            )
+        return global_settings
     
     @detailed_log_function(LogCategory.CONFIG)
     def _load_environment_overrides(self):
