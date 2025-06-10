@@ -60,7 +60,7 @@ class ViolationDetectionOutput:
         return data
 
 
-class ViolationDetectorAgent(BaseAgent):
+class ViolationDetectorAgent(BaseAgent, MemoryMixin):
     """
     Specialized agent for detecting legal violations in documents and case materials.
     Combines pattern matching and LLM-based analysis.
