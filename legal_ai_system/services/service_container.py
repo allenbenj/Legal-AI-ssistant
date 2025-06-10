@@ -133,6 +133,14 @@ class ServiceContainer:
 
         service_container_logger.info("ServiceContainer instance created.")
 
+    def update_workflow_config(self, config: Dict[str, Any]) -> None:
+        """Update the active workflow configuration in-place."""
+        self._active_workflow_config.update(config)
+
+    def get_active_workflow_config(self) -> Dict[str, Any]:
+        """Return a copy of the active workflow configuration."""
+        return dict(self._active_workflow_config)
+
     @detailed_log_function(LogCategory.SYSTEM)
     async def register_service(
         self,
@@ -184,81 +192,76 @@ class ServiceContainer:
                 raise ValueError(msg)
 
     @detailed_log_function(LogCategory.SYSTEM)
-    async def get_service(self, name: str) -> Any:
+    async def get_service(self, name: str, _chain: Optional[List[str]] = None) -> Any:
         """Retrieves a service instance, creating it via factory if necessary."""
-        async with self._lock:
-            if name not in self._services:
-                if name not in self._service_factories:
-                    service_container_logger.error(
-                        f"Service not found.", parameters={"name": name}
-                    )
-                    raise ConfigurationError(
-                        f"Service '{name}' not found in container."
-                    )
+        if _chain is None:
+            _chain = []
 
-                # Create service from factory
-                factory_info = self._service_factories[name]
-                service_container_logger.info(
-                    f"Creating service '{name}' from factory."
+        if name in _chain:
+            chain = " -> ".join(_chain + [name])
+            service_container_logger.critical(
+                f"Circular dependency detected while resolving {chain}."
+            )
+            raise ConfigurationError(f"Circular dependency detected: {chain}")
+
+        async with self._lock:
+            if name in self._services:
+                return self._services[name]
+
+            if name not in self._service_factories:
+                service_container_logger.error(
+                    f"Service not found.", parameters={"name": name}
+                )
+                raise ConfigurationError(f"Service '{name}' not found in container.")
+
+            # Copy factory info while holding the lock then release
+            factory_info = self._service_factories[name]
+
+        service_container_logger.info(f"Creating service '{name}' from factory.")
+
+        # Resolve dependencies first outside the lock
+        for dep_name in factory_info["depends_on"]:
+            if dep_name not in self._services:
+                await self.get_service(dep_name, _chain + [name])
+
+        # Get config for the service if config_key is provided
+        service_config = {}
+        if factory_info["config_key"]:
+            config_manager = self._services.get(
+                "configuration_manager"
+            )  # Assume CM is registered
+            if config_manager and hasattr(config_manager, "get"):
+                service_config = config_manager.get(factory_info["config_key"], {})
+            else:
+                service_container_logger.warning(
+                    f"ConfigurationManager not found or 'get' method missing. Cannot load config for service '{name}'."
                 )
 
-                # Resolve dependencies first
-                for dep_name in factory_info["depends_on"]:
-                    if (
-                        dep_name not in self._services
-                    ):  # Ensure dependency is initialized
-                        await self.get_service(dep_name)
+        # Merge factory_kwargs with loaded service_config (kwargs take precedence)
+        final_kwargs = {**service_config, **factory_info["kwargs"]}
 
-                # Get config for the service if config_key is provided
-                service_config = {}
-                if factory_info["config_key"]:
-                    config_manager = self._services.get(
-                        "configuration_manager"
-                    )  # Assume CM is registered
-                    if config_manager and hasattr(config_manager, "get"):
-                        service_config = config_manager.get(
-                            factory_info["config_key"], {}
-                        )
-                    else:
-                        service_container_logger.warning(
-                            f"ConfigurationManager not found or 'get' method missing. Cannot load config for service '{name}'."
-                        )
+        try:
+            if factory_info["is_async"]:
+                instance = await factory_info["factory"](
+                    self, **final_kwargs
+                )  # Pass container and merged kwargs
+            else:
+                instance = factory_info["factory"](self, **final_kwargs)
 
-                # Merge factory_kwargs with loaded service_config (kwargs take precedence)
-                final_kwargs = {**service_config, **factory_info["kwargs"]}
+            async with self._lock:
+                self._services[name] = instance
 
-                try:
-                    if factory_info["is_async"]:
-                        instance = await factory_info["factory"](
-                            self, **final_kwargs
-                        )  # Pass container and merged kwargs
-                    else:
-                        instance = factory_info["factory"](self, **final_kwargs)
+            service_container_logger.info(f"Service '{name}' created and cached.")
+        except Exception as e:
+            self._service_states[name] = ServiceLifecycleState.ERROR
+            service_container_logger.critical(
+                f"Failed to create service '{name}' from factory.", exception=e
+            )
+            raise SystemInitializationError(
+                f"Failed to create service '{name}'", cause=e
+            )
 
-                    self._services[name] = instance
-                    # Initialization is now handled by initialize_all_services or explicitly
-                    # self._service_states[name] = ServiceLifecycleState.INITIALIZING
-                    # if hasattr(instance, 'initialize_service'):
-                    #     await instance.initialize_service()
-                    # elif hasattr(instance, 'initialize'):
-                    #     await instance.initialize()
-                    # self._service_states[name] = ServiceLifecycleState.INITIALIZED
-
-                    service_container_logger.info(
-                        f"Service '{name}' created and cached."
-                    )
-                except Exception as e:
-                    self._service_states[name] = ServiceLifecycleState.ERROR
-                    service_container_logger.critical(
-                        f"Failed to create service '{name}' from factory.", exception=e
-                    )
-                    raise SystemInitializationError(
-                        f"Failed to create service '{name}'", cause=e
-                    )
-
-            return self._services[name]
-
-
+        return instance
 
     @detailed_log_function(LogCategory.SYSTEM)
     async def initialize_all_services(self):
@@ -451,7 +454,6 @@ class ServiceContainer:
         )
 
 
-
 # Global factory function to create and populate the service container
 # This is where you define how your system's services are created and wired together.
 async def create_service_container(
@@ -530,6 +532,7 @@ async def create_service_container(
 
     # Register UserRepository
     from ..utils.user_repository import UserRepository
+
     if persistence_manager_service and persistence_manager_service.connection_pool:
         await container.register_service(
             "user_repository",
@@ -660,7 +663,9 @@ async def create_service_container(
         service_config=kg_conf,
     )
 
-    from ..core.enhanced_vector_store import create_enhanced_vector_store  # Unified implementation
+    from ..core.enhanced_vector_store import (
+        create_enhanced_vector_store,
+    )  # Unified implementation
 
     vs_conf = {
         "STORAGE_PATH": str(
@@ -668,9 +673,7 @@ async def create_service_container(
         ),
         "DOCUMENT_INDEX_PATH": embed_conf.get("document_index_path"),
         "ENTITY_INDEX_PATH": embed_conf.get("entity_index_path"),
-        "DEFAULT_INDEX_TYPE": embed_conf.get(
-            "vector_store_type", "HNSW"
-        ),
+        "DEFAULT_INDEX_TYPE": embed_conf.get("vector_store_type", "HNSW"),
         "embedding_model_name": embed_conf.get("embedding_model"),
     }
     # EmbeddingProvider instance can be fetched from EmbeddingManager if VectorStore is designed to take it
@@ -826,6 +829,7 @@ async def create_service_container(
 
     # Register simple LangGraph node classes for builder workflows
     from ..agents.agent_nodes import AnalysisNode, SummaryNode
+
     workflow_topic = config_manager_service.get("workflow_builder_topic", "default")
     await container.register_service(
         "analysis_node",
@@ -835,16 +839,6 @@ async def create_service_container(
     await container.register_service(
         "summary_node",
         factory=lambda sc: SummaryNode(),
-        is_async_factory=False,
-    )
-
-    # Register orchestrator which coordinates both realtime and builder workflows
-    from .workflow_orchestrator import WorkflowOrchestrator
-    await container.register_service(
-        "workflow_orchestrator",
-        factory=lambda sc, topic=workflow_topic: WorkflowOrchestrator(
-            sc, topic=topic
-        ),
         is_async_factory=False,
     )
 
