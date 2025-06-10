@@ -769,6 +769,7 @@ async def create_service_container(
     # For now, let's assume workflows will get agent *classes* or factories.
     # Or, if agents are simple enough to be singletons:
     from ..agents.document_processor_agent import DocumentProcessorAgent
+    from ..agents.document_processor_agent_v2 import DocumentProcessorAgentV2
     from ..agents.document_rewriter_agent import DocumentRewriterAgent
     from ..agents.ontology_extraction_agent import OntologyExtractionAgent
     from ..agents.entity_extraction_agent import StreamlinedEntityExtractionAgent
@@ -780,6 +781,7 @@ async def create_service_container(
 
     agent_classes = {
         "document_processor_agent": DocumentProcessorAgent,
+        "document_processor_agent_v2": DocumentProcessorAgentV2,
         "ontology_extraction_agent": OntologyExtractionAgent,
         "streamlined_entity_extraction_agent": StreamlinedEntityExtractionAgent,
         # ... Add all other agent classes from agents/__init__.py

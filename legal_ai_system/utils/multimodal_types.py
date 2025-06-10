@@ -75,6 +75,33 @@ class MultiModalDocument:
     metadata: DocumentMetadata = field(default_factory=DocumentMetadata)
 
 
+@dataclass
+class DepositionTranscript:
+    """Transcript produced from a video deposition."""
+
+    segments: List[AudioSegment] = field(default_factory=list)
+    speakers: Optional[List[str]] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class StructuredForm:
+    """Key/value representation of a legal form."""
+
+    fields: Dict[str, str] = field(default_factory=dict)
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class RedlineAnalysis:
+    """Summary of contract revisions."""
+
+    additions: List[str] = field(default_factory=list)
+    deletions: List[str] = field(default_factory=list)
+    comments: List[str] = field(default_factory=list)
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
 __all__ = [
     "ProcessedImage",
     "StructuredTable",
@@ -83,4 +110,7 @@ __all__ = [
     "VideoFrame",
     "DocumentMetadata",
     "MultiModalDocument",
+    "DepositionTranscript",
+    "StructuredForm",
+    "RedlineAnalysis",
 ]
