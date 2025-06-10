@@ -842,6 +842,30 @@ async def create_service_container(
                 is_async_factory=False,
             )
 
+    # Register simple LangGraph node classes for builder workflows
+    from ..agents.agent_nodes import AnalysisNode, SummaryNode
+    workflow_topic = config_manager_service.get("workflow_builder_topic", "default")
+    await container.register_service(
+        "analysis_node",
+        factory=lambda sc, t=workflow_topic: AnalysisNode(t),
+        is_async_factory=False,
+    )
+    await container.register_service(
+        "summary_node",
+        factory=lambda sc: SummaryNode(),
+        is_async_factory=False,
+    )
+
+    # Register orchestrator which coordinates both realtime and builder workflows
+    from .workflow_orchestrator import WorkflowOrchestrator
+    await container.register_service(
+        "workflow_orchestrator",
+        factory=lambda sc, topic=workflow_topic: WorkflowOrchestrator(
+            sc, workflow_topic=topic
+        ),
+        is_async_factory=False,
+    )
+
     # Register workflow with active configuration
     workflow_conf_dict = config_manager_service.get("workflow_config", {})
     container.update_workflow_config(workflow_conf_dict)

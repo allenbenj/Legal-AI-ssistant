@@ -5,6 +5,10 @@ Coordinates execution of document analysis workflows such as
 """
 
 from typing import Any, Dict, Optional
+from pathlib import Path
+
+from ..utils.document_utils import extract_text
+from ..workflows.langgraph_setup import build_graph
 
 from ..core.detailed_logging import (
     get_detailed_logger,
@@ -30,16 +34,26 @@ class WorkflowOrchestrator:
         if workflow_config is None:
             workflow_config = config.get("workflow_config", WorkflowConfig())
 
+        # RealTimeAnalysisWorkflow used for async document processing
         self.workflow = RealTimeAnalysisWorkflow(
             service_container,
             workflow_config=workflow_config,
             **config,
         )
+
+        # Setup builder based workflow
+        self.topic = config.get("workflow_topic", "default")
+        self.graph_builder = config.get("graph_builder", build_graph)
+        self._graph = None
+
         wo_logger.info("WorkflowOrchestrator initialized")
 
     @detailed_log_function(LogCategory.SYSTEM)
     async def initialize_service(self) -> None:
         await self.workflow.initialize()
+        # lazily build graph for builder-based workflow
+        if self._graph is None:
+            self._graph = self.graph_builder(self.topic)
 
     @detailed_log_function(LogCategory.SYSTEM)
     async def execute_workflow_instance(
@@ -48,8 +62,18 @@ class WorkflowOrchestrator:
         custom_metadata: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Run the workflow and return the generated document ID."""
+
+        # 1. Run the async real-time workflow
         result = await self.workflow.process_document_realtime(
             document_path=document_path_str,
             **(custom_metadata or {}),
         )
+
+        # 2. Execute the builder based graph for additional processing
+        if self._graph is None:
+            self._graph = self.graph_builder(self.topic)
+        text = extract_text(Path(document_path_str))
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, self._graph.run, text)
+
         return result.document_id
