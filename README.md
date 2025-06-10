@@ -59,6 +59,15 @@ tual environment and run the tests:
 python legal_ai_system/scripts/setup_environment_task.py
 ```
 
+For a quick test run you can also execute:
+
+```bash
+./scripts/run_tests.sh
+```
+
+The script creates a `.venv`, installs development dependencies, and runs
+`pytest`.
+
 ### Start Task
 
 
