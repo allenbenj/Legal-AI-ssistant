@@ -6,6 +6,6 @@ __all__ = [
 ]
 
 try:
-    from .services.integration_service import LegalAIIntegrationService
+    from legal_ai_system.services.integration_service import LegalAIIntegrationService
 except Exception:  # pragma: no cover - optional during minimal setups
     LegalAIIntegrationService = None

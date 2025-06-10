@@ -6,7 +6,7 @@ from this module avoids exposing the internal ``core`` package structure and
 prevents long re-export chains.
 """
 
-from .core import constants as _core
+from legal_ai_system.core import constants as _core
 
 # Re-export public constant classes and helper validators
 Constants = _core.Constants
