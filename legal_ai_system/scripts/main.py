@@ -162,11 +162,19 @@ except ImportError as e:
             pass
 
     class _SettingsFallback:
-        frontend_dist_path = (
-            Path(__file__).resolve().parent.parent / "frontend" / "dist"
-        )
+        """Minimal settings fallback when core settings are unavailable."""
 
-    settings = _SettingsFallback()
+        base_dir = Path(__file__).resolve().parent.parent
+        data_dir = base_dir / "storage"
+        frontend_dist_path = base_dir / "frontend" / "dist"
+        logs_dir = base_dir / "logs"
+
+    try:
+        from legal_ai_system.core.settings import LegalAISettings
+
+        settings = LegalAISettings()
+    except Exception:  # pragma: no cover - fallback for missing dependencies
+        settings = _SettingsFallback()
 
 
 # Initialize logger for this module
