@@ -36,10 +36,11 @@ Alternatively, run the helper script to automate the setup and validation:
 ```bash
 python legal_ai_system/scripts/setup_environment_task.py
 ```
+### Example: Build a Workflow
 
-```bash
-npm install
-npm run build
+
+
+workflow = builder.build()
+result = workflow.run("sample.pdf")
+print(result)
 ```
-
-
