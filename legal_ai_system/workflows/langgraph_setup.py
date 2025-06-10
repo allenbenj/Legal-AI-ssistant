@@ -40,6 +40,9 @@ if TYPE_CHECKING:  # pragma: no cover - hint for type checkers
     from langgraph.graph import END as _RealEND
 
 from ..agents.agent_nodes import AnalysisNode, SummaryNode
+from .nodes import HumanReviewNode, ProgressTrackingNode
+from ..utils.reviewable_memory import ReviewableMemory
+from ..api.websocket_manager import ConnectionManager
 
 
 def _uppercase(text: str) -> str:
@@ -55,22 +58,10 @@ def build_graph(topic: str) -> StateGraph:
     graph = StateGraph()
 
     graph.add_node("analysis", AnalysisNode(topic))
+    review_memory = ReviewableMemory()
+    graph.add_node("human_review", HumanReviewNode(review_memory))
+    manager = ConnectionManager()
     graph.add_node("summary", SummaryNode())
-    graph.add_node("noop", lambda x: x)
-    graph.add_node("uppercase", _uppercase)
-    graph.add_node("merge", _merge_text)
-
-    graph.set_entry_point("analysis")
-    graph.add_conditional_edges(
-        "analysis",
-        [
-            (lambda t: "skip" in t.lower(), "noop"),
-            (lambda t: "skip" not in t.lower(), "summary"),
-        ],
-    )
-    graph.add_parallel_nodes("summary", ["uppercase", "noop"], "merge")
-    graph.add_edge("noop", END)
-    graph.add_edge("merge", END)
 
     return graph
 

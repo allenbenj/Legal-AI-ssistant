@@ -77,11 +77,6 @@ if svc_mod is None:
 _orig_container_cls = getattr(svc_mod, "ServiceContainer", object)
 
 class ServiceContainer:
-    async def register_service(self, *args, **kwargs):
-        return None
-
-    async def initialize_all_services(self) -> None:
-        return None
 
 svc_mod.ServiceContainer = ServiceContainer
 
