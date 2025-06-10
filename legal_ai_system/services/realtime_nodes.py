@@ -1,13 +1,7 @@
 
 
-class DocumentProcessingNode:  # pragma: no cover - placeholder
-    pass
+from typing import Any
 
-
-    pass
-
-
-__all__ = [
 
     "DocumentProcessingNode",
     "DocumentRewritingNode",
