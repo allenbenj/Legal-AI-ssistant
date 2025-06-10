@@ -8,7 +8,7 @@ core services and agents within the Legal AI System.
 
 import asyncio
 from typing import Dict, Any, Optional, Callable, Awaitable, List, TYPE_CHECKING
-from dataclasses import asdict
+
 from enum import Enum
 from datetime import datetime, timezone
 import os
@@ -129,6 +129,8 @@ class ServiceContainer:
         self._lock = (
             asyncio.Lock()
         )  # For thread-safe registration and retrieval if needed (though primarily async)
+        # Active workflow configuration shared across workflow instances
+        self._active_workflow_config: Dict[str, Any] = {}
 
         service_container_logger.info("ServiceContainer instance created.")
 
@@ -449,21 +451,6 @@ class ServiceContainer:
             parameters={"task_name": getattr(coro, "__name__", "unnamed_coro")},
         )
 
-    def get_active_workflow_config(self) -> WorkflowConfig:
-        """Return the currently active workflow configuration."""
-        return self._active_workflow_config
-
-    async def update_workflow_config(self, new_config: Dict[str, Any]) -> None:
-        """Update the workflow configuration and propagate to the workflow instance."""
-        async with self._lock:
-            for key, value in new_config.items():
-                setattr(self._active_workflow_config, key, value)
-            if "realtime_analysis_workflow" in self._services:
-                workflow = self._services["realtime_analysis_workflow"]
-                if hasattr(workflow, "update_config"):
-                    maybe = workflow.update_config(**new_config)
-                    if asyncio.iscoroutine(maybe):
-                        await maybe
 
 
 # Global factory function to create and populate the service container
@@ -861,6 +848,7 @@ async def create_service_container(
         ),
         is_async_factory=False,
     )
+
 
     # Register LangGraph nodes and builder for the orchestrator
     from ..agents.agent_nodes import AnalysisNode, SummaryNode
