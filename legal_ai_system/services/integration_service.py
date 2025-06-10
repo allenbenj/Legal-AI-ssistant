@@ -7,15 +7,13 @@ to interact with various backend components (agents, managers, workflows).
 This service is typically used by the API layer (e.g., FastAPI).
 """
 
-import asyncio
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
 # import logging # Replaced by detailed_logging
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Dict, Optional
 
-from legal_ai_system.agents.document_processor_agent import DocumentProcessingOutput
 from legal_ai_system.core.detailed_logging import (
     LogCategory,
     detailed_log_function,
@@ -23,13 +21,9 @@ from legal_ai_system.core.detailed_logging import (
 )
 from legal_ai_system.core.unified_exceptions import (
     ConfigurationError,
-    DocumentNotFoundError,
-    ProcessingError,
     ServiceLayerError,
 )
-from legal_ai_system.services.realtime_analysis_workflow import RealTimeAnalysisResult
 from legal_ai_system.services.security_manager import (
-    AccessLevel,
     SecurityManager,
 )
 from legal_ai_system.services.security_manager import User as AuthUser
