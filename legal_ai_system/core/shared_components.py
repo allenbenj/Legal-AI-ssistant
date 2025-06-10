@@ -125,6 +125,8 @@ class APIClient:
             logger.error(f"Get knowledge graph failed: {e}")
             return {"nodes": [], "edges": []}
 
+    def get_workflows(self) -> List[Dict[str, Any]]:
+        """Retrieve available workflows"""
         try:
             response = self.session.get(f"{self.base_url}/api/v1/workflows")
             response.raise_for_status()
@@ -133,10 +135,6 @@ class APIClient:
             logger.error(f"Get workflows failed: {e}")
             return []
 
-            )
-            response.raise_for_status()
-            return response.json()
-        except Exception as e:
 class ErrorHandler:
     """Centralized error handling and user notifications"""
 

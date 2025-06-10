@@ -10,6 +10,7 @@ from pathlib import Path
 from datetime import datetime
 from enum import Enum
 import os
+import yaml
 
 # Import detailed logging system
 from .detailed_logging import get_detailed_logger, LogCategory, detailed_log_function
@@ -21,6 +22,8 @@ from .settings import (
     settings as global_settings,
 )
 from .constants import Constants
+from .config_models import DatabaseConfig, VectorStoreConfig, SecurityConfig
+from .llm_providers import LLMConfig
 
 
 # Initialize logger
@@ -38,10 +41,12 @@ class ConfigurationManager:
         """Initialize configuration manager with optional custom settings instance"""
         config_manager_logger.info("=== INITIALIZING CONFIGURATION MANAGER ===")
         
-        self._settings: LegalAISettings = custom_settings_instance or global_settings
+        self._settings: LegalAISettings = (
+            custom_settings_instance or self._load_defaults()
+        )
         self._config_cache: Dict[str, Any] = {} # For potentially computed or frequently accessed transformed configs
         self._environment_overrides: Dict[str, Any] = {}
-        
+
         self._load_environment_overrides()
         
         config_manager_logger.info("ConfigurationManager initialized", parameters={
@@ -52,6 +57,29 @@ class ConfigurationManager:
             'vector_store_type': self._settings.vector_store_type,
             'environment_overrides_count': len(self._environment_overrides)
         })
+
+    @detailed_log_function(LogCategory.CONFIG)
+    def _load_defaults(self) -> LegalAISettings:
+        """Load default settings from YAML file."""
+        defaults_path = Path(__file__).resolve().parents[2] / "config" / "defaults.yaml"
+        if defaults_path.exists():
+            try:
+                with defaults_path.open("r") as f:
+                    data = yaml.safe_load(f) or {}
+                config_manager_logger.info(
+                    "Defaults loaded from YAML", parameters={"path": str(defaults_path)}
+                )
+                return LegalAISettings(**data)
+            except Exception as e:
+                config_manager_logger.error(
+                    "Failed to load defaults YAML", parameters={"path": str(defaults_path)}, exception=e
+                )
+        else:
+            config_manager_logger.warning(
+                "Defaults YAML not found, falling back to package defaults",
+                parameters={"path": str(defaults_path)}
+            )
+        return global_settings
     
     @detailed_log_function(LogCategory.CONFIG)
     def _load_environment_overrides(self):
@@ -166,7 +194,7 @@ class ConfigurationManager:
     # Ensure they use the `self.get()` method to benefit from overrides and logging.
 
     @detailed_log_function(LogCategory.CONFIG)
-    def get_llm_config(self) -> Dict[str, Any]:
+    def get_llm_config(self) -> LLMConfig:
         """Get LLM provider configuration."""
         config_manager_logger.trace("Retrieving LLM configuration")
         
@@ -198,10 +226,10 @@ class ConfigurationManager:
             })
         
         config_manager_logger.info("LLM configuration retrieved", parameters=config)
-        return config
+        return LLMConfig(**config)
 
     @detailed_log_function(LogCategory.CONFIG)
-    def get_database_config(self) -> Dict[str, Any]:
+    def get_database_config(self) -> DatabaseConfig:
         """Get database configuration."""
         config_manager_logger.trace("Retrieving database configuration")
         
@@ -217,10 +245,10 @@ class ConfigurationManager:
         }
         
         config_manager_logger.info("Database configuration retrieved", parameters=config)
-        return config
+        return DatabaseConfig(**config)
 
     @detailed_log_function(LogCategory.CONFIG)
-    def get_vector_store_config(self) -> Dict[str, Any]:
+    def get_vector_store_config(self) -> VectorStoreConfig:
         """Get vector store configuration."""
         config_manager_logger.trace("Retrieving vector store configuration")
         
@@ -238,10 +266,10 @@ class ConfigurationManager:
         }
         
         config_manager_logger.info("Vector store configuration retrieved", parameters=config)
-        return config
+        return VectorStoreConfig(**config)
 
     @detailed_log_function(LogCategory.CONFIG)
-    def get_security_config(self) -> Dict[str, Any]:
+    def get_security_config(self) -> SecurityConfig:
         """Get security configuration."""
         config_manager_logger.trace("Retrieving security configuration")
         
@@ -254,7 +282,7 @@ class ConfigurationManager:
         }
         
         config_manager_logger.info("Security configuration retrieved", parameters=config)
-        return config
+        return SecurityConfig(**config)
 
     @detailed_log_function(LogCategory.CONFIG)
     def get_processing_config(self) -> Dict[str, Any]:
@@ -326,11 +354,11 @@ class ConfigurationManager:
         }
         
         # Check LLM configuration
-        llm_config = self.get_llm_config()
-        if llm_config['provider'] in ['openai', 'xai'] and not llm_config.get('api_key'):
-            msg = f"API key missing for LLM provider: {llm_config['provider']}"
+        llm_cfg = self.get_llm_config()
+        if llm_cfg.provider in ['openai', 'xai'] and not llm_cfg.api_key:
+            msg = f"API key missing for LLM provider: {llm_cfg.provider}"
             validation_results['warnings'].append(msg)
-            validation_results['checks_summary']['llm_api_key'] = f"Missing for {llm_config['provider']}"
+            validation_results['checks_summary']['llm_api_key'] = f"Missing for {llm_cfg.provider}"
         else:
             validation_results['checks_summary']['llm_api_key'] = "OK"
         
@@ -353,7 +381,7 @@ class ConfigurationManager:
         
         # Check database configuration (basic check for paths)
         db_config = self.get_database_config()
-        sqlite_path_obj = Path(db_config['sqlite_path'])
+        sqlite_path_obj = db_config.sqlite_path
         if not sqlite_path_obj.parent.exists():
             msg = f"SQLite database directory missing: {str(sqlite_path_obj.parent)}"
             validation_results['warnings'].append(msg)

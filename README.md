@@ -51,6 +51,17 @@ enable these features, install additional libraries:
 pip install ffmpeg-python openai-whisper whisperx pdfplumber pyannote.audio
 ```
 
+To experiment with advanced workflow orchestration using the
+[`langgraph`](https://pypi.org/project/langgraph/) engine install it
+separately:
+
+```bash
+pip install langgraph==0.0.20
+```
+
+See [advanced_langgraph.md](docs/advanced_langgraph.md) for details on how the
+package integrates with document routing and WebSocket progress updates.
+
 For more detailed instructions see [ENV_SETUP.md](ENV_SETUP.md).
 
 The older `setup_environment_task.py` script can also be used to create the vir
@@ -59,16 +70,6 @@ tual environment and run the tests:
 python legal_ai_system/scripts/setup_environment_task.py
 ```
 
-## Environment Variables
-
-Several services expect credentials or URLs to be defined in environment variables:
-
-- `OPENAI_API_KEY` or `XAI_API_KEY` – API key for your selected language model provider.
-- `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD` – connection settings for the Neo4j database.
-- `REDIS_URL_CACHE` – Redis connection string used for caching.
-- `LEGAL_AI_ENCRYPTION_PASSWORD_SECRET` – master password used by the `SecurityManager`.
-
-Additional optional variables are documented in `legal_ai_system/core/settings.py` if you need to override default paths or tuning parameters.
 
 ### Start Task
 
@@ -88,3 +89,4 @@ See the documents in the `docs/` folder for architecture details and advanced
 usage. The [Integration Guide](docs/integration_plan.md) summarises the
 five-phase integration plan, WebSocket patterns and deployment tips and
 includes sections on security, testing, success metrics and troubleshooting.
+For LangGraph specific routing examples see [advanced_langgraph.md](docs/advanced_langgraph.md).

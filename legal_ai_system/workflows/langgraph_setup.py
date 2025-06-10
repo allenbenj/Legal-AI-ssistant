@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable, List
 
 try:  # pragma: no cover - optional dependency
     from langgraph.graph import StateGraph, END
@@ -24,6 +24,12 @@ except Exception:  # ImportError or other issues if langgraph not installed
         def add_edge(self, *args: Any, **kwargs: Any) -> None:
             raise RuntimeError("LangGraph is required to build workflows")
 
+        def add_parallel_nodes(self, *args: Any, **kwargs: Any) -> None:
+            raise RuntimeError("LangGraph is required to build workflows")
+
+        def add_conditional_edges(self, *args: Any, **kwargs: Any) -> None:
+            raise RuntimeError("LangGraph is required to build workflows")
+
         def run(self, *args: Any, **kwargs: Any) -> Any:
             raise RuntimeError("LangGraph is required to build workflows")
 
@@ -34,18 +40,26 @@ if TYPE_CHECKING:  # pragma: no cover - hint for type checkers
     from langgraph.graph import END as _RealEND
 
 from ..agents.agent_nodes import AnalysisNode, SummaryNode
+from .nodes import HumanReviewNode, ProgressTrackingNode
 
 
-def build_graph(topic: str) -> StateGraph:
-    """Build a simple LangGraph pipeline for a given topic."""
+try:  # pragma: no cover - optional dependency at runtime
+    from ..utils.reviewable_memory import ReviewableMemory
+except Exception:  # pragma: no cover - during tests
+    ReviewableMemory = Any  # type: ignore
+
+
+
     graph = StateGraph()
 
     graph.add_node("analysis", AnalysisNode(topic))
-    graph.add_node("summary", SummaryNode())
 
-    graph.set_entry_point("analysis")
-    graph.add_edge("analysis", "summary")
-    graph.add_edge("summary", END)
+    graph.add_node("summary", SummaryNode())
+    graph.add_node("echo", lambda x: x)
+    graph.add_node("combine", lambda items: " ".join(items))
+    graph.add_node("final", lambda x: x)
+
+
 
     return graph
 
