@@ -36,6 +36,8 @@ The project defines several specialized agents under `legal_ai_system/agents`:
 - Generated tags are persisted to the vector store metadata with the originating document ID.
 - **KnowledgeBaseAgent** – resolves entities and structures data for the knowledge base.  See `knowledge_base_agent.py` lines 1‑8.
 - Persists resolved entities and relationships to the `KnowledgeGraphManager` using a circuit breaker for reliability.
+- **KnowledgeGraphReasoningAgent** – infers new relationships by traversing the knowledge graph.  See `knowledge_graph_reasoning_agent.py` lines 1‑8.
+- Provides multi-hop reasoning over entities and can answer cross-document legal queries.
 - **LegalAnalysisAgent** – performs IRAC analysis with contradiction detection.  See `legal_analysis_agent.py` lines 1‑9.
 - Runs deep reasoning and validates legal logic using LLM-based checks.
 - **NoteTakingAgent** – generates notes with legal context awareness.  See `note_taking_agent.py` lines 1‑5.
@@ -44,10 +46,6 @@ The project defines several specialized agents under `legal_ai_system/agents`:
 - Evaluates potential compliance or ethics issues for later review.
 - **LegalAuditAgent / EthicsReviewAgent / LEOConductAgent** – lightweight review agents for GUI violation review.  See `legal_agents.py` lines 1‑32.
 - Provide quick client-side checks within the GUI when deeper analysis is not required.
-
-## Core Data Types
-
-- **MultiModalDocument** – container for text, images, tables, audio transcripts and video frames. See `utils/multimodal_types.py` lines 65-75. Returned by `DocumentProcessorAgentV2` and shared across workflows.
 
 
 ## Services
@@ -84,15 +82,6 @@ LangGraph based workflows use `AnalysisNode` and `SummaryNode` (see `agents/agen
 
 ### Typed Workflow Engine
 
-The project includes a lightweight typed workflow engine located in
-`legal_ai_system.workflows`.  Agents implement the generic protocol
-`AgentCapability[InputModel, OutputModel]` from
-`legal_ai_system.core.agent_types`.  The `LegalWorkflowBuilder` class
-assembles agents while verifying that the output type of one agent
-matches the input type of the next.  Calling
-`LegalWorkflowBuilder.build()` produces an `AgentWorkflow` object from
-`legal_ai_system.workflows.agent_workflow` which can process batches or
-streams asynchronously.
 
 Overall, the ServiceContainer acts as the hub connecting agents and services, enabling workflows like `RealTimeAnalysisWorkflow` and integration via APIs or GUI components.
 
