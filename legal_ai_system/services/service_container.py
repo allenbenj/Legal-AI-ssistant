@@ -705,33 +705,15 @@ async def create_service_container(
         "vector_store", factory=create_enhanced_vector_store, service_config=vs_conf
     )
 
-    from ..core.optimized_vector_store import (
-        create_optimized_vector_store,
-    )  # Optimized one
-
-    ovs_conf = {  # Can have its own config or inherit
-        "STORAGE_PATH": str(
-            config_manager_service.get("data_dir") / "vector_store_optimized"
-        ),
-        "DOCUMENT_INDEX_PATH": embed_conf.get("document_index_path"),
-        "ENTITY_INDEX_PATH": embed_conf.get("entity_index_path"),
-        "DEFAULT_INDEX_TYPE": "HNSW",  # Often optimized means HNSW or specific FAISS params
-    }
-    await container.register_service(
-        "optimized_vector_store",
-        factory=create_optimized_vector_store,
-        service_config=ovs_conf,
-    )
-
     from .realtime_graph_manager import create_realtime_graph_manager
 
     kgm_service = await container.get_service("knowledge_graph_manager")
-    ovs_service = await container.get_service("optimized_vector_store")
+    vs_service = await container.get_service("vector_store")
     await container.register_service(
         "realtime_graph_manager",
         factory=create_realtime_graph_manager,
         kg_manager=kgm_service,
-        vector_store=ovs_service,
+        vector_store=vs_service,
     )
 
     # 5. Memory Layer
