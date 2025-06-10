@@ -88,7 +88,10 @@ else:
             class AuthenticationManager:
                 pass
 
-    from .realtime_analysis_workflow import RealTimeAnalysisWorkflow
+    try:
+        from .realtime_analysis_workflow import RealTimeAnalysisWorkflow
+    except Exception:  # pragma: no cover - optional during tests
+        RealTimeAnalysisWorkflow = None  # type: ignore
     from .workflow_config import WorkflowConfig
 
 
