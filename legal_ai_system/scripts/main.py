@@ -11,18 +11,19 @@
 
 import asyncio
 import json
+import logging
 import os
 import sys
 import uuid  # For generating IDs
-import logging
+from collections import defaultdict
 
 # import logging # Replaced by detailed_logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union, Set
-from collections import defaultdict
+from typing import Any, Dict, List, Optional, Set, Union
+
 from jose import jwt
 
 # third-party imports
@@ -42,6 +43,7 @@ except ImportError:  # pragma: no cover - optional server dependency
 try:
     from legal_ai_system.core.constants import Constants
 except Exception:  # pragma: no cover - fallback for testing/archive usage
+
     class Constants:
         """Fallback constants used when the full package is unavailable."""
 
@@ -64,7 +66,10 @@ try:
         status,
     )
     from fastapi.middleware.cors import CORSMiddleware
-    from fastapi.responses import HTMLResponse, JSONResponse  # Added HTMLResponse for root
+    from fastapi.responses import (  # Added HTMLResponse for root
+        HTMLResponse,
+        JSONResponse,
+    )
     from fastapi.security import (
         HTTPAuthorizationCredentials,
         HTTPBearer,
@@ -77,25 +82,16 @@ from pydantic import BaseModel
 from pydantic import Field as PydanticField  # Alias Field
 from strawberry.fastapi import GraphQLRouter  # type: ignore
 from strawberry.types import Info  # type: ignore
+
 from config.settings import settings
 
 # Attempt to import core services, with fallbacks for standalone running or partial setup
 try:
+    from legal_ai_system.config.settings import settings
     from legal_ai_system.core.detailed_logging import (
         LogCategory,
         get_detailed_logger,
     )
-    from legal_ai_system.services.security_manager import (
-        AccessLevel,
-        SecurityManager,
-        User as AuthUser,
-    )
-    from legal_ai_system.services.service_container import ServiceContainer
-    from legal_ai_system.services.realtime_analysis_workflow import (
-        RealTimeAnalysisResult,
-        RealTimeAnalysisWorkflow,
-    )
-    from legal_ai_system.config.settings import settings
 
     SERVICES_AVAILABLE = True
 except ImportError as e:
@@ -139,10 +135,10 @@ except ImportError as e:
             self.last_login = last_login
             self.is_active = is_active
 
-    RealTimeAnalysisWorkflow = None  # type: ignore
-    RealTimeAnalysisResult = None  # type: ignore
     class _SettingsFallback:
-        frontend_dist_path = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+        frontend_dist_path = (
+            Path(__file__).resolve().parent.parent / "frontend" / "dist"
+        )
 
     settings = _SettingsFallback()
 
@@ -185,6 +181,120 @@ def save_workflow_configs(configs: Dict[str, WorkflowConfig]) -> None:
             f,
             indent=2,
             default=str,
+        )
+
+# Workflow configuration storage
+WORKFLOW_CONFIG_FILE = Path(settings.data_dir) / "workflow_configs.json"
+workflow_configs: Dict[str, "WorkflowConfig"] = {}
+
+
+def load_workflow_configs() -> None:
+    """Load workflow presets from disk if available."""
+    if WORKFLOW_CONFIG_FILE.exists():
+        try:
+            data = json.load(open(WORKFLOW_CONFIG_FILE, "r"))
+            for item in data:
+                workflow_configs[item["id"]] = WorkflowConfig(**item)
+            main_api_logger.info(
+                "Loaded workflow configurations",
+                parameters={"count": len(workflow_configs)},
+            )
+        except Exception as e:  # pragma: no cover - startup resilience
+            main_api_logger.error(
+                "Failed to load workflow configurations.", exception=e
+            )
+
+
+def save_workflow_configs() -> None:
+    """Persist workflow presets to disk."""
+    try:
+        WORKFLOW_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(WORKFLOW_CONFIG_FILE, "w") as f:
+            json.dump(
+                [cfg.model_dump() for cfg in workflow_configs.values()],
+                f,
+                default=str,
+                indent=2,
+            )
+    except Exception as e:  # pragma: no cover - I/O failure shouldn't crash
+        main_api_logger.error(
+            "Failed to save workflow configurations.", exception=e
+        )
+
+# Workflow configuration storage
+WORKFLOW_CONFIG_FILE = Path(settings.data_dir) / "workflow_configs.json"
+workflow_configs: Dict[str, "WorkflowConfig"] = {}
+
+
+def load_workflow_configs() -> None:
+    """Load workflow presets from disk if available."""
+    if WORKFLOW_CONFIG_FILE.exists():
+        try:
+            data = json.load(open(WORKFLOW_CONFIG_FILE, "r"))
+            for item in data:
+                workflow_configs[item["id"]] = WorkflowConfig(**item)
+            main_api_logger.info(
+                "Loaded workflow configurations",
+                parameters={"count": len(workflow_configs)},
+            )
+        except Exception as e:  # pragma: no cover - startup resilience
+            main_api_logger.error(
+                "Failed to load workflow configurations.", exception=e
+            )
+
+
+def save_workflow_configs() -> None:
+    """Persist workflow presets to disk."""
+    try:
+        WORKFLOW_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(WORKFLOW_CONFIG_FILE, "w") as f:
+            json.dump(
+                [cfg.model_dump() for cfg in workflow_configs.values()],
+                f,
+                default=str,
+                indent=2,
+            )
+    except Exception as e:  # pragma: no cover - I/O failure shouldn't crash
+        main_api_logger.error(
+            "Failed to save workflow configurations.", exception=e
+        )
+
+# Workflow configuration storage
+WORKFLOW_CONFIG_FILE = Path(settings.data_dir) / "workflow_configs.json"
+workflow_configs: Dict[str, "WorkflowConfig"] = {}
+
+
+def load_workflow_configs() -> None:
+    """Load workflow presets from disk if available."""
+    if WORKFLOW_CONFIG_FILE.exists():
+        try:
+            data = json.load(open(WORKFLOW_CONFIG_FILE, "r"))
+            for item in data:
+                workflow_configs[item["id"]] = WorkflowConfig(**item)
+            main_api_logger.info(
+                "Loaded workflow configurations",
+                parameters={"count": len(workflow_configs)},
+            )
+        except Exception as e:  # pragma: no cover - startup resilience
+            main_api_logger.error(
+                "Failed to load workflow configurations.", exception=e
+            )
+
+
+def save_workflow_configs() -> None:
+    """Persist workflow presets to disk."""
+    try:
+        WORKFLOW_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(WORKFLOW_CONFIG_FILE, "w") as f:
+            json.dump(
+                [cfg.model_dump() for cfg in workflow_configs.values()],
+                f,
+                default=str,
+                indent=2,
+            )
+    except Exception as e:  # pragma: no cover - I/O failure shouldn't crash
+        main_api_logger.error(
+            "Failed to save workflow configurations.", exception=e
         )
 
 
@@ -264,18 +374,6 @@ async def lifespan(app: FastAPI):
             "⚠️ SecurityManager not available. Authentication/Authorization will be bypassed."
         )
 
-    websocket_manager_instance = WebSocketManager()
-    main_api_logger.info("✅ WebSocketManager initialized.")
-
-    # Load workflow configurations
-    global workflow_configs
-    workflow_configs = load_workflow_configs()
-    main_api_logger.info(
-        "Loaded workflow configurations.",
-        parameters={"count": len(workflow_configs)},
-    )
-
-    # Start background monitoring task (if any)
     # monitoring_task = asyncio.create_task(system_monitor_task())
 
     main_api_logger.info("✅ Legal AI System API started successfully via lifespan.")
@@ -297,9 +395,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Legal AI System API",
     description="Comprehensive API for Legal AI document processing and analysis",
-    version=(
-        getattr(getattr(Constants, "Version", None), "APP_VERSION", "2.0.1")
-    ),
+    version=(getattr(getattr(Constants, "Version", None), "APP_VERSION", "2.0.1")),
     lifespan=lifespan,
 )
 
@@ -314,6 +410,22 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Serve the built frontend if available. Deployment can override the
+# path via the FRONTEND_DIST_PATH environment variable.
+frontend_dist = Path(settings.frontend_dist_path)
+if frontend_dist.is_dir():
+    app.mount(
+        "/",
+        StaticFiles(directory=str(frontend_dist), html=True),
+        name="frontend",
+    )
+else:
+    main_api_logger.warning(
+        "Frontend dist path not found; serving minimal root page.",
+        extra={"path": str(frontend_dist)},
+    )
+
 
 # --- Security & Auth ---
 # Mocked for now as per original file, to be integrated with SecurityManager
@@ -377,6 +489,90 @@ class WorkflowConfig(ProcessingRequest):
     created_at: datetime = PydanticField(
         default_factory=lambda: datetime.now(tz=timezone.utc)
     )
+
+
+class WorkflowConfig(ProcessingRequest):
+    """Preset configuration for a document processing workflow."""
+
+    id: str = PydanticField(default_factory=lambda: uuid.uuid4().hex)
+    name: str
+    description: Optional[str] = None
+    created_at: datetime = PydanticField(
+        default_factory=lambda: datetime.now(tz=datetime.timezone.utc)
+    )
+    updated_at: datetime = PydanticField(
+        default_factory=lambda: datetime.now(tz=datetime.timezone.utc)
+    )
+
+
+class WorkflowConfigCreate(ProcessingRequest):
+    """Payload for creating a workflow preset."""
+
+    name: str
+    description: Optional[str] = None
+
+
+class WorkflowConfigUpdate(ProcessingRequest):
+    """Payload for updating a workflow preset."""
+
+    name: Optional[str] = None
+    description: Optional[str] = None
+
+
+class WorkflowConfig(ProcessingRequest):
+    """Preset configuration for a document processing workflow."""
+
+    id: str = PydanticField(default_factory=lambda: uuid.uuid4().hex)
+    name: str
+    description: Optional[str] = None
+    created_at: datetime = PydanticField(
+        default_factory=lambda: datetime.now(tz=datetime.timezone.utc)
+    )
+    updated_at: datetime = PydanticField(
+        default_factory=lambda: datetime.now(tz=datetime.timezone.utc)
+    )
+
+
+class WorkflowConfigCreate(ProcessingRequest):
+    """Payload for creating a workflow preset."""
+
+    name: str
+    description: Optional[str] = None
+
+
+class WorkflowConfigUpdate(ProcessingRequest):
+    """Payload for updating a workflow preset."""
+
+    name: Optional[str] = None
+    description: Optional[str] = None
+
+
+class WorkflowConfig(ProcessingRequest):
+    """Preset configuration for a document processing workflow."""
+
+    id: str = PydanticField(default_factory=lambda: uuid.uuid4().hex)
+    name: str
+    description: Optional[str] = None
+    created_at: datetime = PydanticField(
+        default_factory=lambda: datetime.now(tz=datetime.timezone.utc)
+    )
+    updated_at: datetime = PydanticField(
+        default_factory=lambda: datetime.now(tz=datetime.timezone.utc)
+    )
+
+
+class WorkflowConfigCreate(ProcessingRequest):
+    """Payload for creating a workflow preset."""
+
+    name: str
+    description: Optional[str] = None
+
+
+class WorkflowConfigUpdate(ProcessingRequest):
+    """Payload for updating a workflow preset."""
+
+    name: Optional[str] = None
+    description: Optional[str] = None
 
 
 class DocumentStatusResponse(BaseModel):  # Renamed for clarity
@@ -735,23 +931,25 @@ app.include_router(graphql_app_router, prefix="/graphql")
 
 
 # --- REST API Endpoints ---
-@app.get("/", response_class=HTMLResponse, include_in_schema=False)
-async def api_root():
-    # Simple landing page with links to docs
-    return """
-    <html>
-        <head><title>Legal AI System API</title></head>
-        <body>
-            <h1>Welcome to the Legal AI System API</h1>
-            <p>This is the central backend for all Legal AI operations.</p>
-            <ul>
-                <li><a href="/docs">API Documentation (Swagger UI)</a></li>
-                <li><a href="/redoc">Alternative API Documentation (ReDoc)</a></li>
-                <li><a href="/graphql">GraphQL Endpoint (GraphiQL)</a></li>
-            </ul>
-        </body>
-    </html>
-    """
+if not Path(settings.frontend_dist_path).is_dir():
+
+    @app.get("/", response_class=HTMLResponse, include_in_schema=False)
+    async def api_root():
+        """Fallback landing page shown when frontend assets are missing."""
+        return """
+        <html>
+            <head><title>Legal AI System API</title></head>
+            <body>
+                <h1>Welcome to the Legal AI System API</h1>
+                <p>This is the central backend for all Legal AI operations.</p>
+                <ul>
+                    <li><a href="/docs">API Documentation (Swagger UI)</a></li>
+                    <li><a href="/redoc">Alternative API Documentation (ReDoc)</a></li>
+                    <li><a href="/graphql">GraphQL Endpoint (GraphiQL)</a></li>
+                </ul>
+            </body>
+        </html>
+        """
 
 
 @app.post("/api/v1/auth/token", response_model=TokenResponse)
@@ -969,24 +1167,19 @@ async def process_document_rest(  # Renamed
             possible_files[0]
         )  # Take the first match for simplicity
 
-    if not RealTimeAnalysisWorkflow or not service_container_instance:
-        main_api_logger.error(
-            "Processing cannot start: RealTimeAnalysisWorkflow or ServiceContainer not available."
-        )
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Processing service is not configured.",
-        )
-
     # user_id_for_task = current_user.user_id
     user_id_for_task = "mock_user_for_processing"  # Placeholder if auth is off
 
+    if service_container_instance:
+        service_container_instance.update_workflow_config(
+            processing_request.model_dump()
+        )
     background_tasks.add_task(
-        process_document_background_task,  # Renamed
-        document_id,  # Pass the conceptual document_id
-        document_file_path_str,  # Pass the actual file path for processing
+        process_document_background_task,
+        document_id,
+        document_file_path_str,
         processing_request,
-        user_id_for_task,  # Pass user ID for auditing/context
+        user_id_for_task,
     )
 
     main_api_logger.info(
@@ -1037,6 +1230,141 @@ async def get_document_status_rest(  # Renamed
     return DocumentStatusResponse(
         document_id=document_id, status="pending_or_unknown", progress=0.0
     )
+
+
+# ----- Workflow Config Endpoints -----
+
+@app.get("/api/v1/workflows", response_model=List[WorkflowConfig])
+async def list_workflow_configs():
+    """List all saved workflow presets."""
+    return list(workflow_configs.values())
+
+
+@app.post(
+    "/api/v1/workflows",
+    response_model=WorkflowConfig,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_workflow_config(config: WorkflowConfigCreate):
+    new_cfg = WorkflowConfig(**config.model_dump())
+    workflow_configs[new_cfg.id] = new_cfg
+    save_workflow_configs()
+    return new_cfg
+
+
+@app.put("/api/v1/workflows/{config_id}", response_model=WorkflowConfig)
+async def update_workflow_config(config_id: str, update: WorkflowConfigUpdate):
+    existing = workflow_configs.get(config_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Workflow config not found")
+    update_data = update.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(existing, key, value)
+    existing.updated_at = datetime.now(tz=datetime.timezone.utc)
+    workflow_configs[config_id] = existing
+    save_workflow_configs()
+    return existing
+
+
+@app.delete(
+    "/api/v1/workflows/{config_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+async def delete_workflow_config(config_id: str):
+    if config_id in workflow_configs:
+        del workflow_configs[config_id]
+        save_workflow_configs()
+        return JSONResponse(status_code=status.HTTP_204_NO_CONTENT)
+    raise HTTPException(status_code=404, detail="Workflow config not found")
+
+
+# ----- Workflow Config Endpoints -----
+
+@app.get("/api/v1/workflows", response_model=List[WorkflowConfig])
+async def list_workflow_configs():
+    """List all saved workflow presets."""
+    return list(workflow_configs.values())
+
+
+@app.post(
+    "/api/v1/workflows",
+    response_model=WorkflowConfig,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_workflow_config(config: WorkflowConfigCreate):
+    new_cfg = WorkflowConfig(**config.model_dump())
+    workflow_configs[new_cfg.id] = new_cfg
+    save_workflow_configs()
+    return new_cfg
+
+
+@app.put("/api/v1/workflows/{config_id}", response_model=WorkflowConfig)
+async def update_workflow_config(config_id: str, update: WorkflowConfigUpdate):
+    existing = workflow_configs.get(config_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Workflow config not found")
+    update_data = update.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(existing, key, value)
+    existing.updated_at = datetime.now(tz=datetime.timezone.utc)
+    workflow_configs[config_id] = existing
+    save_workflow_configs()
+    return existing
+
+
+@app.delete(
+    "/api/v1/workflows/{config_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+async def delete_workflow_config(config_id: str):
+    if config_id in workflow_configs:
+        del workflow_configs[config_id]
+        save_workflow_configs()
+        return JSONResponse(status_code=status.HTTP_204_NO_CONTENT)
+    raise HTTPException(status_code=404, detail="Workflow config not found")
+
+
+# ----- Workflow Config Endpoints -----
+
+@app.get("/api/v1/workflows", response_model=List[WorkflowConfig])
+async def list_workflow_configs():
+    """List all saved workflow presets."""
+    return list(workflow_configs.values())
+
+
+@app.post(
+    "/api/v1/workflows",
+    response_model=WorkflowConfig,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_workflow_config(config: WorkflowConfigCreate):
+    new_cfg = WorkflowConfig(**config.model_dump())
+    workflow_configs[new_cfg.id] = new_cfg
+    save_workflow_configs()
+    return new_cfg
+
+
+@app.put("/api/v1/workflows/{config_id}", response_model=WorkflowConfig)
+async def update_workflow_config(config_id: str, update: WorkflowConfigUpdate):
+    existing = workflow_configs.get(config_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Workflow config not found")
+    update_data = update.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(existing, key, value)
+    existing.updated_at = datetime.now(tz=datetime.timezone.utc)
+    workflow_configs[config_id] = existing
+    save_workflow_configs()
+    return existing
+
+
+@app.delete(
+    "/api/v1/workflows/{config_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+async def delete_workflow_config(config_id: str):
+    if config_id in workflow_configs:
+        del workflow_configs[config_id]
+        save_workflow_configs()
+        return JSONResponse(status_code=status.HTTP_204_NO_CONTENT)
+    raise HTTPException(status_code=404, detail="Workflow config not found")
 
 
 @app.get("/api/v1/system/health", response_model=SystemHealthResponse)
@@ -1273,38 +1601,6 @@ async def process_document_background_task(  # Renamed
         "stage": "Initializing",
     }
 
-    if not service_container_instance or not RealTimeAnalysisWorkflow:
-        main_api_logger.critical(
-            "Cannot process document: ServiceContainer or RealTimeAnalysisWorkflow not available."
-        )
-        global_processing_states[document_id].update(
-            {"status": "failed", "error": "System not configured for processing."}
-        )
-        if websocket_manager_instance:
-            await websocket_manager_instance.broadcast_to_topic(
-                {
-                    "type": "processing_error",
-                    "document_id": document_id,
-                    "error": "System not configured.",
-                },
-                f"document_updates_{document_id}",
-            )  # User-specific topic or general
-        return
-
-    try:
-        workflow_config = (
-            processing_request_model.model_dump()
-        )  # Convert Pydantic model to dict
-        workflow_config["user_id"] = requesting_user_id  # Add user context
-
-        # Instantiate workflow from service container or directly
-        # workflow = service_container_instance.get_service("realtime_analysis_workflow")
-        # For now, direct instantiation:
-        workflow = RealTimeAnalysisWorkflow(
-            service_container_instance, **workflow_config
-        )
-        await workflow.initialize()  # If workflow has async init
-
         # Define progress callback for WebSocket
         async def ws_progress_callback(
             stage: str,
@@ -1336,14 +1632,6 @@ async def process_document_background_task(  # Renamed
         )  # Assuming workflow supports this
 
         # Execute the workflow
-        analysis_result: RealTimeAnalysisResult = (
-            await workflow.process_document_realtime(
-                document_path=document_file_path,  # Use the actual file path
-                document_id_override=document_id,  # Pass the conceptual ID
-                # other options from processing_request_model can be passed if workflow accepts them
-            )
-        )
-
         global_processing_states[document_id].update(
             {
                 "status": "completed",

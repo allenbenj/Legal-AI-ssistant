@@ -6,12 +6,16 @@ document processing, hybrid extraction, knowledge graph building, and
 agent memory integration with user feedback loops.
 """
 
+from __future__ import annotations
+
 import asyncio
 import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
+
+from .workflow_config import WorkflowConfig
 
 from ..agents.document_processor_agent import DocumentProcessorAgent
 from ..agents.document_rewriter_agent import DocumentRewriterAgent
@@ -24,6 +28,8 @@ from ..utils.reviewable_memory import (
     ReviewStatus,
 )
 from .realtime_graph_manager import RealTimeGraphManager
+from ..config.workflow_config import WorkflowConfig
+from ..config.agent_unified_config import AGENT_CLASS_MAP
 
 
 @dataclass
@@ -69,6 +75,19 @@ class RealTimeAnalysisResult:
         }
 
 
+@dataclass
+class WorkflowConfig:
+    """Configuration options for :class:`RealTimeAnalysisWorkflow`."""
+
+    enable_real_time_sync: bool = True
+    confidence_threshold: float = 0.75
+    enable_user_feedback: bool = True
+    parallel_processing: bool = True
+    max_concurrent_documents: int = 3
+    performance_monitoring: bool = True
+    auto_optimization_threshold: int = 100
+
+
 class RealTimeAnalysisWorkflow:
     """
     Master workflow for real-time legal document analysis.
@@ -82,32 +101,9 @@ class RealTimeAnalysisWorkflow:
     - Performance monitoring and optimization
     """
 
-    def __init__(self, services, **config):
-        self.services = services
-        self.config = config
+
         self.logger = services.logger
 
-        # Workflow configuration
-        self.enable_real_time_sync = config.get("enable_real_time_sync", True)
-        self.confidence_threshold = config.get("confidence_threshold", 0.75)
-        self.enable_user_feedback = config.get("enable_user_feedback", True)
-        self.parallel_processing = config.get("parallel_processing", True)
-
-        # Performance configuration
-        self.max_concurrent_documents = config.get("max_concurrent_documents", 3)
-        self.performance_monitoring = config.get("performance_monitoring", True)
-        self.auto_optimization_threshold = config.get(
-            "auto_optimization_threshold", 100
-        )
-
-        # Initialize components
-        self.document_processor = DocumentProcessorAgent(services, **config)
-        self.document_rewriter = DocumentRewriterAgent(services, **config)
-        self.ontology_extractor = OntologyExtractionAgent(services, **config)
-        self.hybrid_extractor = HybridLegalExtractor(services, **config)
-        self.graph_manager = RealTimeGraphManager(services, **config)
-        self.vector_store = OptimizedVectorStore(services, **config)
-        self.reviewable_memory = ReviewableMemory(services, **config)
 
         # Performance tracking
         self.documents_processed = 0
@@ -125,6 +121,7 @@ class RealTimeAnalysisWorkflow:
         # Synchronization
         self.processing_lock = asyncio.Semaphore(self.max_concurrent_documents)
         self.optimization_lock = asyncio.Lock()
+
 
     async def initialize(self):
         """Initialize the real-time analysis workflow."""
@@ -357,13 +354,13 @@ class RealTimeAnalysisWorkflow:
 
             # Add document-level vector
             await self.vector_store.add_vector_async(
-                content=document_text[:1000],  # Limit size
-                entity_type="DOCUMENT",
-                entity_id=document_id,
-                confidence=0.9,
-                metadata={
-                    "document_path": hybrid_result.document_id,
-                    "extraction_timestamp": datetime.now().isoformat(),
+                content_to_embed=document_text[:1000],  # Limit size
+                document_id_ref=document_id,
+                index_target="document",
+                confidence_score=0.9,
+                source_file=hybrid_result.document_id,
+                custom_metadata={
+                    "extraction_timestamp": datetime.now().isoformat()
                 },
             )
             vector_updates["vectors_added"] += 1
@@ -372,12 +369,13 @@ class RealTimeAnalysisWorkflow:
             for entity in hybrid_result.validated_entities:
                 if entity.confidence >= self.confidence_threshold:
                     await self.vector_store.add_vector_async(
-                        content=entity.entity_text,
-                        entity_type=entity.consensus_type,
-                        entity_id=f"{entity.consensus_type}_{hash(entity.entity_text) % 10000}",
-                        confidence=entity.confidence,
-                        metadata={
-                            "source_document": document_id,
+                        content_to_embed=entity.entity_text,
+                        document_id_ref=document_id,
+                        index_target="entity",
+                        vector_id_override=f"{entity.consensus_type}_{hash(entity.entity_text) % 10000}",
+                        confidence_score=entity.confidence,
+                        source_file=document_id,
+                        custom_metadata={
                             "extraction_method": "hybrid",
                             "discrepancy": entity.discrepancy,
                         },
@@ -389,12 +387,13 @@ class RealTimeAnalysisWorkflow:
                 for result in results:
                     if result.get("confidence", 0) >= self.confidence_threshold:
                         await self.vector_store.add_vector_async(
-                            content=result.get("description", ""),
-                            entity_type=extraction_type.upper(),
-                            entity_id=f"{extraction_type}_{hash(str(result)) % 10000}",
-                            confidence=result.get("confidence", 0.8),
-                            metadata={
-                                "source_document": document_id,
+                            content_to_embed=result.get("description", ""),
+                            document_id_ref=document_id,
+                            index_target="entity",
+                            vector_id_override=f"{extraction_type}_{hash(str(result)) % 10000}",
+                            confidence_score=result.get("confidence", 0.8),
+                            source_file=document_id,
+                            custom_metadata={
                                 "targeted_extraction": True,
                                 "extraction_type": extraction_type,
                             },

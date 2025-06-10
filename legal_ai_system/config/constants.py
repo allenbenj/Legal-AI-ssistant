@@ -1,42 +1,27 @@
-"""Public re-export of core constants without wildcard imports.
+"""Compatibility wrapper exposing constants from :mod:`config.constants`.
 
-Historically this module relied on ``from ..core.constants import *`` which
-caused linter warnings about unused imports.  To keep the public API stable and
-avoid those warnings, we import the core constants module under an alias and
-explicitly assign the attributes we wish to expose.
+This module previously duplicated the definitions found in
+``config.constants``.  To prevent code drift and simplify the import graph,
+it now re-exports those symbols directly from the unified public module.
+Existing import paths continue to work while new code should import from
+``config.constants`` instead.
 """
 
-from __future__ import annotations
-
-from ..core import constants as _core_constants
+from config import constants as _base
 
 # Re-export selected classes and helpers for backwards compatibility
-Constants = _core_constants.Constants
-TimeConstants = _core_constants.TimeConstants
-SizeConstants = _core_constants.SizeConstants
-SecurityConstants = _core_constants.SecurityConstants
-PerformanceConstants = _core_constants.PerformanceConstants
-DocumentConstants = _core_constants.DocumentConstants
-LegalConstants = _core_constants.LegalConstants
-NetworkConstants = _core_constants.NetworkConstants
-EnvironmentConstants = _core_constants.EnvironmentConstants
-validate_positive_integer = _core_constants.validate_positive_integer
-validate_float_range = _core_constants.validate_float_range
-validate_timeout_seconds = _core_constants.validate_timeout_seconds
-validate_cache_size = _core_constants.validate_cache_size
+Constants = _base.Constants
+TimeConstants = _base.TimeConstants
+SizeConstants = _base.SizeConstants
+SecurityConstants = _base.SecurityConstants
+PerformanceConstants = _base.PerformanceConstants
+DocumentConstants = _base.DocumentConstants
+LegalConstants = _base.LegalConstants
+NetworkConstants = _base.NetworkConstants
+EnvironmentConstants = _base.EnvironmentConstants
+validate_positive_integer = _base.validate_positive_integer
+validate_float_range = _base.validate_float_range
+validate_timeout_seconds = _base.validate_timeout_seconds
+validate_cache_size = _base.validate_cache_size
 
-__all__ = [
-    "Constants",
-    "TimeConstants",
-    "SizeConstants",
-    "SecurityConstants",
-    "PerformanceConstants",
-    "DocumentConstants",
-    "LegalConstants",
-    "NetworkConstants",
-    "EnvironmentConstants",
-    "validate_positive_integer",
-    "validate_float_range",
-    "validate_timeout_seconds",
-    "validate_cache_size",
-]
+__all__ = _base.__all__

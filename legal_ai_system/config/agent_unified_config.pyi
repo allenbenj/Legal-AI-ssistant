@@ -6,6 +6,9 @@ from ..core.agent_unified_config import (
     setup_agents_example,
     validate_agent_setup,
 )
+from typing import Dict, Type, Any
+
+AGENT_CLASS_MAP: Dict[str, Type[Any]]
 
 __all__ = [
     "AgentConfigHelper",
@@ -14,4 +17,5 @@ __all__ = [
     "get_agent_configuration_status",
     "setup_agents_example",
     "validate_agent_setup",
+    "AGENT_CLASS_MAP",
 ]

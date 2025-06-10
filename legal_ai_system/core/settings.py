@@ -72,6 +72,10 @@ except ImportError:
             / "storage/vectors/faiss_index.bin",
             "faiss_metadata_path": Path(__file__).resolve().parent.parent
             / "storage/vectors/faiss_metadata.json",
+            "document_index_path": Path(__file__).resolve().parent.parent
+            / "storage/vectors/document_index.faiss",
+            "entity_index_path": Path(__file__).resolve().parent.parent
+            / "storage/vectors/entity_index.faiss",
             "lance_db_path": Path(__file__).resolve().parent.parent
             / "storage/vectors/lancedb",
             "lance_table_name": "documents",
@@ -187,6 +191,10 @@ class LegalAISettings(BaseSettings):
             self.faiss_index_path = self.data_dir / "vectors" / "faiss_index.bin"
         if self.faiss_metadata_path is None:
             self.faiss_metadata_path = self.data_dir / "vectors" / "faiss_metadata.json"
+        if self.document_index_path is None:
+            self.document_index_path = self.data_dir / "vectors" / "document_index.faiss"
+        if self.entity_index_path is None:
+            self.entity_index_path = self.data_dir / "vectors" / "entity_index.faiss"
         if self.lance_db_path is None:
             self.lance_db_path = self.data_dir / "vectors" / "lancedb"
         if self.sqlite_path is None:
@@ -240,6 +248,8 @@ class LegalAISettings(BaseSettings):
         # Update specific paths that depend on data_dir
         self.faiss_index_path = self.data_dir / "vectors/faiss_index.bin"
         self.faiss_metadata_path = self.data_dir / "vectors/faiss_metadata.json"
+        self.document_index_path = self.data_dir / "vectors/document_index.faiss"
+        self.entity_index_path = self.data_dir / "vectors/entity_index.faiss"
         self.lance_db_path = self.data_dir / "vectors/lancedb"
         self.sqlite_path = self.data_dir / "databases/legal_ai.db"
         self.memory_db_path = self.data_dir / "databases/memory.db"
@@ -285,6 +295,8 @@ class LegalAISettings(BaseSettings):
     # FAISS Settings - Path will be updated in __init__
     faiss_index_path: Optional[Path] = Field(default=None, env="FAISS_INDEX_PATH")
     faiss_metadata_path: Optional[Path] = Field(default=None, env="FAISS_METADATA_PATH")
+    document_index_path: Optional[Path] = Field(default=None, env="DOCUMENT_INDEX_PATH")
+    entity_index_path: Optional[Path] = Field(default=None, env="ENTITY_INDEX_PATH")
 
     # LanceDB Settings - Path will be updated in __init__
     lance_db_path: Optional[Path] = Field(default=None, env="LANCE_DB_PATH")
