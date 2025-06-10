@@ -69,6 +69,19 @@ class RealTimeAnalysisResult:
         }
 
 
+@dataclass
+class WorkflowConfig:
+    """Configuration options for :class:`RealTimeAnalysisWorkflow`."""
+
+    enable_real_time_sync: bool = True
+    confidence_threshold: float = 0.75
+    enable_user_feedback: bool = True
+    parallel_processing: bool = True
+    max_concurrent_documents: int = 3
+    performance_monitoring: bool = True
+    auto_optimization_threshold: int = 100
+
+
 class RealTimeAnalysisWorkflow:
     """
     Master workflow for real-time legal document analysis.
@@ -125,6 +138,32 @@ class RealTimeAnalysisWorkflow:
         # Synchronization
         self.processing_lock = asyncio.Semaphore(self.max_concurrent_documents)
         self.optimization_lock = asyncio.Lock()
+
+    def update_config(self, **new_config: Any) -> None:
+        """Update workflow configuration in-place."""
+        self.config.update(new_config)
+        self.enable_real_time_sync = self.config.get(
+            "enable_real_time_sync", self.enable_real_time_sync
+        )
+        self.confidence_threshold = self.config.get(
+            "confidence_threshold", self.confidence_threshold
+        )
+        self.enable_user_feedback = self.config.get(
+            "enable_user_feedback", self.enable_user_feedback
+        )
+        self.parallel_processing = self.config.get(
+            "parallel_processing", self.parallel_processing
+        )
+        self.max_concurrent_documents = self.config.get(
+            "max_concurrent_documents", self.max_concurrent_documents
+        )
+        self.performance_monitoring = self.config.get(
+            "performance_monitoring", self.performance_monitoring
+        )
+        self.auto_optimization_threshold = self.config.get(
+            "auto_optimization_threshold", self.auto_optimization_threshold
+        )
+        self.processing_lock = asyncio.Semaphore(self.max_concurrent_documents)
 
     async def initialize(self):
         """Initialize the real-time analysis workflow."""

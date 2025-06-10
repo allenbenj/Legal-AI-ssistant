@@ -8,6 +8,7 @@ core services and agents within the Legal AI System.
 
 import asyncio
 from typing import Dict, Any, Optional, Callable, Awaitable, List, TYPE_CHECKING
+from dataclasses import asdict
 from enum import Enum
 from datetime import datetime, timezone
 import os
@@ -88,6 +89,11 @@ else:
             class AuthenticationManager:
                 pass
 
+    from .realtime_analysis_workflow import (
+        RealTimeAnalysisWorkflow,
+        WorkflowConfig,
+    )
+
 
 # Initialize logger for this module
 service_container_logger: DetailedLogger = get_detailed_logger(
@@ -125,6 +131,7 @@ class ServiceContainer:
         self._lock = (
             asyncio.Lock()
         )  # For thread-safe registration and retrieval if needed (though primarily async)
+        self._active_workflow_config: WorkflowConfig = WorkflowConfig()
         service_container_logger.info("ServiceContainer instance created.")
 
     @detailed_log_function(LogCategory.SYSTEM)
@@ -441,6 +448,19 @@ class ServiceContainer:
             "Background task added to ServiceContainer.",
             parameters={"task_name": getattr(coro, "__name__", "unnamed_coro")},
         )
+
+    def get_active_workflow_config(self) -> WorkflowConfig:
+        """Return the currently active workflow configuration."""
+        return self._active_workflow_config
+
+    def update_workflow_config(self, new_config: Dict[str, Any]) -> None:
+        """Update the workflow configuration and propagate to the workflow instance."""
+        for key, value in new_config.items():
+            setattr(self._active_workflow_config, key, value)
+        if "realtime_analysis_workflow" in self._services:
+            workflow = self._services["realtime_analysis_workflow"]
+            if hasattr(workflow, "update_config"):
+                workflow.update_config(**new_config)
 
 
 # Global factory function to create and populate the service container
@@ -807,6 +827,17 @@ async def create_service_container(
                 factory=lambda sc, cfg=agent_config, cls=agent_cls: cls(sc, **cfg),
                 is_async_factory=False,
             )
+
+    # Register workflow with active configuration
+    workflow_conf_dict = config_manager_service.get("workflow_config", {})
+    container.update_workflow_config(workflow_conf_dict)
+    await container.register_service(
+        "realtime_analysis_workflow",
+        factory=lambda sc: RealTimeAnalysisWorkflow(
+            sc, **asdict(sc.get_active_workflow_config())
+        ),
+        is_async_factory=False,
+    )
 
     # Initialize all services that were registered with factories or need explicit init
     await container.initialize_all_services()
