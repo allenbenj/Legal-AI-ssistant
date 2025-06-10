@@ -8,7 +8,6 @@ core services and agents within the Legal AI System.
 
 import asyncio
 from typing import Dict, Any, Optional, Callable, Awaitable, List, TYPE_CHECKING
-
 from enum import Enum
 from datetime import datetime, timezone
 import os
@@ -848,7 +847,6 @@ async def create_service_container(
         ),
         is_async_factory=False,
     )
-
 
     # Register LangGraph nodes and builder for the orchestrator
     from ..agents.agent_nodes import AnalysisNode, SummaryNode

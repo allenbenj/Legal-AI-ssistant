@@ -928,9 +928,7 @@ async def process_document_rest(  # Renamed
     # user_id_for_task = current_user.user_id
     user_id_for_task = "mock_user_for_processing"  # Placeholder if auth is off
 
-    if service_container:
-        await service_container.update_workflow_config(
-            processing_request.model_dump()
+    processing_request.model_dump()
         )
     background_tasks.add_task(
         process_document_background_task,
