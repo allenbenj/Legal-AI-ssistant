@@ -133,5 +133,4 @@ def create_optimized_vector_store(
         ),
         default_index_type=IndexType(cfg.get("DEFAULT_INDEX_TYPE", "HNSW")),
         enable_gpu_faiss=cfg.get("ENABLE_GPU_FAISS", False),
-        service_config=cfg,
-    )
+

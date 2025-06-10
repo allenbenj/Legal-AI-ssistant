@@ -108,13 +108,11 @@ def check_gui_dependencies() -> bool:  # Renamed
 
 def run_streamlit_app_content():
     """Defines the actual content and logic of the Streamlit application."""
-    try:
-        import streamlit as st
-    except ImportError:
-        streamlit_logger.critical(
-            "Streamlit library not found. Cannot run GUI content.")
-        print("FATAL: Streamlit library is required to run this GUI. Please install it (`pip install streamlit`) and retry.")
-        return
+
+    # `check_gui_dependencies` ensures `streamlit` is installed before this
+    # function is executed. Therefore we can rely on the module level import of
+    # `streamlit as st` and avoid a second import here. This also keeps linters
+    # happy since the variable `st` is defined at the module level.
 
     st.title("🏛️ Legal AI System Dashboard")
     st.caption("Professional Edition - Document Analysis & Knowledge Management")

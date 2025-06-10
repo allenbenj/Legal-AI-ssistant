@@ -595,9 +595,7 @@ def integrate_xai_with_existing_gui():
         st.session_state.xai_tab_added = True
 
     # XAI-enhanced document processor
-    if st.sidebar.checkbox(
-        "🤖 Use XAI/Grok Models", help="Enable direct XAI integration"
-    ):
+    if st.sidebar.checkbox("🤖 Use XAI/Grok Models", help="Enable direct XAI integration"):
         st.session_state.use_xai = True
         XAIIntegratedGUI.render_xai_document_processor()
     else:
