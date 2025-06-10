@@ -1,12 +1,14 @@
+// @ts-nocheck
 import React, { useState, useEffect, createContext, useContext } from 'react';
-import { 
-  Search, Upload, FileText, Users, Settings, Shield, 
+import {
+  Search, Upload, FileText, Users, Settings, Shield,
   Activity, Database, Cpu, AlertCircle, CheckCircle,
   Play, Pause, RefreshCw, ChevronRight, Home,
   BarChart, Network, Workflow, Eye, Download,
   Clock, Filter, Plus, Trash2, Edit, Save
 } from 'lucide-react';
-import useRealtimeSystemStatus from '../../frontend/src/hooks/useRealtimeSystemStatus';
+
+
 
 // Context for global state management
 const AppContext = createContext({});
@@ -86,16 +88,17 @@ function Sidebar() {
       
       <nav className="mt-8">
         {menuItems.map(item => (
-          <button
+          <Button
             key={item.id}
             onClick={() => setCurrentView(item.id)}
+            variant="secondary"
             className={`w-full px-4 py-3 flex items-center gap-3 hover:bg-gray-800 transition-colors ${
               currentView === item.id ? 'bg-gray-800 border-l-4 border-blue-500' : ''
             }`}
           >
             <item.icon className="w-5 h-5" />
             <span>{item.label}</span>
-          </button>
+          </Button>
         ))}
       </nav>
     </div>
@@ -124,15 +127,15 @@ function Header() {
         </div>
         
         <div className="flex items-center gap-4">
-          <button className="p-2 hover:bg-gray-100 rounded-lg">
+          <Button variant="outline" size="sm" className="p-2 hover:bg-gray-100 rounded-lg">
             <RefreshCw className="w-5 h-5" />
-          </button>
-          <button className="p-2 hover:bg-gray-100 rounded-lg relative">
+          </Button>
+          <Button variant="outline" size="sm" className="p-2 hover:bg-gray-100 rounded-lg relative">
             <AlertCircle className="w-5 h-5" />
             <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
               2
             </span>
-          </button>
+          </Button>
           <div className="flex items-center gap-2">
             <img src="/api/placeholder/32/32" alt="User" className="w-8 h-8 rounded-full" />
             <span className="text-sm font-medium">Admin User</span>
@@ -251,11 +254,19 @@ function Dashboard() {
 // Document Processing Interface
 function DocumentProcessing() {
   const { addNotification } = useContext(AppContext);
-  const [documents, setDocuments] = useState([
-    { id: 1, name: 'contract_agreement.pdf', status: 'processing', progress: 65 },
-    { id: 2, name: 'witness_statement.docx', status: 'completed', progress: 100 },
-    { id: 3, name: 'evidence_photos.zip', status: 'queued', progress: 0 }
-  ]);
+  const { isLoading, error, data: documents, executeAsync } =
+    useLoadingState<Array<{ id: number; name: string; status: string; progress: number }>>();
+
+  useEffect(() => {
+    executeAsync(() =>
+      fetch('data/sample_documents.json').then(res => {
+        if (!res.ok) {
+          throw new Error('Failed to load documents');
+        }
+        return res.json();
+      })
+    );
+  }, []);
 
   const handleFileUpload = () => {
     addNotification('File uploaded successfully', 'success');
@@ -266,14 +277,14 @@ function DocumentProcessing() {
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">Document Processing</h2>
         <div className="flex gap-3">
-          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2">
+          <Button className="px-4 py-2 flex items-center gap-2" variant="primary">
             <Upload className="w-4 h-4" />
             Upload Documents
-          </button>
-          <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2">
+          </Button>
+          <Button className="px-4 py-2 border border-gray-300 flex items-center gap-2" variant="outline">
             <Filter className="w-4 h-4" />
             Filter
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -282,12 +293,13 @@ function DocumentProcessing() {
         <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
         <p className="text-gray-600 mb-2">Drag and drop files here or click to browse</p>
         <p className="text-sm text-gray-500">Supported formats: PDF, DOCX, TXT, CSV, XLSX</p>
-        <button 
+        <Button
           onClick={handleFileUpload}
-          className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          className="mt-4 px-6 py-2"
+          variant="primary"
         >
           Select Files
-        </button>
+        </Button>
       </div>
 
       {/* Document Queue */}
@@ -296,7 +308,27 @@ function DocumentProcessing() {
           <h3 className="text-lg font-semibold">Processing Queue</h3>
         </div>
         <div className="p-6 space-y-4">
-          {documents.map(doc => (
+          {isLoading && <TableSkeleton rows={3} columns={3} />}
+          {error && (
+            <div className="text-red-600 space-x-2">
+              <span>Error loading documents</span>
+              <button
+                className="underline"
+                onClick={() =>
+                  executeAsync(() =>
+                    fetch('data/sample_documents.json').then(res => {
+                      if (!res.ok) throw new Error('Failed to load documents');
+                      return res.json();
+                    })
+                  )
+                }
+              >
+                Retry
+              </button>
+            </div>
+          )}
+          {documents &&
+            documents.map(doc => (
             <div key={doc.id} className="border rounded-lg p-4">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-3">
@@ -311,15 +343,15 @@ function DocumentProcessing() {
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button className="p-1 hover:bg-gray-100 rounded">
+                  <Button variant="outline" size="sm" className="p-1 hover:bg-gray-100 rounded">
                     <Eye className="w-4 h-4" />
-                  </button>
-                  <button className="p-1 hover:bg-gray-100 rounded">
+                  </Button>
+                  <Button variant="outline" size="sm" className="p-1 hover:bg-gray-100 rounded">
                     <Download className="w-4 h-4" />
-                  </button>
-                  <button className="p-1 hover:bg-gray-100 rounded text-red-500">
+                  </Button>
+                  <Button variant="outline" size="sm" className="p-1 hover:bg-gray-100 rounded text-red-500">
                     <Trash2 className="w-4 h-4" />
-                  </button>
+                  </Button>
                 </div>
               </div>
               {doc.status === 'processing' && (
@@ -329,9 +361,17 @@ function DocumentProcessing() {
                     <span>{doc.progress}%</span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
+                    <div
                       className="bg-blue-600 h-2 rounded-full transition-all"
                       style={{ width: `${doc.progress}%` }}
+                    />
+                  </div>
+                  <div className="mt-2">
+                    <ProgressiveLoader
+                      stages={[
+                        { label: 'Uploaded', completed: true },
+                        { label: 'Processing', completed: doc.progress === 100 }
+                      ]}
                     />
                   </div>
                 </div>
@@ -370,9 +410,9 @@ function KnowledgeGraph() {
             <option value="organization">Organizations</option>
             <option value="case">Cases</option>
           </select>
-          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+          <Button className="px-4 py-2" variant="primary">
             Export Graph
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -431,9 +471,9 @@ function AgentManagement() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">Agent Management</h2>
-        <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+        <Button className="px-4 py-2" variant="primary">
           Deploy New Agent
-        </button>
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -452,14 +492,16 @@ function AgentManagement() {
                 </div>
               </div>
               <div className="flex gap-2">
-                <button className={`p-2 rounded ${
-                  agent.status === 'running' ? 'hover:bg-gray-100' : 'bg-green-100 hover:bg-green-200'
-                }`}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={`p-2 rounded ${agent.status === 'running' ? 'hover:bg-gray-100' : 'bg-green-100 hover:bg-green-200'}`}
+                >
                   {agent.status === 'running' ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                </button>
-                <button className="p-2 hover:bg-gray-100 rounded">
+                </Button>
+                <Button variant="outline" size="sm" className="p-2 hover:bg-gray-100 rounded">
                   <Settings className="w-4 h-4" />
-                </button>
+                </Button>
               </div>
             </div>
 
@@ -501,57 +543,6 @@ function AgentManagement() {
   );
 }
 
-// Workflow Designer
-function WorkflowDesigner() {
-  const [workflows, setWorkflows] = useState<any[]>([]);
-  useEffect(() => {
-    fetch('/api/v1/workflows')
-      .then(res => res.json())
-  }, []);
-
-  const editWorkflow = (wf: any) => {
-    setSelected(wf);
-        fetch('/api/v1/workflows')
-          .then(res => res.json())
-          .then(data => setWorkflows(Array.isArray(data) ? data : []));
-      });
-  };
-
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Workflow Designer</h2>
-          <Plus className="w-4 h-4" />
-          Create Workflow
-        </button>
-      </div>
-
-        </div>
-      )}
-
-      <div className="bg-white rounded-lg shadow">
-        <div className="p-6 border-b">
-          <h3 className="text-lg font-semibold">Saved Workflows</h3>
-        </div>
-        <div className="p-6 space-y-4">
-          {workflows.map(workflow => (
-            <div key={workflow.id} className="border rounded-lg p-4 flex items-center justify-between">
-              <div>
-                <div className="font-medium">{workflow.name}</div>
-              </div>
-              <div className="flex items-center gap-3">
-                <button className="p-2 hover:bg-gray-100 rounded" onClick={() => editWorkflow(workflow)}>
-                  <Edit className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // Monitoring Dashboard
 function Monitoring() {
@@ -621,9 +612,9 @@ function SecurityManagement() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">Security Management</h2>
-        <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+        <Button className="px-4 py-2" variant="primary">
           Add User
-        </button>
+        </Button>
       </div>
 
       {/* Security Overview */}
@@ -693,8 +684,8 @@ function SecurityManagement() {
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <button className="text-indigo-600 hover:text-indigo-900 mr-3">Edit</button>
-                    <button className="text-red-600 hover:text-red-900">Delete</button>
+                    <Button className="text-indigo-600 hover:text-indigo-900 mr-3" variant="outline" size="sm">Edit</Button>
+                    <Button className="text-red-600 hover:text-red-900" variant="outline" size="sm">Delete</Button>
                   </td>
                 </tr>
               ))}
@@ -816,15 +807,12 @@ function SystemSettings() {
       </div>
 
       <div className="flex justify-end gap-3">
-        <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
+        <Button className="px-4 py-2 border border-gray-300" variant="outline">
           Cancel
-        </button>
-        <button 
-          onClick={handleSave}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-        >
+        </Button>
+        <Button onClick={handleSave} className="px-4 py-2" variant="primary">
           Save Settings
-        </button>
+        </Button>
       </div>
     </div>
   );

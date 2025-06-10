@@ -27,3 +27,6 @@ class ExponentialBackoffRetry:
                     raise
                 delay = self.base_delay * (self.multiplier ** (attempt - 1))
                 await asyncio.sleep(delay)
+
+__all__ = ["ExponentialBackoffRetry"]
+
