@@ -85,8 +85,21 @@ object acknowledging that processing has started.  The fields are:
 - `document_id` – the identifier stored in the `MemoryManager`
 - `filename` – the stored filename on disk
 - `size_bytes` – byte size of the uploaded file
-- `status` – always `processing_initiated` when the workflow is queued
+- `status` – initial status is `loaded` once a document is uploaded. It will
+  progress through `preprocessing`, `processing`, `in_review`, and finally
+  `completed` or `error`.
 - `message` – human readable confirmation
 
 If the `SecurityManager` or workflow orchestrator are unavailable the method
 raises `ServiceLayerError`.
+
+### Document Status Lifecycle
+
+Documents move through several states as they are processed:
+
+1. **loaded** – successfully uploaded and awaiting preprocessing.
+2. **preprocessing** – text and metadata extraction is in progress.
+3. **processing** – analysis agents are running on the document.
+4. **in_review** – human review is required for some extractions.
+5. **completed** – processing finished successfully and the document is searchable.
+6. **error** – an unrecoverable issue occurred during processing.

@@ -15,15 +15,33 @@ import uuid
 
 class DocumentStatus(Enum):
     """Document processing status enumeration."""
+
     PENDING = "pending"
-    PROCESSING = "processing"
+    LOADED = "loaded"  # Uploaded and ready for processing
+    PREPROCESSING = "preprocessing"  # Initial text/metadata extraction
+    PROCESSING = "processing"  # Main analysis pipeline running
+    IN_REVIEW = "in_review"  # Awaiting human review
     COMPLETED = "completed"
     ERROR = "error"
     CANCELLED = "cancelled"
 
 
+@dataclass
+class DocumentProcessingState:
+    """Tracks real-time state of a document in the pipeline."""
+
+    document_id: str
+    status: DocumentStatus = DocumentStatus.PENDING
+    stage: Optional[str] = None
+    progress: float = 0.0  # 0.0 - 1.0
+    options: Dict[str, Any] = field(default_factory=dict)
+    error: Optional[str] = None
+    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+
 class EntityType(Enum):
     """Legal entity types."""
+
     PERSON = "person"
     ORGANIZATION = "organization"
     LOCATION = "location"
@@ -42,6 +60,7 @@ class EntityType(Enum):
 
 class ConfidenceLevel(Enum):
     """Confidence levels for AI extractions."""
+
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
@@ -51,6 +70,7 @@ class ConfidenceLevel(Enum):
 @dataclass
 class LegalDocument:
     """Represents a legal document in the system."""
+
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     file_path: Optional[Path] = None
     filename: Optional[str] = None
@@ -62,7 +82,7 @@ class LegalDocument:
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     metadata: Dict[str, Any] = field(default_factory=dict)
-    
+
     def __post_init__(self):
         """Update derived fields after initialization."""
         if self.file_path and not self.filename:
@@ -74,6 +94,7 @@ class LegalDocument:
 @dataclass
 class ExtractedEntity:
     """Represents an extracted legal entity."""
+
     text: str
     entity_type: EntityType
     confidence: float
@@ -84,7 +105,7 @@ class ExtractedEntity:
     attributes: Dict[str, Any] = field(default_factory=dict)
     source: str = "unknown"
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    
+
     @property
     def confidence_level(self) -> ConfidenceLevel:
         """Convert numeric confidence to level."""
@@ -101,6 +122,7 @@ class ExtractedEntity:
 @dataclass
 class ExtractedRelationship:
     """Represents a relationship between entities."""
+
     source_entity_id: str
     target_entity_id: str
     relationship_type: str
@@ -114,6 +136,7 @@ class ExtractedRelationship:
 @dataclass
 class ProcessingResult:
     """Generic result container for processing operations."""
+
     success: bool
     data: Optional[Any] = None
     error: Optional[str] = None
@@ -126,6 +149,7 @@ class ProcessingResult:
 @dataclass
 class LegalCitation:
     """Represents a legal citation."""
+
     text: str
     citation_type: str  # case, statute, regulation, etc.
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
@@ -140,6 +164,7 @@ class LegalCitation:
 @dataclass
 class LegalViolation:
     """Represents a detected legal violation."""
+
     violation_type: str
     description: str
     severity: str  # low, medium, high, critical
@@ -154,6 +179,7 @@ class LegalViolation:
 @dataclass
 class AgentMemoryEntry:
     """Memory entry for agent state persistence."""
+
     agent_name: str
     session_id: str
     key: str
@@ -167,6 +193,7 @@ class AgentMemoryEntry:
 @dataclass
 class UserFeedback:
     """User feedback for model improvement."""
+
     item_id: str  # ID of the item being reviewed
     item_type: str  # entity, relationship, violation, etc.
     feedback_type: str  # approve, reject, modify
