@@ -7,6 +7,11 @@ import {
   BarChart, Network, Workflow, Eye, Download,
   Clock, Filter, Plus, Trash2, Edit, Save
 } from 'lucide-react';
+import ErrorBoundary from '../../frontend/src/components/ErrorBoundary';
+import {
+  DashboardErrorBoundary,
+  DocumentProcessingErrorBoundary,
+} from '../../frontend/src/components/AsyncErrorBoundary';
 
 
 
@@ -40,25 +45,59 @@ export default function LegalAISystem() {
   };
 
   return (
-    <AppContext.Provider value={contextValue}>
-      <div className="min-h-screen bg-gray-50">
-        <Sidebar />
-        <div className="ml-64">
-          <Header />
-          <main className="p-6">
-            <NotificationArea notifications={notifications} />
-            {currentView === 'dashboard' && <Dashboard />}
-            {currentView === 'documents' && <DocumentProcessing />}
-            {currentView === 'knowledge' && <KnowledgeGraph />}
-            {currentView === 'agents' && <AgentManagement />}
-            {currentView === 'workflows' && <WorkflowDesigner />}
-            {currentView === 'monitoring' && <Monitoring />}
-            {currentView === 'security' && <SecurityManagement />}
-            {currentView === 'settings' && <SystemSettings />}
-          </main>
+    <ErrorBoundary level="critical">
+      <AppContext.Provider value={contextValue}>
+        <div className="min-h-screen bg-gray-50">
+          <Sidebar />
+          <div className="ml-64">
+            <Header />
+            <main className="p-6">
+              <NotificationArea notifications={notifications} />
+              {currentView === 'dashboard' && (
+                <DashboardErrorBoundary>
+                  <Dashboard />
+                </DashboardErrorBoundary>
+              )}
+              {currentView === 'documents' && (
+                <DocumentProcessingErrorBoundary>
+                  <DocumentProcessing />
+                </DocumentProcessingErrorBoundary>
+              )}
+              {currentView === 'knowledge' && (
+                <ErrorBoundary level="view">
+                  <KnowledgeGraph />
+                </ErrorBoundary>
+              )}
+              {currentView === 'agents' && (
+                <ErrorBoundary level="view">
+                  <AgentManagement />
+                </ErrorBoundary>
+              )}
+              {currentView === 'workflows' && (
+                <ErrorBoundary level="view">
+                  <WorkflowDesigner />
+                </ErrorBoundary>
+              )}
+              {currentView === 'monitoring' && (
+                <ErrorBoundary level="view">
+                  <Monitoring />
+                </ErrorBoundary>
+              )}
+              {currentView === 'security' && (
+                <ErrorBoundary level="view">
+                  <SecurityManagement />
+                </ErrorBoundary>
+              )}
+              {currentView === 'settings' && (
+                <ErrorBoundary level="view">
+                  <SystemSettings />
+                </ErrorBoundary>
+              )}
+            </main>
+          </div>
         </div>
-      </div>
-    </AppContext.Provider>
+      </AppContext.Provider>
+    </ErrorBoundary>
   );
 }
 
