@@ -117,7 +117,7 @@ class ModelSwitcher: # Renamed from GrokModelSwitcher for generality
                 if "grok-3-reasoning" in GROK_MODELS_CONFIG: # Check if reasoning model is defined
                     suggested_model_name = "grok-3-reasoning"
             elif complexity == TaskComplexity.SIMPLE and suggested_model_name == "grok-3-reasoning":
-                 if "grok-3-mini" in GROK_MODELS_CONFIG:
+                if "grok-3-mini" in GROK_MODELS_CONFIG:
                     suggested_model_name = "grok-3-mini"
         else:
             # Generic suggestion: use the current model or a default one
@@ -151,7 +151,7 @@ class ModelSwitcher: # Renamed from GrokModelSwitcher for generality
             model_switcher_logger.info(msg)
             return ModelSwitchResult(success=True, previous_model=previous_model, new_model=model_name, reason=msg)
 
-        if not self.api_key and self.default_provider_type != LLMProviderEnum.OLLAMA : # Ollama might not need API key
+        if not self.api_key and self.default_provider_type != LLMProviderEnum.OLLAMA: # Ollama might not need API key
             msg = f"API key not available for provider {self.default_provider_type.value}. Cannot switch model."
             model_switcher_logger.error(msg)
             return ModelSwitchResult(success=False, previous_model=previous_model, new_model=model_name, reason=msg)
@@ -165,10 +165,10 @@ class ModelSwitcher: # Renamed from GrokModelSwitcher for generality
                 if self.llm_manager.primary_provider:
                     current_primary_config = self.llm_manager.primary_provider.config
                     new_llm_config = current_primary_config.copy(update={'model': model_name})
-                else: # Cannot create a new config if no primary provider to base it on
-                     msg = "Cannot switch model: No primary LLM provider configured in LLMManager."
-                     model_switcher_logger.error(msg)
-                     return ModelSwitchResult(success=False, previous_model=previous_model, new_model=model_name, reason=msg)
+                else:  # Cannot create a new config if no primary provider to base it on
+                    msg = "Cannot switch model: No primary LLM provider configured in LLMManager."
+                    model_switcher_logger.error(msg)
+                    return ModelSwitchResult(success=False, previous_model=previous_model, new_model=model_name, reason=msg)
 
 
             # This is the critical part: LLMManager needs to handle this.
@@ -326,7 +326,7 @@ class ModelSwitcher: # Renamed from GrokModelSwitcher for generality
             if perf_record.calls > 0: # Only recommend models with performance data
                 model_config_details = available_models.get(model_name, {})
                 
-                recommendation_text = self._generate_recommendation_text(model_name, perf_record)
+                recommendation_text = self._generate_recommendation_text(perf_record)
                 
                 recommendations.append({
                     "model_name": model_name,
@@ -343,7 +343,7 @@ class ModelSwitcher: # Renamed from GrokModelSwitcher for generality
         recommendations.sort(key=lambda x: (x["success_rate"], -x["avg_time_sec"]), reverse=True)
         return recommendations
 
-    def _generate_recommendation_text(self, model_name: str, perf_record: ModelPerformanceRecord) -> str:
+    def _generate_recommendation_text(self, perf_record: ModelPerformanceRecord) -> str:
         """Generate recommendation text for a model based on its performance."""
         if perf_record.success_rate >= 0.9 and perf_record.avg_time_sec < 5.0 and perf_record.calls >= 10:
             return "Excellent performance & reliability. Highly recommended for similar tasks."
