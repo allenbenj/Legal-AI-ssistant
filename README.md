@@ -23,6 +23,11 @@ pip install lexnlp
 
 For more detailed instructions see [ENV_SETUP.md](ENV_SETUP.md).
 
+Alternatively, run the helper script to automate the setup and validation:
+```bash
+python scripts/setup_environment_task.py
+```
+
 
 npm install
 npm run build
