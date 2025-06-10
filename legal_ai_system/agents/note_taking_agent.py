@@ -168,9 +168,10 @@ class NoteTakingAgent(BaseAgent, MemoryMixin):
         self.logger.debug("Generating note suggestions.", parameters={'doc_id': doc_id})
         
         # Run pattern matching in a background thread
-        # asyncio.to_thread ensures the CPU-bound regex logic doesn't block the event loop
-        pattern_opportunities = await asyncio.to_thread(
-            self._identify_note_opportunities_sync, text
+        # Use the running loop with run_in_executor for compatibility with older asyncio versions
+        loop = asyncio.get_running_loop()
+        pattern_opportunities = await loop.run_in_executor(
+            None, self._identify_note_opportunities_sync, text
         )
         
         suggested_notes_list: List[Note] = []
