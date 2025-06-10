@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 try:  # pragma: no cover - optional dependency
-    from langgraph.graph import StateGraph, END
+    from langgraph.graph import StateGraph, END, BaseNode
 except Exception:  # ImportError or other issues if langgraph not installed
 
     class StateGraph:  # pragma: no cover - simple placeholder
@@ -28,12 +28,21 @@ except Exception:  # ImportError or other issues if langgraph not installed
             raise RuntimeError("LangGraph is required to build workflows")
 
     END = "END"
+    class BaseNode:
+        pass
 
 if TYPE_CHECKING:  # pragma: no cover - hint for type checkers
     from langgraph.graph import StateGraph as _RealStateGraph
     from langgraph.graph import END as _RealEND
 
 from ..agents.agent_nodes import AnalysisNode, SummaryNode
+
+
+class CitationCheckNode(BaseNode):
+    """Placeholder node that simulates citation validation."""
+
+    def __call__(self, input_text: str) -> str:  # pragma: no cover - trivial
+        return f"{input_text} [citations checked]"
 
 
 def build_graph(topic: str) -> StateGraph:
@@ -50,4 +59,20 @@ def build_graph(topic: str) -> StateGraph:
     return graph
 
 
-__all__ = ["build_graph"]
+def build_advanced_legal_workflow(topic: str) -> StateGraph:
+    """Build an expanded LangGraph workflow including citation validation."""
+    graph = StateGraph()
+
+    graph.add_node("analysis", AnalysisNode(topic))
+    graph.add_node("citations", CitationCheckNode())
+    graph.add_node("summary", SummaryNode())
+
+    graph.set_entry_point("analysis")
+    graph.add_edge("analysis", "citations")
+    graph.add_edge("citations", "summary")
+    graph.add_edge("summary", END)
+
+    return graph
+
+
+__all__ = ["build_graph", "build_advanced_legal_workflow", "CitationCheckNode"]
