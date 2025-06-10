@@ -107,6 +107,55 @@ class APIClient:
             logger.error(f"Get knowledge graph failed: {e}")
             return {"nodes": [], "edges": []}
 
+    # ------------------------------------------------------------------
+    # Workflow management endpoints
+    # ------------------------------------------------------------------
+    def get_workflows(self) -> List[Dict[str, Any]]:
+        """Retrieve available workflow configurations"""
+        try:
+            response = self.session.get(f"{self.base_url}/api/v1/workflows")
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            logger.error(f"Get workflows failed: {e}")
+            return []
+
+    def create_workflow(self, workflow_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a new workflow configuration"""
+        try:
+            response = self.session.post(
+                f"{self.base_url}/api/v1/workflows",
+                json=workflow_data,
+            )
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            logger.error(f"Create workflow failed: {e}")
+            return {"status": "ERROR", "message": str(e)}
+
+    def update_workflow(self, workflow_id: str, workflow_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Update an existing workflow configuration"""
+        try:
+            response = self.session.put(
+                f"{self.base_url}/api/v1/workflows/{workflow_id}",
+                json=workflow_data,
+            )
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            logger.error(f"Update workflow failed: {e}")
+            return {"status": "ERROR", "message": str(e)}
+
+    def delete_workflow(self, workflow_id: str) -> Dict[str, Any]:
+        """Delete a workflow configuration"""
+        try:
+            response = self.session.delete(f"{self.base_url}/api/v1/workflows/{workflow_id}")
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            logger.error(f"Delete workflow failed: {e}")
+            return {"status": "ERROR", "message": str(e)}
+
 class ErrorHandler:
     """Centralized error handling and user notifications"""
     
