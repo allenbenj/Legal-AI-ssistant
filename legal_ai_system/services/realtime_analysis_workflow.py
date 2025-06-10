@@ -18,7 +18,11 @@ from ..agents.document_rewriter_agent import DocumentRewriterAgent
 from ..agents.ontology_extraction_agent import OntologyExtractionAgent
 from ..core.optimized_vector_store import OptimizedVectorStore
 from ..utils.hybrid_extractor import HybridLegalExtractor
-from ..utils.reviewable_memory import ReviewableMemory
+from ..utils.reviewable_memory import (
+    ReviewableMemory,
+    ReviewDecision,
+    ReviewStatus,
+)
 from .realtime_graph_manager import RealTimeGraphManager
 
 
@@ -437,6 +441,17 @@ class RealTimeAnalysisWorkflow:
 
         except Exception as e:
             self.logger.error(f"Memory integration failed: {e}")
+        finally:
+            # Always fetch latest pending reviews for GUI updates
+            try:
+                pending = await self.reviewable_memory.get_pending_reviews_async(
+                    limit=20
+                )
+                await self._notify_update(
+                    "pending_reviews", [item.to_dict() for item in pending]
+                )
+            except Exception as e:
+                self.logger.error(f"Failed to fetch pending reviews: {e}")
 
         return memory_updates
 
@@ -659,6 +674,39 @@ class RealTimeAnalysisWorkflow:
     async def _on_graph_update(self, event_type: str, data: Dict[str, Any]):
         """Handle graph update events."""
         await self._notify_update(f"graph_{event_type}", data)
+
+    async def fetch_pending_reviews(self, limit: int = 20) -> List[Dict[str, Any]]:
+        """Return pending review items for the GUI."""
+        try:
+            items = await self.reviewable_memory.get_pending_reviews_async(limit=limit)
+            return [item.to_dict() for item in items]
+        except Exception as e:
+            self.logger.error(f"Failed to fetch pending reviews: {e}")
+            return []
+
+    async def submit_review_feedback(self, feedback: Dict[str, Any]) -> bool:
+        """Submit user review decision to the reviewable memory."""
+        if not feedback:
+            return False
+        try:
+            decision = ReviewDecision(
+                item_id=feedback["item_id"],
+                decision=ReviewStatus(feedback.get("decision", "approved")),
+                reviewer_id=feedback.get("reviewer_id", "gui"),
+                modified_content=feedback.get("modified_content"),
+                reviewer_notes=feedback.get("reviewer_notes", ""),
+                confidence_override=feedback.get("confidence_override"),
+            )
+            success = await self.reviewable_memory.submit_review_decision_async(decision)
+            if success:
+                await self._notify_update(
+                    "review_decision",
+                    {"item_id": decision.item_id, "decision": decision.decision.value},
+                )
+            return success
+        except Exception as e:
+            self.logger.error(f"Review feedback processing failed: {e}")
+            return False
 
     # System management
     async def get_system_stats(self) -> Dict[str, Any]:

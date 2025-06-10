@@ -35,6 +35,15 @@ except ImportError:  # pragma: no cover - fallback for standalone execution
 import logging  # Using standard logging for this standalone part initially
 from pathlib import Path
 import time  # For simulate processing
+import asyncio
+from typing import Optional
+
+try:
+    from legal_ai_system.services.realtime_analysis_workflow import RealTimeAnalysisWorkflow
+except Exception:
+    RealTimeAnalysisWorkflow = None  # type: ignore
+
+workflow_for_gui: Optional[RealTimeAnalysisWorkflow] = None
 
 # Using standard logging initially, can be augmented by detailed_logging if main system is run first
 streamlit_logger = logging.getLogger("StreamlitAppGUI")
@@ -131,7 +140,14 @@ def run_streamlit_app_content():
     st.sidebar.info(f"Status: {backend_status}")
 
     page = st.sidebar.radio(
-        "Go to", ["Dashboard", "Document Upload", "Knowledge Graph", "System Status"])
+        "Go to", [
+            "Dashboard",
+            "Document Upload",
+            "Knowledge Graph",
+            "Review Queue",
+            "System Status",
+        ]
+    )
 
     if page == "Dashboard":
         st.header("System Overview")
@@ -213,6 +229,58 @@ def run_streamlit_app_content():
                 st.info("Search results would appear here. (Mocked)")
             else:
                 st.warning("Please enter a search query.")
+
+    elif page == "Review Queue":
+        st.header("📥 Pending Review Items")
+        if workflow_for_gui:
+            pending = []
+            try:
+                pending = st.session_state.get(
+                    "pending_items",
+                    asyncio.run(workflow_for_gui.fetch_pending_reviews(limit=20)),
+                )
+                if pending:
+                    st.session_state["pending_items"] = pending
+            except Exception as e:
+                st.error(f"Failed to fetch reviews: {e}")
+
+            if pending:
+                for item in pending:
+                    st.markdown(f"**{item['item_type']}** - {item['item_id']}")
+                    st.json(item["content"])
+                    col_a, col_b = st.columns(2)
+                    if col_a.button(
+                        f"Approve {item['item_id']}", key=f"ap_{item['item_id']}"
+                    ):
+                        if workflow_for_gui:
+                            asyncio.run(
+                                workflow_for_gui.submit_review_feedback(
+                                    {
+                                        "item_id": item["item_id"],
+                                        "decision": "approved",
+                                        "reviewer_id": "gui_user",
+                                    }
+                                )
+                            )
+                            st.success("Decision submitted")
+                    if col_b.button(
+                        f"Reject {item['item_id']}", key=f"rej_{item['item_id']}"
+                    ):
+                        if workflow_for_gui:
+                            asyncio.run(
+                                workflow_for_gui.submit_review_feedback(
+                                    {
+                                        "item_id": item["item_id"],
+                                        "decision": "rejected",
+                                        "reviewer_id": "gui_user",
+                                    }
+                                )
+                            )
+                            st.success("Decision submitted")
+            else:
+                st.info("No pending reviews found.")
+        else:
+            st.info("Workflow not available. Connect backend to enable reviews.")
 
     elif page == "System Status":
         st.header("⚙️ System Status & Health")
