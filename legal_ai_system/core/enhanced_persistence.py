@@ -885,6 +885,32 @@ class EnhancedPersistenceManager:
                     );
                 """)
                 await conn.execute("CREATE INDEX IF NOT EXISTS idx_workflows_state_updated ON workflows(state, updated_at DESC);")
+
+                await conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS documents (
+                        document_id TEXT PRIMARY KEY,
+                        filename TEXT NOT NULL,
+                        file_path TEXT UNIQUE,
+                        file_size INTEGER,
+                        file_type TEXT,
+                        file_hash TEXT UNIQUE,
+                        processing_status TEXT DEFAULT 'pending',
+                        processed_at TIMESTAMPTZ,
+                        created_at TIMESTAMPTZ DEFAULT NOW(),
+                        updated_at TIMESTAMPTZ DEFAULT NOW(),
+                        source TEXT,
+                        tags TEXT,
+                        custom_metadata JSONB DEFAULT '{}'::jsonb
+                    );
+                    """
+                )
+                await conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_doc_meta_status ON documents(processing_status);"
+                )
+                await conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_doc_meta_file_type ON documents(file_type);"
+                )
                 self.logger.info("Database schema created/verified successfully.")
         except asyncpg.PostgresError as e:
             self.logger.error("Database error during schema creation.", exception=e)
