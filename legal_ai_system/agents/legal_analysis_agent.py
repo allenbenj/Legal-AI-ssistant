@@ -38,7 +38,8 @@ class LegalAnalysisResult:
     analyzed_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat()) # Added
 
     def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
+        """Return a dictionary representation of the dataclass."""
+        return asdict(self, dict_factory=dict)
 
 
 class LegalAnalysisAgent(BaseAgent, MemoryMixin):
