@@ -774,6 +774,7 @@ async def create_service_container(
     from ..agents.ontology_extraction_agent import OntologyExtractionAgent
     from ..agents.entity_extraction_agent import StreamlinedEntityExtractionAgent
     from ..agents.legal_reasoning_engine import LegalReasoningEngine
+    from ..agents.knowledge_graph_reasoning_agent import KnowledgeGraphReasoningAgent
 
     # Example: await container.register_service("document_processor_agent", instance=DocumentProcessorAgent(container))
     # This needs careful thought: are agents services or instantiated by workflows?
@@ -832,6 +833,7 @@ async def create_service_container(
             "KnowledgeBaseAgent",
             None,
         ),
+        "knowledge_graph_reasoning_agent": KnowledgeGraphReasoningAgent,
         "legal_reasoning_engine": LegalReasoningEngine,
     }
     for name, agent_cls in agent_classes.items():
