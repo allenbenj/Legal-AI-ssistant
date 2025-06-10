@@ -264,34 +264,82 @@ class LegalAIIntegrationService:
     async def get_system_status_summary(self) -> Dict[str, Any]:  # Renamed
         """Aggregates status from various core services."""
         integration_service_logger.info("Fetching system status summary.")
-        # This method would call health_check() or get_service_status() on key services
-        # registered in the service_container.
 
-        # Example of how it might work:
-        # status_summary = await self.service_container.get_system_health_summary()
-        # return status_summary
+        if not self.service_container or not hasattr(
+            self.service_container, "get_system_health_summary"
+        ):
+            integration_service_logger.error(
+                "Service container not available or missing health summary method."
+            )
+            return {
+                "overall_status": "unavailable",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
 
-        # Mocked response for now:
-        mock_summary = {
-            "overall_status": "HEALTHY",
-            "services_status": {
-                "llm_manager": {"status": "healthy"},
-                "knowledge_graph_manager": {"status": "healthy"},
-                "vector_store": {"status": "healthy"},
-                "persistence_manager": {"status": "healthy"},
-            },
-            "performance_metrics_summary": {
-                "avg_workflow_time_sec": 120.5,
-                "active_workflows": 3,
-            },
-            "active_documents_count": 5,
-            "pending_reviews_count": 2,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        }
+        try:
+            status_summary = await self.service_container.get_system_health_summary()
+        except Exception as e:  # pragma: no cover - container failure
+            integration_service_logger.error(
+                "Failed to obtain system health summary.", exception=e
+            )
+            return {
+                "overall_status": "error",
+                "details": str(e),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+
+        # Gather additional metrics from workflow orchestrator or managers
+        try:
+            orchestrator = await self.service_container.get_service(
+                "ultimate_orchestrator"
+            )
+        except Exception:
+            orchestrator = None
+
+        if not orchestrator:
+            try:
+                orchestrator = await self.service_container.get_service(
+                    "realtime_analysis_workflow"
+                )
+            except Exception:
+                orchestrator = None
+
+        if orchestrator and hasattr(orchestrator, "get_system_stats"):
+            try:
+                status_summary["workflow_metrics"] = await orchestrator.get_system_stats()
+            except Exception as e:
+                integration_service_logger.warning(
+                    "Workflow metrics unavailable.", exception=e
+                )
+
+        # Add metrics from realtime graph manager if available
+        try:
+            rt_graph_manager = await self.service_container.get_service(
+                "realtime_graph_manager"
+            )
+            if rt_graph_manager and hasattr(rt_graph_manager, "get_realtime_stats"):
+                status_summary["realtime_graph_stats"] = await rt_graph_manager.get_realtime_stats()
+        except Exception as e:
+            integration_service_logger.warning(
+                "Real-time graph stats unavailable.", exception=e
+            )
+
+        # Include reviewable memory statistics for pending reviews
+        try:
+            review_memory = await self.service_container.get_service(
+                "reviewable_memory"
+            )
+            if review_memory and hasattr(review_memory, "get_review_stats_async"):
+                status_summary["review_memory_stats"] = await review_memory.get_review_stats_async()
+        except Exception as e:
+            integration_service_logger.warning(
+                "Review memory stats unavailable.", exception=e
+            )
+
         integration_service_logger.info(
-            "System status summary retrieved (mocked).", parameters=mock_summary
+            "System status summary retrieved.", parameters=status_summary
         )
-        return mock_summary
+        return status_summary
 
     # Add other methods that FastAPI endpoints will call, e.g.:
     # async def search_knowledge_graph(...)
