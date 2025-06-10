@@ -88,6 +88,8 @@ from strawberry.types import Info  # type: ignore
         LogCategory,
         get_detailed_logger,
     )
+    from legal_ai_system.api.websocket_manager import ConnectionManager
+    from legal_ai_system.services.realtime_publisher import RealtimePublisher
 
 
     SERVICES_AVAILABLE = True
@@ -132,34 +134,7 @@ except ImportError as e:
             self.last_login = last_login
             self.is_active = is_active
 
-    class ConnectionManager:  # type: ignore
-        async def connect(self, websocket, client_id):
-            await websocket.accept()
 
-        def disconnect(self, client_id):
-            pass
-
-        async def broadcast_to_topic(self, message, topic):
-            pass
-
-        async def subscribe_to_topic(self, client_id, topic):
-            pass
-
-        async def unsubscribe_from_topic(self, client_id, topic):
-            pass
-
-        async def send_personal_message(self, message, client_id):
-            pass
-
-    class RealtimePublisher:  # type: ignore
-        def __init__(self, manager):
-            pass
-
-        def start_system_monitoring(self, interval: float = 1.0) -> None:
-            pass
-
-        def stop(self) -> None:
-            pass
 
     class _SettingsFallback:
         frontend_dist_path = (
@@ -719,105 +694,6 @@ def require_permission(required_level: AccessLevel):
         return current_user
 
     return permission_checker
-
-
-# --- WebSocket Manager ---
-class WebSocketManager:
-    # ... (WebSocketManager from original file, with logging using main_api_logger.getChild("WebSocketManager"))
-    # I will assume this class is defined as in the original main.py and add logging.
-    def __init__(self):
-        self.active_connections: Dict[str, WebSocket] = {}  # user_id -> WebSocket
-        self.subscriptions: Dict[str, Set[str]] = defaultdict(
-            set
-        )  # user_id -> set of topics
-        self.topic_subscribers: Dict[str, Set[str]] = defaultdict(
-            set
-        )  # topic -> set of user_ids
-        self.logger = main_api_logger.getChild("WebSocketManager")  # Specific logger
-
-    async def connect(self, websocket: WebSocket, user_id: str):
-        await websocket.accept()
-        self.active_connections[user_id] = websocket
-        self.logger.info(
-            f"WebSocket connected.",
-            parameters={"user_id": user_id, "client": str(websocket.client)},
-        )
-        await self.send_personal_message(
-            {"type": "connection_ack", "status": "connected", "user_id": user_id},
-            user_id,
-        )
-
-    def disconnect(self, user_id: str):
-        if user_id in self.active_connections:
-            del self.active_connections[user_id]
-
-        topics_to_clean = list(self.subscriptions.pop(user_id, set()))
-        for topic in topics_to_clean:
-            if topic in self.topic_subscribers:
-                self.topic_subscribers[topic].discard(user_id)
-                if not self.topic_subscribers[topic]:  # Clean up empty topics
-                    del self.topic_subscribers[topic]
-        self.logger.info(f"WebSocket disconnected.", parameters={"user_id": user_id})
-
-    async def send_personal_message(self, message: Dict[str, Any], user_id: str):
-        if user_id in self.active_connections:
-            try:
-                await self.active_connections[user_id].send_text(
-                    json.dumps(message, default=str)
-                )
-            except WebSocketDisconnect:
-                self.logger.warning(
-                    f"WebSocket already disconnected for user during send.",
-                    parameters={"user_id": user_id},
-                )
-                self.disconnect(user_id)
-            except Exception as e:
-                self.logger.error(
-                    f"Failed to send WebSocket message.",
-                    parameters={"user_id": user_id},
-                    exception=e,
-                )
-                self.disconnect(user_id)  # Assume connection is broken
-
-    async def broadcast_to_topic(self, message: Dict[str, Any], topic: str):
-        self.logger.debug(
-            f"Broadcasting to topic.",
-            parameters={
-                "topic": topic,
-                "num_subscribers": len(self.topic_subscribers.get(topic, [])),
-            },
-        )
-        if topic in self.topic_subscribers:
-            # Create a copy for safe iteration as disconnects might modify the set
-            for user_id_subscriber in list(self.topic_subscribers[topic]):
-                await self.send_personal_message(message, user_id_subscriber)
-
-    async def subscribe_to_topic(self, user_id: str, topic: str):
-        self.subscriptions[user_id].add(topic)
-        self.topic_subscribers[topic].add(user_id)
-        self.logger.info(
-            f"User subscribed to topic.",
-            parameters={"user_id": user_id, "topic": topic},
-        )
-        await self.send_personal_message(
-            {"type": "subscription_ack", "topic": topic, "status": "subscribed"},
-            user_id,
-        )
-
-    async def unsubscribe_from_topic(self, user_id: str, topic: str):
-        self.subscriptions[user_id].discard(topic)
-        if topic in self.topic_subscribers:
-            self.topic_subscribers[topic].discard(user_id)
-            if not self.topic_subscribers[topic]:
-                del self.topic_subscribers[topic]
-        self.logger.info(
-            f"User unsubscribed from topic.",
-            parameters={"user_id": user_id, "topic": topic},
-        )
-        await self.send_personal_message(
-            {"type": "subscription_ack", "topic": topic, "status": "unsubscribed"},
-            user_id,
-        )
 
 
 # --- GraphQL Schema Definitions ---
