@@ -477,6 +477,14 @@ async def create_service_container(
     service_container_logger.info("=== CREATE SERVICE CONTAINER START ===")
     container = ServiceContainer()
 
+    # Start Prometheus metrics exporter
+    from .metrics_exporter import init_metrics_exporter
+
+    await container.register_service(
+        "metrics_exporter",
+        instance=init_metrics_exporter(),
+    )
+
     # 1. Configuration Manager (must be first)
     from ..core.configuration_manager import create_configuration_manager
 
