@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from queue import Queue
+from .enhanced_persistence import ConnectionPool
 
 # Import detailed logging system
 from .detailed_logging import (
@@ -1041,12 +1042,12 @@ class EnhancedVectorStore:
 
 
 def create_enhanced_vector_store(
-    service_container: Any,
-    service_config: Optional[Dict[str, Any]] | None = None,
+    connection_pool: ConnectionPool,
+    config: Optional[Dict[str, Any]] | None = None,
 ) -> "EnhancedVectorStore":
     """Factory function used by :class:`ServiceContainer`."""
 
-    cfg = service_config or {}
+    cfg = config or {}
     return EnhancedVectorStore(
         storage_path=cfg.get("STORAGE_PATH", "./storage/vectors"),
         embedding_model=cfg.get(
@@ -1056,7 +1057,6 @@ def create_enhanced_vector_store(
         enable_gpu=cfg.get("ENABLE_GPU_FAISS", False),
         document_index_path=cfg.get("DOCUMENT_INDEX_PATH"),
         entity_index_path=cfg.get("ENTITY_INDEX_PATH"),
-        connection_pool=cfg.get("connection_pool"),
     )
 
     # ------------------------------------------------------------------
