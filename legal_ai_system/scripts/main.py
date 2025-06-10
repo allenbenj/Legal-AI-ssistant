@@ -25,6 +25,16 @@ from typing import Any, Dict, List, Optional
 
 from jose import jwt
 
+try:
+    from legal_ai_system.core.detailed_logging import (
+        get_detailed_logger,
+        LogCategory,
+    )
+    main_api_logger = get_detailed_logger("MainAPI", LogCategory.API)
+except Exception:  # pragma: no cover - fallback minimal logger
+    logging.basicConfig(level=logging.INFO)
+    main_api_logger = logging.getLogger("MainAPI")
+
 # third-party imports
 try:
     import strawberry  # type: ignore
@@ -136,6 +146,26 @@ websocket_manager_instance: Optional[ConnectionManager] = None
 realtime_publisher_instance: Optional[RealtimePublisher] = None
 
 
+def get_service_container() -> ServiceContainer:
+    """Dependency to provide the initialized ServiceContainer."""
+    if service_container_instance is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Service container not initialized",
+        )
+    return service_container_instance
+
+
+def get_security_manager() -> SecurityManager:
+    """Dependency to provide the active SecurityManager."""
+    if security_manager_instance is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Security manager not initialized",
+        )
+    return security_manager_instance
+
+
 def load_workflow_configs() -> None:
     """Load workflow presets from disk if available."""
     if WORKFLOW_CONFIG_FILE.exists():
@@ -177,6 +207,9 @@ async def lifespan(app: FastAPI):
         websocket_manager_instance, \
         realtime_publisher_instance
 
+    # --- Startup events ---
+    # Log startup and initialize all dynamic components such as the
+    # service container, security manager, and real-time publisher.
     main_api_logger.info("🚀 Starting Legal AI System API lifespan...")
 
     # Load any saved workflow configurations
@@ -256,10 +289,14 @@ async def lifespan(app: FastAPI):
     realtime_publisher_instance = RealtimePublisher(websocket_manager_instance)
     realtime_publisher_instance.start_system_monitoring()
 
-    main_api_logger.info("✅ Legal AI System API started successfully via lifespan.")
+    main_api_logger.info(
+        "✅ Legal AI System API started successfully via lifespan."
+    )
 
     yield  # API is running
 
+    # --- Shutdown events ---
+    # Perform graceful cleanup of services and background tasks.
     main_api_logger.info("🛑 Shutting down Legal AI System API via lifespan...")
 
     # Persist workflow configurations
@@ -768,6 +805,7 @@ async def upload_document_rest(  # Renamed to avoid conflict
     file: UploadFile = File(...),
     # current_user: AuthUser = Depends(require_permission(AccessLevel.WRITE)) # Auth re-enabled
     # For now, removing auth dependency for ease of testing if SecurityManager isn't fully up
+    service_container: ServiceContainer = Depends(get_service_container),
 ):
     main_api_logger.info(
         "Document upload request received.",
@@ -838,6 +876,7 @@ async def process_document_rest(  # Renamed
     document_id: str,
     processing_request: ProcessingRequest,  # Use Pydantic model for request body
     background_tasks: BackgroundTasks,
+    service_container: ServiceContainer = Depends(get_service_container),
     # current_user: AuthUser = Depends(require_permission(AccessLevel.WRITE)) # Auth
 ):
     main_api_logger.info(
@@ -892,9 +931,7 @@ async def process_document_rest(  # Renamed
     # user_id_for_task = current_user.user_id
     user_id_for_task = "mock_user_for_processing"  # Placeholder if auth is off
 
-    if service_container_instance:
-        await service_container_instance.update_workflow_config(
-            processing_request.model_dump()
+
         )
     background_tasks.add_task(
         process_document_background_task,
@@ -1004,11 +1041,10 @@ async def delete_workflow_config(config_id: str):
 @app.get("/api/v1/system/health", response_model=SystemHealthResponse)
 async def get_system_health_rest(  # Renamed
     # current_user: AuthUser = Depends(require_permission(AccessLevel.READ)) # Auth
+    service_container: ServiceContainer = Depends(get_service_container),
 ):
     main_api_logger.info("System health check requested.")
-    if not service_container_instance or not hasattr(
-        service_container_instance, "get_system_health_summary"
-    ):
+    if not hasattr(service_container, "get_system_health_summary"):
         main_api_logger.error(
             "Cannot get system health: ServiceContainer not available or method missing."
         )
@@ -1029,7 +1065,7 @@ async def get_system_health_rest(  # Renamed
 
     try:
         # This method should be on ServiceContainer or a dedicated HealthService
-        health_summary = await service_container_instance.get_system_health_summary()
+        health_summary = await service_container.get_system_health_summary()
 
         return SystemHealthResponse(
             overall_status=health_summary.get("overall_status", "DEGRADED"),
@@ -1055,17 +1091,18 @@ async def get_system_health_rest(  # Renamed
 async def submit_review_decision_rest(  # Renamed
     review_request: ReviewDecisionRequest,
     # current_user: AuthUser = Depends(require_permission(AccessLevel.WRITE)) # Auth
+    service_container: ServiceContainer = Depends(get_service_container),
 ):
     main_api_logger.info(
         "Review decision submitted.", parameters=review_request.model_dump()
     )
-    if not service_container_instance:
+    if not service_container:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Review service not configured.",
         )
 
-    review_service = service_container_instance.get_service(
+    review_service = service_container.get_service(
         "reviewable_memory"
     )  # Or 'confidence_calibration_manager'
     if not review_service or not hasattr(review_service, "submit_review_decision"):

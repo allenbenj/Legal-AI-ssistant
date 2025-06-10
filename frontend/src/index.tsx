@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import LegalAISystem from 'legal-ai-gui';
+import LegalAISystem from '@/legal-ai-gui';
 import { AuthProvider } from './contexts/AuthContext';
 
 const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement);
