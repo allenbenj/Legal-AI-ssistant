@@ -7,10 +7,8 @@ This module provides a comprehensive knowledge graph management system
 specifically designed for legal document processing and analysis.
 """
 
-import asyncio
 import json
-import logging
-from typing import Dict, List, Any, Optional, Tuple, Union
+from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
