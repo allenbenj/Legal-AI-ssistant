@@ -128,6 +128,8 @@ class ServiceContainer:
         self._lock = (
             asyncio.Lock()
         )  # For thread-safe registration and retrieval if needed (though primarily async)
+        # Active workflow configuration shared across workflow instances
+        self._active_workflow_config: Dict[str, Any] = {}
 
         service_container_logger.info("ServiceContainer instance created.")
 
@@ -256,20 +258,7 @@ class ServiceContainer:
 
             return self._services[name]
 
-    def get_active_workflow_config(self) -> Dict[str, Any]:
-        """Return the currently active workflow configuration."""
-        return dict(self._active_workflow_config)
 
-    @detailed_log_function(LogCategory.SYSTEM)
-    async def update_workflow_config(self, new_config: Dict[str, Any]) -> None:
-        """Update workflow configuration and propagate to the workflow service if initialized."""
-        async with self._lock:
-            self._active_workflow_config.update(new_config)
-            workflow = self._services.get("realtime_analysis_workflow")
-            if workflow and hasattr(workflow, "update_config"):
-                maybe = workflow.update_config(**self._active_workflow_config)
-                if asyncio.iscoroutine(maybe):
-                    await maybe
 
     @detailed_log_function(LogCategory.SYSTEM)
     async def initialize_all_services(self):
@@ -738,11 +727,11 @@ async def create_service_container(
     from .realtime_analysis_workflow import RealTimeAnalysisWorkflow
 
     workflow_cfg_dict = config_manager_service.get("workflow_config", {})
-    await container.update_workflow_config(workflow_cfg_dict)
+    container.update_workflow_config(workflow_cfg_dict)
     await container.register_service(
         "realtime_analysis_workflow",
         factory=lambda sc: RealTimeAnalysisWorkflow(
-            sc, config=WorkflowConfig(**sc.get_active_workflow_config())
+            sc, workflow_config=WorkflowConfig(**sc.get_active_workflow_config())
         ),
         is_async_factory=False,
     )
@@ -855,17 +844,6 @@ async def create_service_container(
         "workflow_orchestrator",
         factory=lambda sc, topic=workflow_topic: WorkflowOrchestrator(
             sc, topic=topic
-        ),
-        is_async_factory=False,
-    )
-
-    # Register workflow with active configuration
-    workflow_conf_dict = config_manager_service.get("workflow_config", {})
-    await container.update_workflow_config(workflow_conf_dict)
-    await container.register_service(
-        "realtime_analysis_workflow",
-        factory=lambda sc: RealTimeAnalysisWorkflow(
-            sc, **sc.get_active_workflow_config()
         ),
         is_async_factory=False,
     )

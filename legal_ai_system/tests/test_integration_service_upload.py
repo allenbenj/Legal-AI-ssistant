@@ -173,8 +173,8 @@ async def test_create_document_metadata_success(tmp_path, monkeypatch):
     monkeypatch.setattr(svc, "create_document_record", dummy_create)
 
     doc_id, meta = await svc._create_document_metadata(
-        "file.txt",
         tmp_path / "file.txt",
+        "file.txt",
         SimpleNamespace(user_id="u1"),
         {"a": 1},
     )
