@@ -29,6 +29,17 @@ class VectorStoreConfig(BaseModel):
     entity_index_path: Path = Field(..., description="Path to entity index")
     lance_db_path: Path = Field(..., description="Directory for LanceDB store")
     lance_table_name: str = Field(..., description="Default LanceDB table name")
+    optimization_interval_sec: int = Field(
+        3600, description="Interval between automatic optimization runs"
+    )
+    backup_interval_sec: int = Field(
+        86400, description="Interval between automatic backups"
+    )
+    instances: int = Field(1, description="Number of vector store instances")
+    hosts: List[str] = Field(default_factory=list, description="Vector store host URLs")
+    load_balancing_strategy: str = Field(
+        "round_robin", description="Client-side load balancing strategy"
+    )
 
 class SecurityConfig(BaseModel):
     """Security related configuration."""

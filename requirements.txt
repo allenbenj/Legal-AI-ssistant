@@ -83,7 +83,7 @@ tqdm>=4.65.0
 typing-extensions>=4.7.0
 pathlib>=1.0.1
 pyspellchecker>=0.7.2
-diskcache>=5.6.0
+
 
 # Knowledge Graph (If Neo4j is used)
 neo4j>=5.10.0 # Assuming Neo4j is used as hinted by KnowledgeGraphManager
