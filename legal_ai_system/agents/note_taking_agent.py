@@ -71,7 +71,9 @@ class NoteTakingAgent(BaseAgent, MemoryMixin):
         
         # Get optimized Grok-Mini configuration for this agent
         self.llm_config = self.get_optimized_llm_config()
-        self.logger.info(f"NoteTakingAgentAgent configured with model: {self.llm_config.get('llm_model', 'default')}")
+        self.logger.info(
+            f"NoteTakingAgent configured with model: {self.llm_config.get('llm_model', 'default')}"
+        )
         self.llm_manager: Optional[LLMManager] = self.get_llm_manager()
         self.memory_manager: Optional[UnifiedMemoryManager] = self._get_service("unified_memory_manager")
 
@@ -165,9 +167,11 @@ class NoteTakingAgent(BaseAgent, MemoryMixin):
         # Pattern-based suggestions are CPU-bound, LLM is IO-bound
         self.logger.debug("Generating note suggestions.", parameters={'doc_id': doc_id})
         
-        # Run pattern matching in executor if it becomes complex
-        loop = asyncio.get_event_loop()
-        pattern_opportunities = await loop.run_in_executor(None, self._identify_note_opportunities_sync, text) # Renamed
+        # Run pattern matching in a background thread
+        # asyncio.to_thread ensures the CPU-bound regex logic doesn't block the event loop
+        pattern_opportunities = await asyncio.to_thread(
+            self._identify_note_opportunities_sync, text
+        )
         
         suggested_notes_list: List[Note] = []
         for opp_data in pattern_opportunities:

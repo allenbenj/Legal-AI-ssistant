@@ -192,7 +192,7 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
         # Get optimized Grok-Mini configuration for this agent
         self.llm_config = self.get_optimized_llm_config()
         self.logger.info(
-            f"DocumentProcessorAgentAgent configured with model: {self.llm_config.get('llm_model', 'default')}"
+            f"DocumentProcessorAgent configured with model: {self.llm_config.get('llm_model', 'default')}"
         )
         # Shared components (can be injected or fetched)
         # Assuming classifier has its own config or uses defaults

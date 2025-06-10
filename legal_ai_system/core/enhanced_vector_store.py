@@ -287,13 +287,26 @@ class EnhancedVectorStore:
         storage_path: str = "./storage/vectors",
         embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
         index_type: IndexType = IndexType.HNSW,
-        enable_gpu: bool = False
+        enable_gpu: bool = False,
+        document_index_path: str | None = None,
+        entity_index_path: str | None = None,
     ):
         """Initialize enhanced vector store with comprehensive configuration"""
         vector_logger.info("=== INITIALIZING ENHANCED VECTOR STORE ===")
         
         self.storage_path = Path(storage_path)
         self.storage_path.mkdir(parents=True, exist_ok=True)
+
+        self.document_index_path = (
+            Path(document_index_path)
+            if document_index_path is not None
+            else self.storage_path / "document_index.faiss"
+        )
+        self.entity_index_path = (
+            Path(entity_index_path)
+            if entity_index_path is not None
+            else self.storage_path / "entity_index.faiss"
+        )
         
         self.state = VectorStoreState.INITIALIZING
         self.index_type = index_type
@@ -915,6 +928,8 @@ def create_enhanced_vector_store(
         embedding_model=cfg.get("embedding_model_name", "sentence-transformers/all-MiniLM-L6-v2"),
         index_type=IndexType(cfg.get("DEFAULT_INDEX_TYPE", "HNSW")),
         enable_gpu=cfg.get("ENABLE_GPU_FAISS", False),
+        document_index_path=cfg.get("DOCUMENT_INDEX_PATH"),
+        entity_index_path=cfg.get("ENTITY_INDEX_PATH"),
     )
 
     # ------------------------------------------------------------------

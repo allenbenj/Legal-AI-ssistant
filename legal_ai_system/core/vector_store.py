@@ -65,6 +65,7 @@ class IndexType(Enum):
 
 @dataclass
 class VectorMetadata:
+    faiss_id: int
     vector_id: str
     document_id: str
     content_hash: str
@@ -79,7 +80,7 @@ class VectorMetadata:
     @classmethod
     def from_row_dict(cls, row_dict: Dict[str, Any]) -> "VectorMetadata":
         return cls(
-
+            faiss_id=int(row_dict.get("faiss_id", -1)),
             vector_id=str(row_dict["vector_id"]),
             document_id=str(row_dict["document_id"]),
             content_hash=str(row_dict["content_hash"]),
@@ -285,11 +286,24 @@ class VectorStore:
         embedding_provider: EmbeddingProviderVS,
         default_index_type: IndexType = IndexType.HNSW,
         enable_gpu_faiss: bool = False,
-
+        *,
+        document_index_path: str | None = None,
+        entity_index_path: str | None = None,
+        service_config: Optional[Dict[str, Any]] = None,
     ):
         vector_store_logger.info("=== VectorStore: Instance Creation START ===")
         self.config = service_config or {}
         self.storage_path = Path(storage_path_str)
+        self.document_index_path = (
+            Path(document_index_path)
+            if document_index_path is not None
+            else self.storage_path / "document_index.faiss"
+        )
+        self.entity_index_path = (
+            Path(entity_index_path)
+            if entity_index_path is not None
+            else self.storage_path / "entity_index.faiss"
+        )
 
         if not isinstance(embedding_provider, EmbeddingProviderVS):
             raise ConfigurationError(
@@ -452,6 +466,13 @@ class VectorStore:
                     );
                     CREATE INDEX IF NOT EXISTS idx_meta_doc_id ON vector_metadata(document_id);
                     CREATE INDEX IF NOT EXISTS idx_meta_hash ON vector_metadata(content_hash);
+                    CREATE TABLE IF NOT EXISTS faiss_id_map (
+                        vector_id TEXT PRIMARY KEY,
+                        index_target TEXT NOT NULL,
+                        faiss_id INTEGER NOT NULL
+                    );
+                    CREATE UNIQUE INDEX IF NOT EXISTS idx_faiss_id_map
+                        ON faiss_id_map(index_target, faiss_id);
 
         except sqlite3.Error as e:
             vs_index_logger.critical(
@@ -480,7 +501,7 @@ class VectorStore:
                 f"Creating FAISS index of type {index_type_enum.value} for {purpose} with dim {dim}"
             )
             base = self._create_base_index(index_type_enum, dim, purpose)
-            return faiss.IndexIDMap(base)
+            return faiss.IndexIDMap2(base)
 
             # For IVF types, nlist needs to be determined.
             # A common heuristic: 4*sqrt(N) to 16*sqrt(N), where N is number of vectors.
@@ -620,6 +641,8 @@ class VectorStore:
 
     def _load_faiss_indexes_sync(self):
         """Synchronous part of loading FAISS indexes from disk."""
+        doc_index_path = self.document_index_path
+        entity_index_path = self.entity_index_path
 
             if doc_index_path.exists():
                 try:
@@ -859,6 +882,11 @@ class VectorStore:
 
     def _save_faiss_indexes_sync(self):
         with self._sync_lock:  # Thread lock for FAISS C++ object access
+            doc_idx_path = self.document_index_path
+            tmp_doc_idx_path = doc_idx_path.with_suffix(".tmp")
+            ent_idx_path = self.entity_index_path
+            tmp_ent_idx_path = ent_idx_path.with_suffix(".tmp")
+
             self._update_disk_usage_stats()  # Update before saving
             if self.document_index and self.document_index.ntotal > 0:
 
@@ -902,6 +930,19 @@ class VectorStore:
     def _store_metadata_sync(self, metadata: VectorMetadata):
         db_path = self.metadata_db_path
         try:
+            with self._sync_lock, sqlite3.connect(db_path, timeout=5) as conn:
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO vector_metadata (
+                        faiss_id, vector_id, document_id, content_hash,
+                        content_preview, vector_norm, dimension,
+                        created_at_iso, last_accessed_iso, access_count,
+                        source_file, document_type, tags,
+                        confidence_score, embedding_model, custom_metadata
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    """,
+                    (
+                        metadata.faiss_id,
                         metadata.vector_id,
                         metadata.document_id,
                         metadata.content_hash,
@@ -911,11 +952,11 @@ class VectorStore:
                         metadata.created_at_iso,
                         metadata.last_accessed_iso,
                         metadata.access_count,
-                        metadata.source_file,
-                        metadata.document_type,
-                        json.dumps(metadata.tags or []),
-                        metadata.confidence_score,
-                        metadata.embedding_model,
+                        getattr(metadata, "source_file", None),
+                        getattr(metadata, "document_type", None),
+                        json.dumps(getattr(metadata, "tags", [])),
+                        getattr(metadata, "confidence_score", 1.0),
+                        getattr(metadata, "embedding_model", ""),
                         json.dumps(metadata.custom_metadata or {}),
                     ),
                 )
@@ -1243,9 +1284,16 @@ class VectorStore:
                 metadata_to_store.vector_norm = vector_norm_val
                 metadata_to_store.dimension = self.dimension
                 metadata_to_store.embedding_model = self.embedding_provider.model_name
+                metadata_to_store.faiss_id = faiss_id
             else:
                 metadata_to_store = VectorMetadata(
-
+                    faiss_id=faiss_id,
+                    vector_id=vector_id,
+                    document_id=document_id_ref,
+                    content_hash=content_hash,
+                    content_preview=content_to_embed[:250],
+                    vector_norm=vector_norm_val,
+                    dimension=self.dimension,
                 )
 
             await self._store_metadata_sync_via_executor(metadata_to_store)
@@ -1775,51 +1823,14 @@ class VectorStore:
 
     @detailed_log_function(LogCategory.VECTOR_STORE)
     async def delete_vector_async(self, vector_id: str, index_target: str = "document"):
-        """Delete a vector, its metadata, and remove the associated FAISS entry."""
         async with self._async_lock:
-
             loop = asyncio.get_event_loop()
 
-            # 1. Remove metadata from SQLite and in-memory cache
+
+            # Delete metadata and mapping
             await loop.run_in_executor(None, self._delete_metadata_sync, vector_id)
-            if vector_id in self.metadata_mem_cache:
-                del self.metadata_mem_cache[vector_id]
-
-            # 2. Look up FAISS ID and remove from index
-            faiss_id = await self._get_faiss_id_for_vector_id_async(vector_id, index_target)
-            if faiss_id is not None:
-                index = self.document_index if index_target.lower() == "document" else self.entity_index
-                if index is not None:
-                    try:
-                        index.remove_ids(np.array([faiss_id], dtype=np.int64))
-                        vs_index_logger.info(
-                            "Vector removed from FAISS index.",
-                            parameters={"vector_id": vector_id, "faiss_id": faiss_id, "index": index_target},
-                        )
-                    except Exception as e:
-                        vs_index_logger.error(
-                            "Error removing vector from FAISS index.",
-                            exception=e,
-                            parameters={"vector_id": vector_id, "faiss_id": faiss_id},
-                        )
-            else:
-                vs_index_logger.warning(
-                    f"FAISS ID not found for vector_id '{vector_id}'. Skipping index removal.")
-
-            # 3. Remove mapping entry
             await self._delete_id_mapping_async(vector_id)
-
-            # Update stats after deletion
-            self.stats.total_vectors = (
-                (self.document_index.ntotal if self.document_index else 0)
-                + (self.entity_index.ntotal if self.entity_index else 0)
-            )
-
-            # Schedule index compaction to handle gaps from removals
-            await self.optimization_request_queue.put(
-                {"type": "OPTIMIZE_INDEX_PERFORMANCE", "compact_storage": True}
-            )
-
+            self.metadata_mem_cache.pop(vector_id, None)
 
     def _delete_metadata_sync(self, vector_id: str):
         try:
@@ -2040,7 +2051,7 @@ class VectorStore:
         if len(ids) == 0:
             return
         vectors = np.vstack([index.reconstruct(int(fid)) for fid in ids])
-        new_index = faiss.IndexIDMap(
+        new_index = faiss.IndexIDMap2(
             self._create_base_index(self.index_type, self.dimension, index_target)
         )
         if (
@@ -2194,6 +2205,8 @@ def create_vector_store(
         embedding_provider=embedding_provider_instance,  # Pass the initialized provider
         default_index_type=IndexType(vs_cfg.get("DEFAULT_INDEX_TYPE", "HNSW").upper()),
         enable_gpu_faiss=bool(vs_cfg.get("ENABLE_GPU_FAISS", False)),
-
+        document_index_path=vs_cfg.get("DOCUMENT_INDEX_PATH"),
+        entity_index_path=vs_cfg.get("ENTITY_INDEX_PATH"),
+        service_config=vs_cfg,
     )
     return vs_instance

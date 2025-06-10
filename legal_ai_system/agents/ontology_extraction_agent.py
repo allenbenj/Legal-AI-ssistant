@@ -15,8 +15,8 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import spacy
 import yaml
-from sklearn.metrics.pairwise import (  # Optional, if scikit-learn is available
-    cosine_similarity,
+from sklearn.metrics.pairwise import (
+    cosine_similarity,  # Optional, if scikit-learn is available
 )
 from spacy.language import Language
 from spacy.tokens import Doc as SpacyDoc
@@ -34,6 +34,32 @@ from ..utils.ontology import (
     get_extraction_prompt,
     get_relationship_type_by_label,
 )
+
+
+class DSU:
+    """Lightweight Disjoint Set Union for clustering duplicates."""
+
+    def __init__(self, size: int) -> None:
+        self.parent = list(range(size))
+        self.rank = [0] * size
+
+    def find(self, x: int) -> int:
+        if self.parent[x] != x:
+            self.parent[x] = self.find(self.parent[x])
+        return self.parent[x]
+
+    def union(self, x: int, y: int) -> None:
+        root_x = self.find(x)
+        root_y = self.find(y)
+        if root_x == root_y:
+            return
+        if self.rank[root_x] < self.rank[root_y]:
+            self.parent[root_x] = root_y
+        elif self.rank[root_x] > self.rank[root_y]:
+            self.parent[root_y] = root_x
+        else:
+            self.parent[root_y] = root_x
+            self.rank[root_x] += 1
 
 
 @dataclass
@@ -92,7 +118,7 @@ class OntologyExtractionAgent(BaseAgent, MemoryMixin):
         # Get optimized Grok-Mini configuration for this agent
         self.llm_config = self.get_optimized_llm_config()
         self.logger.info(
-            f"OntologyExtractionAgentAgent configured with model: {self.llm_config.get('llm_model', 'default')}"
+            f"OntologyExtractionAgent configured with model: {self.llm_config.get('llm_model', 'default')}"
         )
         self.version = config.get("agent_version", "1.0.0")
         self.name = "OntologyExtractionAgent"
@@ -839,112 +865,40 @@ class OntologyExtractionAgent(BaseAgent, MemoryMixin):
                 type_specific_entities, key=lambda e: (-e.confidence, e.entity_id)
             )
 
-            # --- Span Overlap Deduplication ---
-            merged_by_span = [False] * len(sorted_entities)
-            span_dedup_list: List[ExtractedEntity] = []
+            dsu = DSU(len(sorted_entities))
+
+            # --- Span Overlap Union ---
             for i in range(len(sorted_entities)):
-                if merged_by_span[i]:
+                span_i = sorted_entities[i].span
+                if span_i == (0, 0):
                     continue
-                current_canonical = sorted_entities[i]
                 for j in range(i + 1, len(sorted_entities)):
-                    if merged_by_span[j]:
+                    span_j = sorted_entities[j].span
+                    if span_j == (0, 0):
                         continue
-                    entity_to_compare = sorted_entities[j]
                     if (
-                        current_canonical.span != (0, 0)
-                        and entity_to_compare.span != (0, 0)
-                        and self._get_jaccard_index(
-                            current_canonical.span, entity_to_compare.span
-                        )
+                        self._get_jaccard_index(span_i, span_j)
                         >= self.deduplication_span_overlap_threshold
                     ):
-                        self.logger.trace(
-                            f"Span Merging: '{entity_to_compare.entity_id}' into '{current_canonical.entity_id}' (Type: {entity_type})"
-                        )
-                        current_canonical = self._merge_entities(
-                            current_canonical, entity_to_compare
-                        )
-                        merged_by_span[j] = True
-                span_dedup_list.append(current_canonical)
+                        dsu.union(i, j)
 
-            self.logger.debug(
-                f"Type '{entity_type}': Span deduplication {len(type_specific_entities)} -> {len(span_dedup_list)} entities."
-            )
-            current_processing_list = span_dedup_list
-
-            # --- Semantic Similarity Deduplication ---
-            if self.embedding_manager and len(current_processing_list) > 1:
-                texts_to_embed = [
-                    e.source_text_snippet for e in current_processing_list
-                ]  # Or more representative text from attributes
+            # --- Semantic Similarity Union ---
+            if self.embedding_manager and len(sorted_entities) > 1:
+                texts_to_embed = [e.source_text_snippet for e in sorted_entities]
                 try:
-                    embeddings_list = await self.embedding_manager.embed_texts(
-                        texts_to_embed
-                    )
+                    embeddings_list = await self.embedding_manager.embed_texts(texts_to_embed)
                     if embeddings_list and len(embeddings_list) == len(texts_to_embed):
                         embeddings = np.array(embeddings_list)
                         similarity_matrix = cosine_similarity(embeddings)
-
-                        merged_by_semantic = [False] * len(current_processing_list)
-                        # Iterate through sorted (by confidence) current_processing_list
-                        # current_processing_list is already result of span dedup, and effectively sorted by confidence from that
-                        # Re-sort by confidence again to ensure primary for semantic merge is highest confidence
-
-                        # Need to map indices from sorted_sem list back to similarity_matrix indices
-                        # (which were based on order of current_processing_list)
-                        # Or, better, keep track of original indices for the matrix.
-                        # This is intricate. Let's simplify: iterate and merge based on the matrix for `current_processing_list`.
-
-                        temp_semantic_list: List[ExtractedEntity] = (
-                            []
-                        )  # Store entities chosen after semantic merge
-
-                        for i in range(len(current_processing_list)):
-                            if merged_by_semantic[i]:
-                                continue
-                            current_semantic_canonical = current_processing_list[
-                                i
-                            ]  # Get from original order for matrix indexing
-
-                            for j in range(i + 1, len(current_processing_list)):
-                                if merged_by_semantic[j]:
-                                    continue
+                        for i in range(len(sorted_entities)):
+                            for j in range(i + 1, len(sorted_entities)):
                                 if (
                                     similarity_matrix[i, j]
                                     >= self.deduplication_semantic_similarity_threshold
                                 ):
-                                    entity_to_compare_semantic = (
-                                        current_processing_list[j]
-                                    )
-                                    self.logger.trace(
-                                        f"Semantic Merging (Sim: {similarity_matrix[i,j]:.3f}): "
-                                        f"'{entity_to_compare_semantic.entity_id}' into '{current_semantic_canonical.entity_id}' (Type: {entity_type})"
-                                    )
-                                    # Ensure current_semantic_canonical is the one with higher confidence if merging
-                                    if (
-                                        entity_to_compare_semantic.confidence
-                                        > current_semantic_canonical.confidence
-                                    ):
-                                        (
-                                            current_semantic_canonical,
-                                            entity_to_compare_semantic,
-                                        ) = (
-                                            entity_to_compare_semantic,
-                                            current_semantic_canonical,
-                                        )
-                                        # If we swapped, the original `i` is now merged into `j`. Mark `i` as merged.
-                                        # This makes direct iteration tricky. A DSU approach is cleaner for complex merges.
-                                        # For now, simple pairwise:
-                                    current_semantic_canonical = self._merge_entities(
-                                        current_semantic_canonical,
-                                        entity_to_compare_semantic,
-                                    )
-                                    merged_by_semantic[j] = True
-                            temp_semantic_list.append(current_semantic_canonical)
-
-                        current_processing_list = temp_semantic_list
+                                    dsu.union(i, j)
                         self.logger.debug(
-                            f"Type '{entity_type}': Semantic deduplication -> {len(current_processing_list)} entities."
+                            f"Type '{entity_type}': semantic similarity matrix processed"
                         )
                     else:
                         self.logger.warning(
@@ -956,7 +910,26 @@ class OntologyExtractionAgent(BaseAgent, MemoryMixin):
                         exc_info=True,
                     )
 
-            final_deduplicated_entities.extend(current_processing_list)
+            clusters: Dict[int, List[int]] = {}
+            for idx in range(len(sorted_entities)):
+                root = dsu.find(idx)
+                clusters.setdefault(root, []).append(idx)
+
+            self.logger.debug(
+                f"Type '{entity_type}': formed {len(clusters)} clusters from {len(sorted_entities)} entities."
+            )
+
+            for indices in clusters.values():
+                indices.sort(
+                    key=lambda i: (
+                        -sorted_entities[i].confidence,
+                        sorted_entities[i].entity_id,
+                    )
+                )
+                canonical = sorted_entities[indices[0]]
+                for idx in indices[1:]:
+                    canonical = self._merge_entities(canonical, sorted_entities[idx])
+                final_deduplicated_entities.append(canonical)
 
         self.logger.info(
             f"Advanced deduplication complete. Total entities: {len(final_deduplicated_entities)}."
