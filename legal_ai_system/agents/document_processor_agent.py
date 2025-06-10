@@ -10,6 +10,7 @@ Integrates optional dependencies gracefully and uses shared components.
 from __future__ import annotations
 
 import asyncio
+import aiofiles
 import hashlib
 import io
 import mimetypes
@@ -467,9 +468,7 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
                 ),  # 'basic' or 'full'
             }
 
-            handler_result = await asyncio.to_thread(
-                handler_method, file_path, processing_options
-            )
+            handler_result = await handler_method(file_path, processing_options)
 
             # Populate output from handler result
             output.text_content = handler_result.get("text_content")
@@ -557,6 +556,200 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
         return output.to_dict()
 
     # --- ASYNC WRAPPERS FOR HANDLERS ---
+    async def _process_pdf_async(
+        self, file_path: Path, options: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        return await asyncio.to_thread(self._process_pdf_sync, file_path, options)
+
+    async def _process_docx_async(
+        self, file_path: Path, options: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        return await asyncio.to_thread(self._process_docx_sync, file_path, options)
+
+    async def _process_doc_async(
+        self, file_path: Path, options: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        try:
+            return await self._process_docx_async(file_path, options)
+        except Exception as e:
+            raise DocumentProcessingError(
+                "Legacy .doc files are not fully supported.", file_path=file_path, cause=e
+            )
+
+    async def _process_txt_async(
+        self, file_path: Path, options: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        file_logger.info(f"Processing TXT (async): {file_path.name}")
+        encodings_to_try = ["utf-8", "latin-1", "cp1252", "utf-16"]
+        content = None
+        encoding_used = "unknown"
+        notes = []
+
+        for enc in encodings_to_try:
+            try:
+                async with aiofiles.open(file_path, "r", encoding=enc) as f:
+                    content = await f.read()
+                encoding_used = enc
+                notes.append(f"Read with encoding: {enc}")
+                break
+            except (UnicodeDecodeError, LookupError):
+                continue
+
+        if content is None:
+            try:
+                async with aiofiles.open(file_path, "rb") as fb:
+                    raw_bytes = await fb.read()
+                content = raw_bytes.decode("utf-8", errors="replace")
+                encoding_used = "utf-8-replace"
+                notes.append("Read as UTF-8 replacing errors.")
+            except Exception as e:
+                raise DocumentProcessingError(
+                    f"Could not read TXT file {file_path.name}: {str(e)}",
+                    file_path=file_path,
+                    cause=e,
+                )
+
+        if options.get("clean_text", True):
+            content = self._common_text_cleaning(content) or ""
+        return {
+            "text_content": content,
+            "extracted_metadata": {"encoding": encoding_used, "source_format": "txt"},
+            "processing_notes": notes,
+        }
+
+    async def _process_markdown_async(
+        self, file_path: Path, options: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        file_logger.info(f"Processing Markdown (async): {file_path.name}")
+        notes = []
+        text_content = ""
+        if dep_manager.is_available("markdown") and dep_manager.is_available("bs4"):
+            try:
+                async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
+                    md_content = await f.read()
+                html = markdown.markdown(md_content, extensions=["extra", "tables", "fenced_code"])  # type: ignore
+                soup = BeautifulSoup(html, "html.parser")  # type: ignore
+                for element in soup.find_all(
+                    ["p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "pre", "code"]
+                ):
+                    text_content += element.get_text(separator=" ", strip=True) + "\n"
+                if not text_content.strip():
+                    text_content = soup.get_text(separator="\n", strip=True)
+                notes.append("Processed Markdown using python-markdown and BeautifulSoup.")
+            except Exception as e:
+                notes.append(f"Error processing Markdown with libraries: {str(e)}. Falling back to text.")
+                return await self._process_txt_async(file_path, options)
+        else:
+            notes.append("Markdown/BeautifulSoup unavailable. Reading as plain text.")
+            return await self._process_txt_async(file_path, options)
+
+        if options.get("clean_text", True):
+            text_content = self._common_text_cleaning(text_content) or ""
+        return {
+            "text_content": text_content,
+            "extracted_metadata": {"source_format": "markdown"},
+            "processing_notes": notes,
+        }
+
+    async def _process_html_async(
+        self, file_path: Path, options: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        file_logger.info(f"Processing HTML (async): {file_path.name}")
+        notes = []
+        text_content = ""
+        if not dep_manager.is_available("bs4"):
+            raise DocumentProcessingError(
+                "BeautifulSoup4 unavailable for HTML.", file_path=file_path
+            )
+
+        try:
+            async with aiofiles.open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                html_content = await f.read()
+            soup = BeautifulSoup(html_content, "html.parser")  # type: ignore
+
+            for script_or_style in soup(["script", "style"]):
+                script_or_style.decompose()
+
+            text_parts = []
+            for element in soup.find_all(
+                ["p", "h1", "h2", "h3", "h4", "h5", "h6", "div", "li", "td", "th"]
+            ):
+                block_text = element.get_text(separator=" ", strip=True)
+                if block_text:
+                    text_parts.append(block_text)
+            text_content = "\n\n".join(text_parts)
+
+            if not text_content.strip():
+                text_content = soup.get_text(separator="\n", strip=True)
+
+            extracted_meta = {
+                "source_format": "html",
+                "title": soup.title.string if soup.title else None,
+            }
+            notes.append("Processed HTML using BeautifulSoup.")
+        except Exception as e:
+            notes.append(f"Error processing HTML: {str(e)}. Reading as plain text.")
+            file_logger.error(f"Error processing HTML {file_path.name}.", exception=e)
+            return await self._process_txt_async(file_path, options)
+
+        if options.get("clean_text", True):
+            text_content = self._common_text_cleaning(text_content) or ""
+        return {
+            "text_content": text_content,
+            "extracted_metadata": extracted_meta,
+            "processing_notes": notes,
+        }
+
+    async def _process_rtf_async(
+        self, file_path: Path, options: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        file_logger.info(f"Processing RTF (async): {file_path.name}")
+        notes = []
+        text_content = ""
+        if dep_manager.is_available("striprtf"):
+            try:
+                async with aiofiles.open(file_path, "r", encoding="ascii", errors="ignore") as f:
+                    rtf_content = await f.read()
+                text_content = await asyncio.to_thread(rtf_to_text, rtf_content)  # type: ignore
+                notes.append("Processed RTF using striprtf library.")
+            except Exception as e:
+                notes.append(
+                    f"Error processing RTF with striprtf: {str(e)}. Fallback to text."
+                )
+                return await self._process_txt_async(file_path, options)
+        else:
+            notes.append(
+                "striprtf library not available for RTF. Reading as plain text (may include RTF markup)."
+            )
+            return await self._process_txt_async(file_path, options)
+
+        if options.get("clean_text", True):
+            text_content = self._common_text_cleaning(text_content) or ""
+        return {
+            "text_content": text_content,
+            "extracted_metadata": {"source_format": "rtf"},
+            "processing_notes": notes,
+        }
+
+    async def _process_excel_async(
+        self, file_path: Path, options: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        return await asyncio.to_thread(self._process_excel_sync, file_path, options)
+
+    async def _process_csv_async(
+        self, file_path: Path, options: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        return await asyncio.to_thread(self._process_csv_sync, file_path, options)
+
+    async def _process_powerpoint_async(
+        self, file_path: Path, options: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        return await asyncio.to_thread(self._process_powerpoint_sync, file_path, options)
+
+    async def _process_image_async(
+        self, file_path: Path, options: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        return await asyncio.to_thread(self._process_image_sync, file_path, options)
 
     # --- SYNCHRONOUS FILE PROCESSING LOGIC ---
     def _common_text_cleaning(self, text: Optional[str]) -> Optional[str]:
@@ -569,7 +762,7 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
         )  # Remove most control characters except \t, \n, \r
         return text.strip()
 
-    def _sync_process_pdf(
+    def _process_pdf_sync(
         self, file_path: Path, options: Dict[str, Any]
     ) -> Dict[str, Any]:
         file_logger.info(f"Processing PDF (sync): {file_path.name}")
@@ -671,7 +864,7 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
             "image_ocr_results": image_ocr_res if image_ocr_res else None,
         }
 
-    def _sync_process_docx(
+    def _process_docx_sync(
         self, file_path: Path, options: Dict[str, Any]
     ) -> Dict[str, Any]:
         file_logger.info(f"Processing DOCX (sync): {file_path.name}")
@@ -744,7 +937,7 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
             "table_count": len(tables_data),
         }
 
-    def _sync_process_txt(
+    def _process_txt_sync(
         self, file_path: Path, options: Dict[str, Any]
     ) -> Dict[str, Any]:
         file_logger.info(f"Processing TXT (sync): {file_path.name}")
@@ -785,7 +978,7 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
             "processing_notes": notes,
         }
 
-    def _sync_process_markdown(
+    def _process_markdown_sync(
         self, file_path: Path, options: Dict[str, Any]
     ) -> Dict[str, Any]:
         file_logger.info(f"Processing Markdown (sync): {file_path.name}")
@@ -811,12 +1004,12 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
                 notes.append(
                     f"Error processing Markdown with libraries: {str(e)}. Falling back to text."
                 )
-                return self._sync_process_txt(
+                return self._process_txt_sync(
                     file_path, options
                 )  # Fallback to plain text reading
         else:
             notes.append("Markdown/BeautifulSoup unavailable. Reading as plain text.")
-            return self._sync_process_txt(file_path, options)
+            return self._process_txt_sync(file_path, options)
 
         if options.get("clean_text", True):
             text_content = self._common_text_cleaning(text_content) or ""
@@ -826,7 +1019,7 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
             "processing_notes": notes,
         }
 
-    def _sync_process_html(
+    def _process_html_sync(
         self, file_path: Path, options: Dict[str, Any]
     ) -> Dict[str, Any]:
         file_logger.info(f"Processing HTML (sync): {file_path.name}")
@@ -867,7 +1060,7 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
         except Exception as e:
             notes.append(f"Error processing HTML: {str(e)}. Reading as plain text.")
             file_logger.error(f"Error processing HTML {file_path.name}.", exception=e)
-            return self._sync_process_txt(file_path, options)  # Fallback
+            return self._process_txt_sync(file_path, options)  # Fallback
 
         if options.get("clean_text", True):
             text_content = self._common_text_cleaning(text_content) or ""
@@ -877,7 +1070,7 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
             "processing_notes": notes,
         }
 
-    def _sync_process_rtf(
+    def _process_rtf_sync(
         self, file_path: Path, options: Dict[str, Any]
     ) -> Dict[str, Any]:
         file_logger.info(f"Processing RTF (sync): {file_path.name}")
@@ -895,12 +1088,12 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
                 notes.append(
                     f"Error processing RTF with striprtf: {str(e)}. Fallback to text."
                 )
-                return self._sync_process_txt(file_path, options)
+                return self._process_txt_sync(file_path, options)
         else:
             notes.append(
                 "striprtf library not available for RTF. Reading as plain text (may include RTF markup)."
             )
-            return self._sync_process_txt(file_path, options)
+            return self._process_txt_sync(file_path, options)
 
         if options.get("clean_text", True):
             text_content = self._common_text_cleaning(text_content) or ""
@@ -910,7 +1103,7 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
             "processing_notes": notes,
         }
 
-    def _sync_process_excel(
+    def _process_excel_sync(
         self, file_path: Path, options: Dict[str, Any]
     ) -> Dict[str, Any]:
         file_logger.info(f"Processing Excel (sync): {file_path.name}")
@@ -1003,7 +1196,7 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
             "table_count": len(tables_data),
         }
 
-    def _sync_process_csv(
+    def _process_csv_sync(
         self, file_path: Path, options: Dict[str, Any]
     ) -> Dict[str, Any]:
         file_logger.info(f"Processing CSV (sync): {file_path.name}")
@@ -1087,7 +1280,7 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
             "table_count": len(tables_data),
         }
 
-    def _sync_process_powerpoint(
+    def _process_powerpoint_sync(
         self, file_path: Path, options: Dict[str, Any]
     ) -> Dict[str, Any]:
         file_logger.info(f"Processing PowerPoint (sync): {file_path.name}")
@@ -1178,7 +1371,7 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
             "processing_notes": notes,
         }
 
-    def _sync_process_image(
+    def _process_image_sync(
         self, file_path: Path, options: Dict[str, Any]
     ) -> Dict[str, Any]:
         file_logger.info(f"Processing Image for OCR (sync): {file_path.name}")
