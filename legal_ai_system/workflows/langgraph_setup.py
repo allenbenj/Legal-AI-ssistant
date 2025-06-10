@@ -41,31 +41,24 @@ if TYPE_CHECKING:  # pragma: no cover - hint for type checkers
 
 from ..agents.agent_nodes import AnalysisNode, SummaryNode
 from .nodes import HumanReviewNode, ProgressTrackingNode
-from ..utils.reviewable_memory import ReviewableMemory
-from ..api.websocket_manager import ConnectionManager
 
 
-def _uppercase(text: str) -> str:
-    return text.upper()
+try:  # pragma: no cover - optional dependency at runtime
+    from ..utils.reviewable_memory import ReviewableMemory
+except Exception:  # pragma: no cover - during tests
+    ReviewableMemory = Any  # type: ignore
 
 
-def _merge_text(results: list[str]) -> str:
-    return "\n".join(results)
-
-
-def build_graph(topic: str) -> StateGraph:
-    """Build a LangGraph pipeline demonstrating advanced features."""
 
     graph = StateGraph()
 
     graph.add_node("analysis", AnalysisNode(topic))
-    review_memory = ReviewableMemory()
-    graph.add_node("human_review", HumanReviewNode(review_memory))
-    manager = ConnectionManager()
+
     graph.add_node("summary", SummaryNode())
     graph.add_node("echo", lambda x: x)
     graph.add_node("combine", lambda items: " ".join(items))
     graph.add_node("final", lambda x: x)
+
 
 
     return graph
