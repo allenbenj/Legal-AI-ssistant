@@ -82,8 +82,29 @@ LangGraph based workflows use `AnalysisNode` and `SummaryNode` (see `agents/agen
 
 ### Typed Workflow Engine
 
-
 Overall, the ServiceContainer acts as the hub connecting agents and services, enabling workflows like `RealTimeAnalysisWorkflow` and integration via APIs or GUI components.
+
+### Service Container Initialization
+
+The factory `create_service_container` builds the container in a defined order so that each component can rely on the services created before it.  The key steps are:
+
+1. **ConfigurationManager** – loaded first so later services can read application settings.
+2. **PersistenceManager** – establishes database and Redis connections.  `UserRepository` and security components depend on it.
+3. **UserRepository** and **SecurityManager** – authentication services are configured using persistence.
+4. **LLMManager** and **ModelSwitcher** – provide language model access for downstream agents.
+5. **EmbeddingManager** – used by the vector store for semantic search.
+6. **KnowledgeGraphManager** and **VectorStore** – storage managers required by the graph layer.
+7. **RealTimeGraphManager** – synchronizes updates between the graph and vector store.
+8. **UnifiedMemoryManager** and **ReviewableMemory** – hold workflow state and review items.
+9. **ViolationReviewDB** – persistence for compliance decisions.
+10. **RealTimeAnalysisWorkflow** – created after graph and memory managers are ready.
+11. **Agent factories** and LangGraph node classes – registered for workflow use.
+12. **WorkflowOrchestrator** – retrieved from the container after the workflow is registered.
+13. Finally all services are initialized via `initialize_all_services`.
+
+This ordering ensures that persistence and graph managers exist before they are consumed by higher level components like the workflow and orchestrator.
+
+Workflow orchestrators obtain the `RealTimeAnalysisWorkflow` instance from the service container when executing a document pipeline.  This reuse avoids creating duplicate workflows and ensures updates are coordinated through the same persistence and graph managers.
 
 ### `handle_document_upload` response
 
@@ -113,3 +134,22 @@ Documents move through several states as they are processed:
 6. **error** – an unrecoverable issue occurred during processing.
 
 Tracking these states helps the UI report progress and highlight any processing issues.
+### Workflow Orchestrator
+
+`WorkflowOrchestrator` is registered with the service container. During creation the container instance is passed into its constructor, which then instantiates `RealTimeAnalysisWorkflow` using that same container. The workflow fetches managers such as persistence, knowledge graph and vector store services from the container so the orchestrator can execute document processing without directly managing those dependencies.
+
+### Service Container Initialization Order
+
+The `create_service_container` function wires services together in a specific order:
+
+1. **ConfigurationManager** – loads settings used by every other component.
+2. **PersistenceManager** followed by **UserRepository**.
+3. **SecurityManager** and its **AuthenticationManager** which depend on persistence.
+4. **LLMManager**, **ModelSwitcher** and **EmbeddingManager** for language model operations.
+5. **KnowledgeGraphManager** and **VectorStore**, then **RealTimeGraphManager**.
+6. **UnifiedMemoryManager** and **ReviewableMemory** for state storage.
+7. **ViolationReviewDB** for tracking policy violations.
+8. **RealTimeAnalysisWorkflow** and the various agent factories.
+9. LangGraph node factories and finally **WorkflowOrchestrator**.
+10. The container then calls `initialize_all_services` so each registered service can prepare its resources.
+

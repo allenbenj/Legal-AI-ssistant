@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React, { useState, useEffect, createContext, useContext } from 'react';
+import React, { useState, useEffect, createContext, useContext, useRef, useCallback } from 'react';
 import {
   Search, Upload, FileText, Users, Settings, Shield,
   Activity, Database, Cpu, AlertCircle, CheckCircle,
@@ -16,11 +16,13 @@ import {
 
 
 
+
 // Context for global state management
 const AppContext = createContext({});
 
 // Main App Component
 export default function LegalAISystem() {
+  const { token } = useAuth();
   const [currentView, setCurrentView] = useState('dashboard');
   const [notifications, setNotifications] = useState([]);
   const [systemStatus, setSystemStatus] = useState({
@@ -44,6 +46,10 @@ export default function LegalAISystem() {
     currentView,
     setCurrentView
   };
+
+  if (!token) {
+    return <Login />;
+  }
 
   return (
     <ErrorBoundary level="critical">
@@ -148,6 +154,7 @@ function Sidebar() {
 // Header Component
 function Header() {
   const { systemStatus } = useContext(AppContext);
+  const { logout } = useAuth();
   const healthPercentage = (systemStatus.services.healthy / systemStatus.services.total) * 100;
 
   return (
@@ -179,6 +186,7 @@ function Header() {
           <div className="flex items-center gap-2">
             <img src="/api/placeholder/32/32" alt="User" className="w-8 h-8 rounded-full" />
             <span className="text-sm font-medium">Admin User</span>
+            <Button variant="outline" size="sm" onClick={logout}>Logout</Button>
           </div>
         </div>
       </div>
@@ -212,7 +220,7 @@ function NotificationArea({ notifications }) {
 // Dashboard Component
 function Dashboard() {
   const { systemStatus, setSystemStatus } = useContext(AppContext);
-  const idRef = React.useRef<string>('client-' + Math.random().toString(36).slice(2));
+  const idRef = useRef<string>('client-' + Math.random().toString(36).slice(2));
   const { status, connected } = useRealtimeSystemStatus(idRef.current);
 
   React.useEffect(() => {
@@ -294,8 +302,14 @@ function Dashboard() {
 // Document Processing Interface
 function DocumentProcessing() {
   const { addNotification } = useContext(AppContext);
-  const { isLoading, error, data: documents, executeAsync } =
-    useLoadingState<Array<{ id: number; name: string; status: string; progress: number }>>();
+  const {
+    isLoading,
+    error,
+    data: documents,
+    executeAsync,
+    setData,
+  } = useLoadingState<Array<{ id: number; name: string; status: string; progress: number }>>();
+  const idRef = useRef<string>('client-' + Math.random().toString(36).slice(2));
 
   useEffect(() => {
     executeAsync(() =>
@@ -311,6 +325,41 @@ function DocumentProcessing() {
   const handleFileUpload = () => {
     addNotification('File uploaded successfully', 'success');
   };
+
+  const updateHandler = useCallback(
+    (update: any) => {
+      if (update.type === 'processing_error') {
+        addNotification(`Processing failed for document ${update.document_id}`, 'error');
+      } else if (update.type === 'processing_progress') {
+        setData(prev =>
+          prev?.map(doc =>
+            doc.id === update.document_id
+              ? {
+                  ...doc,
+                  progress: Math.round((update.progress ?? 0) * 100),
+                  status: update.progress === 1 ? 'completed' : 'processing',
+                }
+              : doc
+          ) ?? prev
+        );
+        if (update.progress === 1) {
+          addNotification(`Document ${update.document_id} processed`, 'success');
+        }
+      }
+    },
+    [addNotification, setData]
+  );
+
+  useDocumentUpdates(
+    idRef.current,
+    documents ? documents.map(d => d.id) : [],
+    updateHandler,
+    msg => {
+      if (msg.message) {
+        addNotification(msg.message, 'info');
+      }
+    }
+  );
 
   return (
     <div className="space-y-6">
