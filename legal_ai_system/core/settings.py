@@ -361,7 +361,7 @@ def get_vector_store_path(store_type: str) -> Path:
         raise ValueError(f"Unknown vector store type: {store_type}")
 
 def is_supported_file(file_path: Union[str, Path]) -> bool:
-    """Check if file format is supported"""
+    """Check if file format is supported."""
     if isinstance(file_path, str):
         file_path = Path(file_path)
     return file_path.suffix.lower() in settings.supported_formats

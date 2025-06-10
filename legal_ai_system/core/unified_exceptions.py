@@ -571,6 +571,25 @@ class LLMProviderError(LegalAIException):
         super().__init__(message, **kwargs)
 
 
+class ThirdPartyError(LegalAIException):
+    """Errors originating from third-party libraries or services."""
+
+    def __init__(
+        self,
+        message: str,
+        provider_name: Optional[str] = None,
+        cause: Optional[Exception] = None,
+        **kwargs,
+    ):
+        kwargs.setdefault("category", ErrorCategory.SYSTEM)
+        kwargs.setdefault("recovery_strategy", ErrorRecoveryStrategy.RETRY)
+        if provider_name:
+            kwargs.setdefault("technical_details", {})["provider_name"] = provider_name
+        if cause is not None:
+            kwargs.setdefault("technical_details", {})["cause"] = str(cause)
+        super().__init__(message, cause=cause, **kwargs)
+
+
 class GUIError(LegalAIException):
     """User interface and interaction errors"""
 

@@ -10,7 +10,9 @@ import asyncio
 import time
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
+from pathlib import Path
 
 from ..agents.document_processor_agent import DocumentProcessorAgent
 from ..agents.document_rewriter_agent import DocumentRewriterAgent
@@ -132,9 +134,6 @@ class RealTimeAnalysisWorkflow:
         await self.reviewable_memory.initialize()
 
         # Register callbacks between components
-        self.graph_manager.register_update_callback(
-            lambda et, data: asyncio.create_task(self._on_graph_update(et, data))
-        )
 
         self.logger.info("Real-time analysis workflow initialized")
 
@@ -611,7 +610,7 @@ class RealTimeAnalysisWorkflow:
 
         return LegalDocument(
             id=document_id,
-            file_path=document_path,
+            file_path=Path(document_path),
             content=text_override or self._extract_text_from_result(result),
             metadata={"processing_result": result},
         )
@@ -625,7 +624,7 @@ class RealTimeAnalysisWorkflow:
             entity_id=f"{validation_result.consensus_type}_{hash(validation_result.entity_text) % 10000}",
             attributes={"name": validation_result.entity_text},
             confidence=validation_result.confidence,
-            source_text=validation_result.entity_text,
+            source_text_snippet=validation_result.entity_text,
             span=(0, len(validation_result.entity_text)),
         )
 
