@@ -9,7 +9,6 @@
 # - Integration with all Legal AI System components
 
 
-import asyncio
 import json
 import logging
 import os
@@ -19,7 +18,7 @@ from collections import defaultdict
 
 # import logging # Replaced by detailed_logging
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
+import datetime
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Union
@@ -53,7 +52,6 @@ except Exception:  # pragma: no cover - fallback for testing/archive usage
 # Assuming these will be structured correctly during refactoring
 # Use absolute imports from the project root 'legal_ai_system'
 try:
-    from fastapi import Form  # Added Form
     from fastapi import (
         BackgroundTasks,
         Depends,
@@ -84,14 +82,7 @@ from strawberry.fastapi import GraphQLRouter  # type: ignore
 from strawberry.types import Info  # type: ignore
 
 
-    from legal_ai_system.core.detailed_logging import (
-        LogCategory,
-        get_detailed_logger,
-    )
 
-
-    SERVICES_AVAILABLE = True
-except ImportError as e:
     # This fallback is for when main.py might be run before the full system is in place
     # or if there are circular dependencies during setup.
     print(
@@ -132,41 +123,22 @@ except ImportError as e:
             self.last_login = last_login
             self.is_active = is_active
 
-    class ConnectionManager:  # type: ignore
-        async def connect(self, websocket, client_id):
-            await websocket.accept()
 
-        def disconnect(self, client_id):
-            pass
-
-        async def broadcast_to_topic(self, message, topic):
-            pass
-
-        async def subscribe_to_topic(self, client_id, topic):
-            pass
-
-        async def unsubscribe_from_topic(self, client_id, topic):
-            pass
-
-        async def send_personal_message(self, message, client_id):
-            pass
-
-    class RealtimePublisher:  # type: ignore
-        def __init__(self, manager):
-            pass
-
-        def start_system_monitoring(self, interval: float = 1.0) -> None:
-            pass
-
-        def stop(self) -> None:
-            pass
 
     class _SettingsFallback:
-        frontend_dist_path = (
-            Path(__file__).resolve().parent.parent / "frontend" / "dist"
-        )
+        """Minimal settings fallback when core settings are unavailable."""
 
-    settings = _SettingsFallback()
+        base_dir = Path(__file__).resolve().parent.parent
+        data_dir = base_dir / "storage"
+        frontend_dist_path = base_dir / "frontend" / "dist"
+        logs_dir = base_dir / "logs"
+
+    try:
+        from legal_ai_system.core.settings import LegalAISettings
+
+        settings = LegalAISettings()
+    except Exception:  # pragma: no cover - fallback for missing dependencies
+        settings = _SettingsFallback()
 
 
 # Initialize logger for this module
@@ -178,12 +150,6 @@ security_manager_instance: Optional["SecurityManager"] = None
 websocket_manager_instance: Optional[ConnectionManager] = None
 realtime_publisher_instance: Optional[RealtimePublisher] = None
 
-# Ensure the data directory exists before defining workflow storage paths
-Path(settings.data_dir).mkdir(parents=True, exist_ok=True)
-
-# Workflow configuration storage
-WORKFLOW_CONFIG_FILE = Path(settings.data_dir) / "workflow_configs.json"
-workflow_configs: Dict[str, WorkflowConfig] = {}
 
 
 def load_workflow_configs() -> None:
@@ -215,9 +181,6 @@ def save_workflow_configs() -> None:
                 indent=2,
             )
     except Exception as e:  # pragma: no cover - I/O failure shouldn't crash
-        main_api_logger.error(
-            "Failed to save workflow configurations.", exception=e
-        )
 
 
 
@@ -311,7 +274,7 @@ async def lifespan(app: FastAPI):
     main_api_logger.info("🛑 Shutting down Legal AI System API via lifespan...")
 
     # Persist workflow configurations
-    save_workflow_configs()
+
     main_api_logger.info("Workflow configurations saved.")
     # if monitoring_task: monitoring_task.cancel(); await asyncio.gather(monitoring_task, return_exceptions=True)
     if service_container_instance and hasattr(service_container_instance, "shutdown"):
@@ -410,15 +373,6 @@ class ProcessingRequest(BaseModel):
     # Add other relevant options from RealTimeAnalysisWorkflow if user-configurable
 
 
-class WorkflowConfig(ProcessingRequest):
-    """Workflow preset configuration model."""
-
-    id: str = PydanticField(default_factory=lambda: str(uuid.uuid4()))
-    name: str
-    description: Optional[str] = None
-    created_at: datetime = PydanticField(
-        default_factory=lambda: datetime.now(tz=timezone.utc)
-    )
 
 
 class WorkflowConfig(ProcessingRequest):
@@ -428,66 +382,10 @@ class WorkflowConfig(ProcessingRequest):
     name: str
     description: Optional[str] = None
     created_at: datetime = PydanticField(
-        default_factory=lambda: datetime.now(tz=datetime.timezone.utc)
+        default_factory=lambda: datetime.datetime.now(tz=datetime.timezone.utc)
     )
     updated_at: datetime = PydanticField(
-        default_factory=lambda: datetime.now(tz=datetime.timezone.utc)
-    )
-
-
-class WorkflowConfigCreate(ProcessingRequest):
-    """Payload for creating a workflow preset."""
-
-    name: str
-    description: Optional[str] = None
-
-
-class WorkflowConfigUpdate(ProcessingRequest):
-    """Payload for updating a workflow preset."""
-
-    name: Optional[str] = None
-    description: Optional[str] = None
-
-
-class WorkflowConfig(ProcessingRequest):
-    """Preset configuration for a document processing workflow."""
-
-    id: str = PydanticField(default_factory=lambda: uuid.uuid4().hex)
-    name: str
-    description: Optional[str] = None
-    created_at: datetime = PydanticField(
-        default_factory=lambda: datetime.now(tz=datetime.timezone.utc)
-    )
-    updated_at: datetime = PydanticField(
-        default_factory=lambda: datetime.now(tz=datetime.timezone.utc)
-    )
-
-
-class WorkflowConfigCreate(ProcessingRequest):
-    """Payload for creating a workflow preset."""
-
-    name: str
-    description: Optional[str] = None
-
-
-class WorkflowConfigUpdate(ProcessingRequest):
-    """Payload for updating a workflow preset."""
-
-    name: Optional[str] = None
-    description: Optional[str] = None
-
-
-class WorkflowConfig(ProcessingRequest):
-    """Preset configuration for a document processing workflow."""
-
-    id: str = PydanticField(default_factory=lambda: uuid.uuid4().hex)
-    name: str
-    description: Optional[str] = None
-    created_at: datetime = PydanticField(
-        default_factory=lambda: datetime.now(tz=datetime.timezone.utc)
-    )
-    updated_at: datetime = PydanticField(
-        default_factory=lambda: datetime.now(tz=datetime.timezone.utc)
+        default_factory=lambda: datetime.datetime.now(tz=datetime.timezone.utc)
     )
 
 
@@ -529,16 +427,16 @@ class SystemHealthResponse(BaseModel):
     active_documents_count: int  # Renamed
     pending_reviews_count: int  # Renamed
     timestamp: str = PydanticField(
-        default_factory=lambda: datetime.now(tz=datetime.timezone.utc).isoformat()
+        default_factory=lambda: datetime.datetime.now(tz=datetime.timezone.utc).isoformat()
     )
 
 
 # --- JWT Utilities & Auth Mock ---
 # In a real app, these would use SecurityManager
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+def create_access_token(data: dict, expires_delta: Optional[datetime.timedelta] = None) -> str:
     to_encode = data.copy()
-    expire_time = datetime.now(tz=datetime.timezone.utc) + (
-        expires_delta or timedelta(hours=Constants.Time.SESSION_TIMEOUT_HOURS)
+    expire_time = datetime.datetime.now(tz=datetime.timezone.utc) + (
+        expires_delta or datetime.timedelta(hours=Constants.Time.SESSION_TIMEOUT_HOURS)
     )
     to_encode.update(
         {
@@ -563,7 +461,7 @@ async def get_current_active_user(
             username="test_user",
             email="test@example.com",
             access_level=AccessLevel.ADMIN,
-            last_login=datetime.now(tz=datetime.timezone.utc),
+            last_login=datetime.datetime.now(tz=datetime.timezone.utc),
         )
 
     token = credentials.credentials
@@ -620,105 +518,6 @@ def require_permission(required_level: AccessLevel):
         return current_user
 
     return permission_checker
-
-
-# --- WebSocket Manager ---
-class WebSocketManager:
-    # ... (WebSocketManager from original file, with logging using main_api_logger.getChild("WebSocketManager"))
-    # I will assume this class is defined as in the original main.py and add logging.
-    def __init__(self):
-        self.active_connections: Dict[str, WebSocket] = {}  # user_id -> WebSocket
-        self.subscriptions: Dict[str, Set[str]] = defaultdict(
-            set
-        )  # user_id -> set of topics
-        self.topic_subscribers: Dict[str, Set[str]] = defaultdict(
-            set
-        )  # topic -> set of user_ids
-        self.logger = main_api_logger.getChild("WebSocketManager")  # Specific logger
-
-    async def connect(self, websocket: WebSocket, user_id: str):
-        await websocket.accept()
-        self.active_connections[user_id] = websocket
-        self.logger.info(
-            f"WebSocket connected.",
-            parameters={"user_id": user_id, "client": str(websocket.client)},
-        )
-        await self.send_personal_message(
-            {"type": "connection_ack", "status": "connected", "user_id": user_id},
-            user_id,
-        )
-
-    def disconnect(self, user_id: str):
-        if user_id in self.active_connections:
-            del self.active_connections[user_id]
-
-        topics_to_clean = list(self.subscriptions.pop(user_id, set()))
-        for topic in topics_to_clean:
-            if topic in self.topic_subscribers:
-                self.topic_subscribers[topic].discard(user_id)
-                if not self.topic_subscribers[topic]:  # Clean up empty topics
-                    del self.topic_subscribers[topic]
-        self.logger.info(f"WebSocket disconnected.", parameters={"user_id": user_id})
-
-    async def send_personal_message(self, message: Dict[str, Any], user_id: str):
-        if user_id in self.active_connections:
-            try:
-                await self.active_connections[user_id].send_text(
-                    json.dumps(message, default=str)
-                )
-            except WebSocketDisconnect:
-                self.logger.warning(
-                    f"WebSocket already disconnected for user during send.",
-                    parameters={"user_id": user_id},
-                )
-                self.disconnect(user_id)
-            except Exception as e:
-                self.logger.error(
-                    f"Failed to send WebSocket message.",
-                    parameters={"user_id": user_id},
-                    exception=e,
-                )
-                self.disconnect(user_id)  # Assume connection is broken
-
-    async def broadcast_to_topic(self, message: Dict[str, Any], topic: str):
-        self.logger.debug(
-            f"Broadcasting to topic.",
-            parameters={
-                "topic": topic,
-                "num_subscribers": len(self.topic_subscribers.get(topic, [])),
-            },
-        )
-        if topic in self.topic_subscribers:
-            # Create a copy for safe iteration as disconnects might modify the set
-            for user_id_subscriber in list(self.topic_subscribers[topic]):
-                await self.send_personal_message(message, user_id_subscriber)
-
-    async def subscribe_to_topic(self, user_id: str, topic: str):
-        self.subscriptions[user_id].add(topic)
-        self.topic_subscribers[topic].add(user_id)
-        self.logger.info(
-            f"User subscribed to topic.",
-            parameters={"user_id": user_id, "topic": topic},
-        )
-        await self.send_personal_message(
-            {"type": "subscription_ack", "topic": topic, "status": "subscribed"},
-            user_id,
-        )
-
-    async def unsubscribe_from_topic(self, user_id: str, topic: str):
-        self.subscriptions[user_id].discard(topic)
-        if topic in self.topic_subscribers:
-            self.topic_subscribers[topic].discard(user_id)
-            if not self.topic_subscribers[topic]:
-                del self.topic_subscribers[topic]
-        self.logger.info(
-            f"User unsubscribed from topic.",
-            parameters={"user_id": user_id, "topic": topic},
-        )
-        await self.send_personal_message(
-            {"type": "subscription_ack", "topic": topic, "status": "unsubscribed"},
-            user_id,
-        )
 
 
 # --- GraphQL Schema Definitions ---
@@ -840,7 +639,7 @@ class Query:
                 healthy_services_count=0,
                 active_documents_count=0,
                 pending_reviews_count=0,
-                timestamp=datetime.now().isoformat(),
+                timestamp=datetime.datetime.now().isoformat(),
             )
         # This should call a method on service_container_instance or a dedicated status service
         # status_data = await service_container_instance.get_system_status_summary()
@@ -850,7 +649,7 @@ class Query:
             healthy_services_count=5,
             active_documents_count=2,
             pending_reviews_count=1,
-            timestamp=datetime.now().isoformat(),
+            timestamp=datetime.datetime.now().isoformat(),
         )  # Mock
 
 
@@ -993,7 +792,7 @@ async def upload_document_rest(  # Renamed to avoid conflict
         c if c.isalnum() or c in [".", "-", "_"] else "_"
         for c in file.filename or "unknown_file"
     )
-    timestamp = datetime.now(tz=datetime.timezone.utc).strftime("%Y%m%d%H%M%S%f")
+    timestamp = datetime.datetime.now(tz=datetime.timezone.utc).strftime("%Y%m%d%H%M%S%f")
     unique_filename = f"{timestamp}_{uuid.uuid4().hex[:8]}_{safe_filename}"
     file_path = upload_dir / unique_filename
 
@@ -1162,7 +961,11 @@ async def get_document_status_rest(  # Renamed
     )
 
 
+
+
+
 # ----- Workflow Config Endpoints -----
+
 
 @app.get("/api/v1/workflows", response_model=List[WorkflowConfig])
 async def list_workflow_configs():
@@ -1190,105 +993,13 @@ async def update_workflow_config(config_id: str, update: WorkflowConfigUpdate):
     update_data = update.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(existing, key, value)
-    existing.updated_at = datetime.now(tz=datetime.timezone.utc)
+    existing.updated_at = datetime.datetime.now(tz=datetime.timezone.utc)
     workflow_configs[config_id] = existing
     save_workflow_configs()
     return existing
 
 
-@app.delete(
-    "/api/v1/workflows/{config_id}", status_code=status.HTTP_204_NO_CONTENT
-)
-async def delete_workflow_config(config_id: str):
-    if config_id in workflow_configs:
-        del workflow_configs[config_id]
-        save_workflow_configs()
-        return JSONResponse(status_code=status.HTTP_204_NO_CONTENT)
-    raise HTTPException(status_code=404, detail="Workflow config not found")
-
-
-# ----- Workflow Config Endpoints -----
-
-@app.get("/api/v1/workflows", response_model=List[WorkflowConfig])
-async def list_workflow_configs():
-    """List all saved workflow presets."""
-    return list(workflow_configs.values())
-
-
-@app.post(
-    "/api/v1/workflows",
-    response_model=WorkflowConfig,
-    status_code=status.HTTP_201_CREATED,
-)
-async def create_workflow_config(config: WorkflowConfigCreate):
-    new_cfg = WorkflowConfig(**config.model_dump())
-    workflow_configs[new_cfg.id] = new_cfg
-    save_workflow_configs()
-    return new_cfg
-
-
-@app.put("/api/v1/workflows/{config_id}", response_model=WorkflowConfig)
-async def update_workflow_config(config_id: str, update: WorkflowConfigUpdate):
-    existing = workflow_configs.get(config_id)
-    if not existing:
-        raise HTTPException(status_code=404, detail="Workflow config not found")
-    update_data = update.model_dump(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(existing, key, value)
-    existing.updated_at = datetime.now(tz=datetime.timezone.utc)
-    workflow_configs[config_id] = existing
-    save_workflow_configs()
-    return existing
-
-
-@app.delete(
-    "/api/v1/workflows/{config_id}", status_code=status.HTTP_204_NO_CONTENT
-)
-async def delete_workflow_config(config_id: str):
-    if config_id in workflow_configs:
-        del workflow_configs[config_id]
-        save_workflow_configs()
-        return JSONResponse(status_code=status.HTTP_204_NO_CONTENT)
-    raise HTTPException(status_code=404, detail="Workflow config not found")
-
-
-# ----- Workflow Config Endpoints -----
-
-@app.get("/api/v1/workflows", response_model=List[WorkflowConfig])
-async def list_workflow_configs():
-    """List all saved workflow presets."""
-    return list(workflow_configs.values())
-
-
-@app.post(
-    "/api/v1/workflows",
-    response_model=WorkflowConfig,
-    status_code=status.HTTP_201_CREATED,
-)
-async def create_workflow_config(config: WorkflowConfigCreate):
-    new_cfg = WorkflowConfig(**config.model_dump())
-    workflow_configs[new_cfg.id] = new_cfg
-    save_workflow_configs()
-    return new_cfg
-
-
-@app.put("/api/v1/workflows/{config_id}", response_model=WorkflowConfig)
-async def update_workflow_config(config_id: str, update: WorkflowConfigUpdate):
-    existing = workflow_configs.get(config_id)
-    if not existing:
-        raise HTTPException(status_code=404, detail="Workflow config not found")
-    update_data = update.model_dump(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(existing, key, value)
-    existing.updated_at = datetime.now(tz=datetime.timezone.utc)
-    workflow_configs[config_id] = existing
-    save_workflow_configs()
-    return existing
-
-
-@app.delete(
-    "/api/v1/workflows/{config_id}", status_code=status.HTTP_204_NO_CONTENT
-)
+@app.delete("/api/v1/workflows/{config_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_workflow_config(config_id: str):
     if config_id in workflow_configs:
         del workflow_configs[config_id]
@@ -1320,7 +1031,7 @@ async def get_system_health_rest(  # Renamed
             performance_metrics_summary={},
             active_documents_count=0,
             pending_reviews_count=0,
-            timestamp=datetime.now(tz=datetime.timezone.utc).isoformat(),
+            timestamp=datetime.datetime.now(tz=datetime.timezone.utc).isoformat(),
         )
 
     try:
@@ -1336,7 +1047,7 @@ async def get_system_health_rest(  # Renamed
             active_documents_count=health_summary.get("active_documents_count", 0),
             pending_reviews_count=health_summary.get("pending_reviews_count", 0),
             timestamp=health_summary.get(
-                "timestamp", datetime.now(tz=datetime.timezone.utc).isoformat()
+                "timestamp", datetime.datetime.now(tz=datetime.timezone.utc).isoformat()
             ),
         )
     except Exception as e:
@@ -1390,7 +1101,7 @@ async def submit_review_decision_rest(  # Renamed
                         "decision": review_request.decision,
                         # "user": current_user.username, # If auth is on
                         "user": "mock_reviewer",
-                        "timestamp": datetime.now(tz=datetime.timezone.utc).isoformat(),
+                        "timestamp": datetime.datetime.now(tz=datetime.timezone.utc).isoformat(),
                     },
                     "calibration_updates",
                 )  # Specific topic for calibration
@@ -1413,37 +1124,6 @@ async def submit_review_decision_rest(  # Renamed
         )
 
 
-# --- Workflow Preset Endpoints ---
-
-@app.post("/api/v1/workflows", response_model=WorkflowConfig)
-async def create_workflow_preset(config: WorkflowConfig):
-    workflow_configs[config.id] = config
-    save_workflow_configs()
-    return config
-
-
-@app.get("/api/v1/workflows", response_model=List[WorkflowConfig])
-async def list_workflow_presets():
-    return list(workflow_configs.values())
-
-
-@app.put("/api/v1/workflows/{workflow_id}", response_model=WorkflowConfig)
-async def update_workflow_preset(workflow_id: str, config_update: WorkflowConfig):
-    if workflow_id not in workflow_configs:
-        raise HTTPException(status_code=404, detail="Workflow not found")
-    workflow_configs[workflow_id] = config_update
-    workflow_configs[workflow_id].id = workflow_id
-    save_workflow_configs()
-    return workflow_configs[workflow_id]
-
-
-@app.delete("/api/v1/workflows/{workflow_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_workflow_preset(workflow_id: str):
-    if workflow_id not in workflow_configs:
-        raise HTTPException(status_code=404, detail="Workflow not found")
-    workflow_configs.pop(workflow_id)
-    save_workflow_configs()
-    return JSONResponse(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # --- WebSocket Endpoint ---
@@ -1472,7 +1152,9 @@ async def websocket_endpoint_route(websocket: WebSocket, client_id: str):
             if msg_type == "subscribe":
                 topic = message.get("topic")
                 if topic:
-                    await websocket_manager_instance.subscribe_to_topic(client_id, topic)
+                    await websocket_manager_instance.subscribe_to_topic(
+                        client_id, topic
+                    )
             elif msg_type == "unsubscribe":
                 topic = message.get("topic")
                 if topic:
@@ -1481,7 +1163,7 @@ async def websocket_endpoint_route(websocket: WebSocket, client_id: str):
                     )
             elif msg_type == "ping":
                 await websocket_manager_instance.send_personal_message(
-                    {"type": "pong", "timestamp": datetime.now().isoformat()}, client_id
+                    {"type": "pong", "timestamp": datetime.datetime.now().isoformat()}, client_id
                 )
             # Add more message type handlers as needed
             else:
@@ -1523,76 +1205,6 @@ async def process_document_background_task(  # Renamed
         },
     )
 
-    global_processing_states[document_id] = {
-        "status": "starting",
-        "progress": 0.01,
-        "stage": "Initializing",
-    }
-
-        # Define progress callback for WebSocket
-        async def ws_progress_callback(
-            stage: str,
-            progress_percent: float,
-            details: Optional[Dict[str, Any]] = None,
-        ):
-            global_processing_states[document_id].update(
-                {
-                    "status": "processing",
-                    "progress": progress_percent / 100.0,
-                    "stage": stage,
-                    "details": details,
-                }
-            )
-            if websocket_manager_instance:
-                await websocket_manager_instance.broadcast_to_topic(
-                    {
-                        "type": "processing_progress",
-                        "document_id": document_id,
-                        "progress": progress_percent,  # Send as 0-100
-                        "stage": stage,
-                        "details": details or {},
-                    },
-                    f"document_updates_{document_id}",
-                )
-
-        workflow.register_progress_callback(
-            ws_progress_callback
-        )  # Assuming workflow supports this
-
-        # Execute the workflow
-        global_processing_states[document_id].update(
-            {
-                "status": "completed",
-                "progress": 1.0,
-                "stage": "Complete",
-                "result_summary": {  # Example summary
-                    "entities_found": (
-                        len(analysis_result.hybrid_extraction.validated_entities)
-                        if analysis_result.hybrid_extraction
-                        else 0
-                    ),
-                    "total_time_sec": analysis_result.total_processing_time,
-                },
-            }
-        )
-
-        if websocket_manager_instance:
-            await websocket_manager_instance.broadcast_to_topic(
-                {
-                    "type": "processing_complete",
-                    "document_id": document_id,
-                    "result": analysis_result.to_dict(),  # Send full or summarized result
-                },
-                f"document_updates_{document_id}",
-            )
-
-        main_api_logger.info(
-            "Document processing background task finished successfully.",
-            parameters={
-                "document_id": document_id,
-                "total_time_sec": analysis_result.total_processing_time,
-            },
-        )
 
     except Exception as e:
         main_api_logger.error(

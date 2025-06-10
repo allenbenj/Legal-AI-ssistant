@@ -108,15 +108,55 @@ class RealTimeAnalysisWorkflow:
     - Performance monitoring and optimization
     """
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:  # pragma: no cover - stub
-        """Create an empty workflow instance for testing."""
+    def __init__(
+        self,
+        service_container: Any,
+        config: WorkflowConfig,
+    ) -> None:
+        """Initialize the workflow with required services and configuration."""
+
+        # Basic references
+        self.service_container = service_container
+        self.config = config
+
+        # Logger setup with fallback during tests
+        try:
+            from ..core.detailed_logging import get_detailed_logger, LogCategory
+        except Exception:  # pragma: no cover - fallback for tests
+            import logging
+
+            class LogCategory:  # type: ignore
+                SYSTEM = "SYSTEM"
+
+            def get_detailed_logger(name: str, category: LogCategory):  # type: ignore
+                return logging.getLogger(name)
+
+        self.logger = get_detailed_logger(
+            "RealTimeAnalysisWorkflow", LogCategory.SYSTEM
+        )
+
+        # Retrieve core services if available
+        getter = getattr(service_container, "get_service", None)
+        self.hybrid_extractor = getter("hybrid_extractor") if getter else None
+        self.graph_manager = getter("realtime_graph_manager") if getter else None
+        self.vector_store = getter("vector_store") if getter else None
+        self.reviewable_memory = getter("reviewable_memory") if getter else None
+
+        # Configuration-driven attributes
+        self.max_concurrent_documents = config.max_concurrent_documents
+        self.confidence_threshold = config.confidence_threshold
+        self.enable_real_time_sync = config.enable_real_time_sync
+        self.enable_user_feedback = config.enable_user_feedback
+        self.parallel_processing = config.parallel_processing
+        self.performance_monitoring = config.performance_monitoring
+        self.auto_optimization_threshold = config.auto_optimization_threshold
 
         # Performance tracking
         self.documents_processed = 0
         self.processing_times: List[float] = []
-        self.performance_stats = {}
+        self.performance_stats: Dict[str, Any] = {}
 
-        # Callbacks for real-time updates
+        # Callback management
         self.progress_callbacks: List[Callable] = []
         self.update_callbacks: List[Callable] = []
 
@@ -124,7 +164,7 @@ class RealTimeAnalysisWorkflow:
         self.feedback_callback: Optional[Callable] = None
         self.pending_feedback: Dict[str, Any] = {}
 
-        # Synchronization
+        # Synchronization primitives
         self.processing_lock = asyncio.Semaphore(self.max_concurrent_documents)
         self.optimization_lock = asyncio.Lock()
 
@@ -160,6 +200,7 @@ class RealTimeAnalysisWorkflow:
         document_id = f"doc_{hash(document_path) % 100000}_{int(time.time())}"
 
         async with self.processing_lock:
+
 
 
     async def _process_entities_realtime(

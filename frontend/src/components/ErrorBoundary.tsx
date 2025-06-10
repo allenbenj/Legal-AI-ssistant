@@ -2,8 +2,20 @@ import React from 'react';
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
+  /**
+   * Optional fallback content to render when an error occurs. If a function is
+   * provided it will receive a reset callback and the caught error.
+   */
   fallback?: React.ReactNode | ((reset: () => void, error: Error | null) => React.ReactNode);
+  /**
+   * Optional category or severity for logging purposes.
+   */
   level?: string;
+  /**
+   * Optional callback that fires when an error is caught. This allows
+   * integration with external logging services.
+   */
+  onError?: (error: Error, info: React.ErrorInfo) => void;
 }
 
 interface ErrorBoundaryState {
@@ -17,7 +29,10 @@ export default class ErrorBoundary extends React.Component<ErrorBoundaryProps, E
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     this.setState({ hasError: true, error });
     // Basic logging; replace with real logging service as needed
-    if (process.env.NODE_ENV !== 'production') {
+    if (this.props.onError) {
+      this.props.onError(error, info);
+    } else if (process.env.NODE_ENV !== 'production') {
+      // eslint-disable-next-line no-console
       console.error(`ErrorBoundary [${this.props.level ?? 'unknown'}]`, error, info);
     }
   }
