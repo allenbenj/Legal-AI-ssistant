@@ -14,7 +14,13 @@ The core dependencies for running the tests are listed below. They can be instal
 
 Additional packages from `requirements.txt` are needed for the application itself (FastAPI, pydantic, etc.).
 
+Running the tests without these dependencies will result in import errors. For
+example, missing `pytest-mock` will cause fixture failures.
+
 ## Running the Tests
+
+Ensure the development dependencies are installed before executing `pytest`. Run
+`pip install -e .[dev]` or use `python legal_ai_system/scripts/install_all_dependencies.py`.
 
 ```bash
 python3 -m venv .venv
