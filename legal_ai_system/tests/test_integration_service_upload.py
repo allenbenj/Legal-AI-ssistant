@@ -23,13 +23,14 @@ for name in [
     "asyncpg",
     "legal_ai_system.utils.user_repository",
     "legal_ai_system.services.security_manager",
-    "legal_ai_system.services.service_container",
     "legal_ai_system.services.workflow_orchestrator",
     "legal_ai_system.services.realtime_analysis_workflow",
+    "legal_ai_system.integration_ready.vector_store_enhanced",
     "yaml",
 ]:
     if name not in sys.modules:
         sys.modules[name] = ModuleType(name)
+
 
 sys.modules["faiss"].StandardGpuResources = object
 sys.modules["faiss"].index_cpu_to_gpu = lambda *a, **k: None
@@ -41,6 +42,11 @@ sys.modules["faiss"].IndexPQ = object
 sys.modules["faiss"].IndexIVFPQ = object
 sys.modules["faiss"].get_num_gpus = lambda: 0
 sys.modules["faiss"].read_index = lambda *a, **k: object()
+
+# Provide placeholder MemoryStore used by memory_manager
+sys.modules[
+    "legal_ai_system.integration_ready.vector_store_enhanced"
+].MemoryStore = object
 
 sys.modules["numpy"].array = lambda *a, **k: a
 sys.modules["numpy"].ndarray = object
@@ -67,10 +73,14 @@ sec_mod.SecurityManager = object
 sec_mod.User = User
 sys.modules["legal_ai_system.utils.user_repository"].UserRepository = object
 
-svc_mod = sys.modules["legal_ai_system.services.service_container"]
-class ServiceContainer:
-    pass
-svc_mod.ServiceContainer = ServiceContainer
+
+
+import pytest
+
+@pytest.fixture(autouse=True, scope="module")
+def _restore_service_container():
+    yield
+    svc_mod.ServiceContainer = _orig_container_cls
 
 sys.modules["legal_ai_system.services.workflow_orchestrator"].WorkflowOrchestrator = object
 
@@ -282,3 +292,4 @@ async def test_upload_and_process_document_error(tmp_path):
     user = sec_mod.User("u1")
     with pytest.raises(ServiceLayerError):
         await svc.upload_and_process_document(b"x", "f.txt", user, progress_cb=None)
+
