@@ -31,6 +31,7 @@ except Exception:  # pragma: no cover - fallback for tests
     ReviewDecision = object  # type: ignore[misc]
     ReviewStatus = object  # type: ignore[misc]
 
+
 # Node classes are imported lazily by the workflow builder during tests.
 
 

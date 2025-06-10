@@ -1,7 +1,7 @@
 from dataclasses import dataclass, asdict
 from typing import Any, Dict
 
-from config.workflow_config import USE_WORKFLOW_BUILDER
+from ..config.workflow_config import USE_WORKFLOW_BUILDER
 
 @dataclass
 class WorkflowConfig:
