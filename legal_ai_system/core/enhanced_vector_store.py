@@ -14,6 +14,7 @@ import numpy as np
 import threading
 import sqlite3
 import hashlib
+import shutil
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
@@ -290,6 +291,8 @@ class EnhancedVectorStore:
         enable_gpu: bool = False,
         document_index_path: str | None = None,
         entity_index_path: str | None = None,
+        optimization_interval: int = 3600,
+        backup_interval: int = 86400,
     ):
         """Initialize enhanced vector store with comprehensive configuration"""
         vector_logger.info("=== INITIALIZING ENHANCED VECTOR STORE ===")
@@ -311,6 +314,8 @@ class EnhancedVectorStore:
         self.state = VectorStoreState.INITIALIZING
         self.index_type = index_type
         self.enable_gpu = enable_gpu
+        self.optimization_interval = optimization_interval
+        self.backup_interval = backup_interval
         
         # Core components
         self.embedding_provider = EmbeddingProvider(embedding_model)
@@ -340,9 +345,11 @@ class EnhancedVectorStore:
         self._initialize_storage()
         self._initialize_indexes()
         self._load_existing_data()
-        
+        self._verify_integrity()
+
         # Start background optimization
         self._start_background_optimization()
+        self._start_background_tasks()
         
         self.state = VectorStoreState.READY
         
@@ -796,6 +803,79 @@ class EnhancedVectorStore:
             time.sleep(0.1)
             self.optimization_queue.task_done()
 
+    def _verify_integrity(self) -> None:
+        """Verify that FAISS indexes and metadata are consistent."""
+        try:
+            doc_vectors = self.document_index.ntotal if self.document_index else 0
+            ent_vectors = self.entity_index.ntotal if self.entity_index else 0
+            with sqlite3.connect(self.metadata_db_path) as conn:
+                cur = conn.execute("SELECT COUNT(*) FROM vector_metadata")
+                meta_count = cur.fetchone()[0]
+            total_vectors = doc_vectors + ent_vectors
+            if total_vectors != meta_count:
+                index_logger.warning(
+                    "Vector index count mismatch",
+                    parameters={
+                        "index_vectors": total_vectors,
+                        "metadata_records": meta_count,
+                    },
+                )
+            else:
+                index_logger.info(
+                    "Vector store integrity verified",
+                    parameters={"total": total_vectors},
+                )
+        except Exception as e:
+            index_logger.error("Integrity verification failed", exception=e)
+
+    def _start_background_tasks(self) -> None:
+        """Start threads for periodic optimization and backup."""
+        self._stop_event = threading.Event()
+        thread = threading.Thread(
+            target=self._background_worker,
+            args=(self.optimization_interval, self.backup_interval),
+            name="vector_bg",
+            daemon=True,
+        )
+        thread.start()
+        self._background_thread = thread
+
+    def _background_worker(self, opt_interval: int, backup_interval: int) -> None:
+        last_opt = time.time()
+        last_backup = time.time()
+        while not self._stop_event.is_set():
+            now = time.time()
+            if now - last_opt >= opt_interval:
+                self.optimization_queue.put("OPTIMIZE")
+                last_opt = now
+            if now - last_backup >= backup_interval:
+                try:
+                    self._backup_indexes()
+                except Exception as e:
+                    vector_logger.warning("Background backup failed", exception=e)
+                last_backup = now
+            time.sleep(5)
+
+    def _backup_indexes(self) -> None:
+        """Copy index files to a timestamped backup directory."""
+        backup_dir = self.storage_path / "backups"
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+        if self.document_index_path.exists():
+            shutil.copy2(
+                self.document_index_path,
+                backup_dir / f"document_index_{timestamp}.faiss",
+            )
+        if self.entity_index_path.exists():
+            shutil.copy2(
+                self.entity_index_path,
+                backup_dir / f"entity_index_{timestamp}.faiss",
+            )
+        vector_logger.info(
+            "Indexes backed up",
+            parameters={"backup_dir": str(backup_dir), "timestamp": timestamp},
+        )
+
     def _store_metadata(self, metadata: VectorMetadata) -> None:
         """Persist metadata to the SQLite database."""
         with sqlite3.connect(self.metadata_db_path) as conn:
@@ -930,6 +1010,8 @@ def create_enhanced_vector_store(
         enable_gpu=cfg.get("ENABLE_GPU_FAISS", False),
         document_index_path=cfg.get("DOCUMENT_INDEX_PATH"),
         entity_index_path=cfg.get("ENTITY_INDEX_PATH"),
+        optimization_interval=int(cfg.get("OPTIMIZATION_INTERVAL_SEC", 3600)),
+        backup_interval=int(cfg.get("BACKUP_INTERVAL_SEC", 86400)),
     )
 
     # ------------------------------------------------------------------

@@ -90,3 +90,21 @@ usage. The [Integration Guide](docs/integration_plan.md) summarises the
 five-phase integration plan, WebSocket patterns and deployment tips and
 includes sections on security, testing, success metrics and troubleshooting.
 For LangGraph specific routing examples see [advanced_langgraph.md](docs/advanced_langgraph.md).
+
+## Database Setup
+
+The application uses SQLite by default, created under `legal_ai_system/storage`.
+To use PostgreSQL or another database, update `sqlite_path` or the relevant
+connection URLs in `config/defaults.yaml`.  Migrations are handled
+automatically on startup.
+
+## Backup and Failover
+
+Vector store indexes are periodically optimized and saved to the `backups/`
+folder under the configured vector storage path.  Set the intervals via
+`vector_store_optimization_interval` and `vector_store_backup_interval` in the
+configuration file or environment variables.  When running multiple vector store
+instances, list their addresses in `vector_store_hosts` and choose a
+`load_balancing_strategy` such as `round_robin` to distribute requests.
+If a node becomes unavailable the service container will route traffic to the
+remaining healthy instances.
