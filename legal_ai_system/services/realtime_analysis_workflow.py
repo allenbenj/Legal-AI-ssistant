@@ -10,6 +10,7 @@ import asyncio
 import time
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 from pathlib import Path
 
@@ -133,11 +134,6 @@ class RealTimeAnalysisWorkflow:
         await self.reviewable_memory.initialize()
 
         # Register callbacks between components
-        async def _handle_graph_update(event_type: str, data: Dict[str, Any]) -> None:
-            """Schedule graph update handling without blocking."""
-            await self._on_graph_update(event_type, data)
-
-        self.graph_manager.register_update_callback(_handle_graph_update)
 
         self.logger.info("Real-time analysis workflow initialized")
 

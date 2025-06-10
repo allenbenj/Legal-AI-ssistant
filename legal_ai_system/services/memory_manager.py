@@ -9,9 +9,8 @@ import logging
 import sqlite3
 import json
 import asyncio
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 from pathlib import Path
-from datetime import datetime
 import threading
 
 from legal_ai_system.integration_ready.vector_store_enhanced import MemoryStore
@@ -433,7 +432,6 @@ class MemoryManager:
                 None,
                 self._optimize_context_window_sync,
                 session_id,
-                target_tokens
             )
             
             logger.info(f"Optimized context window for session {session_id}")
@@ -442,7 +440,7 @@ class MemoryManager:
             logger.error(f"Failed to optimize context window: {e}")
             raise
     
-    def _optimize_context_window_sync(self, session_id: str, target_tokens: int) -> None:
+    def _optimize_context_window_sync(self, session_id: str) -> None:
         """Synchronous context window optimization"""
         with sqlite3.connect(self.db_path) as conn:
             # Remove entries with low importance scores to reduce context size

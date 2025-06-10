@@ -5,11 +5,11 @@ Handles database interactions for violations, memory, and knowledge graph data
 
 import sqlite3
 import json
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
 from pathlib import Path
 import logging
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from contextlib import contextmanager
 
 from legal_ai_system.agents.violation_review import (
@@ -278,7 +278,7 @@ class DatabaseManager:
             logger.error(f"Failed to retrieve violations: {e}")
             return []
     
-    def update_violation_status(self, violation_id: str, status: str, reviewed_by: str, comments: Optional[str] = None) -> bool:
+    def update_violation_status(self, violation_id: str, status: str, comments: Optional[str] = None) -> bool:
         """Update violation status via :class:`ViolationReviewManager`."""
         try:
             success = self.violation_manager.update_violation_status(violation_id, status)
