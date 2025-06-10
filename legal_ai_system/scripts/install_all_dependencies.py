@@ -11,7 +11,8 @@ from typing import Iterable
 def run(cmd: Iterable[str], cwd: Path | None = None, timeout: int = 1800) -> None:
     """Run a command and raise an error if it fails."""
     print(f"Running: {' '.join(cmd)}")
-    subprocess.run(cmd, check=True, cwd=cwd, timeout=timeout)
+    # Convert to list to satisfy type checkers expecting ``Sequence[str]``
+    subprocess.run(list(cmd), check=True, cwd=cwd, timeout=timeout)
 
 
 def ensure_venv(venv_path: Path) -> None:
