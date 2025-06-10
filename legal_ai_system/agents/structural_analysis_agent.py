@@ -323,10 +323,10 @@ Ensure precise identification of IRAC components with confidence ≥{min_confide
                 "irac_components": self._validate_irac_components(
                     parsed_data.get("irac_components", {})
                 ),
-                "document_structure": parsed_data.get(
-                    "document_structure", {}
-                ),  # Add validation if needed
-                "section_analysis": self._validate_list_of_dicts(
+                "document_structure": self._validate_document_structure(
+                    parsed_data.get("document_structure", {})
+                ),
+                "section_analysis": self._validate_section_analysis(
                     parsed_data.get("section_analysis", [])
                 ),
                 "overall_confidence": float(parsed_data.get("overall_confidence", 0.0)),
@@ -402,7 +402,69 @@ Ensure precise identification of IRAC components with confidence ≥{min_confide
             validated_irac[component_key] = validated_items
         return validated_irac
 
-    # _validate_document_structure, _validate_section_analysis can be added for more robustness
+    def _validate_document_structure(self, structure_data: Any) -> Dict[str, Any]:
+        """Validate and normalize document_structure returned by the LLM."""
+        if not isinstance(structure_data, dict):
+            return {}
+
+        validated: Dict[str, Any] = {}
+
+        doc_type = structure_data.get("document_type")
+        if isinstance(doc_type, str):
+            validated["document_type"] = doc_type
+
+        sections = structure_data.get("sections")
+        if isinstance(sections, list):
+            validated["sections"] = [s for s in sections if isinstance(s, dict)]
+
+        # Preserve other simple key/value pairs
+        for key, value in structure_data.items():
+            if key in ("document_type", "sections"):
+                continue
+            if isinstance(value, (str, int, float, bool, dict, list)):
+                validated[key] = value
+
+        return validated
+
+    def _validate_section_analysis(self, sections_data: Any) -> List[Dict[str, Any]]:
+        """Validate section_analysis ensuring consistent structure."""
+        if not isinstance(sections_data, list):
+            return []
+
+        validated_sections: List[Dict[str, Any]] = []
+        for entry in sections_data[: self.max_sections_per_analysis]:
+            if not isinstance(entry, dict):
+                continue
+
+            cleaned_entry: Dict[str, Any] = {}
+
+            title = entry.get("section_title") or entry.get("title")
+            if isinstance(title, str):
+                cleaned_entry["section_title"] = title
+
+            analysis_text = entry.get("analysis") or entry.get("summary")
+            if isinstance(analysis_text, str):
+                cleaned_entry["analysis"] = analysis_text
+
+            confidence = entry.get("confidence")
+            if confidence is not None:
+                try:
+                    conf_value = float(confidence)
+                    if conf_value >= self.min_confidence_threshold:
+                        cleaned_entry["confidence"] = conf_value
+                except (TypeError, ValueError):
+                    pass
+
+            for key in ("start_index", "end_index", "section_text", "irac"):
+                if key in entry and isinstance(
+                    entry[key], (str, int, float, dict, list)
+                ):
+                    cleaned_entry[key] = entry[key]
+
+            if cleaned_entry:
+                validated_sections.append(cleaned_entry)
+
+        return validated_sections
 
     def _assess_structural_complexity(self, document_content: str) -> TaskComplexity:
         """Assess structural analysis complexity for model selection."""
