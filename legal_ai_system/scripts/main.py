@@ -157,6 +157,36 @@ websocket_manager_instance: Optional["WebSocketManager"] = (
     None  # Renamed, forward declare WebSocketManager
 )
 
+# Workflow configuration storage
+workflow_configs: Dict[str, WorkflowConfig] = {}
+WORKFLOW_CONFIGS_FILE = Path(settings.data_dir) / "workflow_configs.json"
+
+
+def load_workflow_configs() -> Dict[str, WorkflowConfig]:
+    if WORKFLOW_CONFIGS_FILE.exists():
+        try:
+            data = json.loads(WORKFLOW_CONFIGS_FILE.read_text())
+            return {
+                cfg["id"]: WorkflowConfig(**cfg)
+                for cfg in data
+            }
+        except Exception as e:
+            main_api_logger.error(
+                "Failed to load workflow configurations.", exception=e
+            )
+    return {}
+
+
+def save_workflow_configs(configs: Dict[str, WorkflowConfig]) -> None:
+    WORKFLOW_CONFIGS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(WORKFLOW_CONFIGS_FILE, "w") as f:
+        json.dump(
+            [cfg.model_dump() for cfg in configs.values()],
+            f,
+            indent=2,
+            default=str,
+        )
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -237,6 +267,14 @@ async def lifespan(app: FastAPI):
     websocket_manager_instance = WebSocketManager()
     main_api_logger.info("✅ WebSocketManager initialized.")
 
+    # Load workflow configurations
+    global workflow_configs
+    workflow_configs = load_workflow_configs()
+    main_api_logger.info(
+        "Loaded workflow configurations.",
+        parameters={"count": len(workflow_configs)},
+    )
+
     # Start background monitoring task (if any)
     # monitoring_task = asyncio.create_task(system_monitor_task())
 
@@ -245,6 +283,10 @@ async def lifespan(app: FastAPI):
     yield  # API is running
 
     main_api_logger.info("🛑 Shutting down Legal AI System API via lifespan...")
+
+    # Persist workflow configurations
+    save_workflow_configs(workflow_configs)
+    main_api_logger.info("Workflow configurations saved.")
     # if monitoring_task: monitoring_task.cancel(); await asyncio.gather(monitoring_task, return_exceptions=True)
     if service_container_instance and hasattr(service_container_instance, "shutdown"):
         await service_container_instance.shutdown()
@@ -324,6 +366,17 @@ class ProcessingRequest(BaseModel):
         0.7, ge=0.0, le=1.0, description="Confidence threshold for extractions"
     )
     # Add other relevant options from RealTimeAnalysisWorkflow if user-configurable
+
+
+class WorkflowConfig(ProcessingRequest):
+    """Workflow preset configuration model."""
+
+    id: str = PydanticField(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    description: Optional[str] = None
+    created_at: datetime = PydanticField(
+        default_factory=lambda: datetime.now(tz=timezone.utc)
+    )
 
 
 class DocumentStatusResponse(BaseModel):  # Renamed for clarity
@@ -1100,6 +1153,39 @@ async def submit_review_decision_rest(  # Renamed
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Review processing failed: {str(e)}",
         )
+
+
+# --- Workflow Preset Endpoints ---
+
+@app.post("/api/v1/workflows", response_model=WorkflowConfig)
+async def create_workflow_preset(config: WorkflowConfig):
+    workflow_configs[config.id] = config
+    save_workflow_configs(workflow_configs)
+    return config
+
+
+@app.get("/api/v1/workflows", response_model=List[WorkflowConfig])
+async def list_workflow_presets():
+    return list(workflow_configs.values())
+
+
+@app.put("/api/v1/workflows/{workflow_id}", response_model=WorkflowConfig)
+async def update_workflow_preset(workflow_id: str, config_update: WorkflowConfig):
+    if workflow_id not in workflow_configs:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    workflow_configs[workflow_id] = config_update
+    workflow_configs[workflow_id].id = workflow_id
+    save_workflow_configs(workflow_configs)
+    return workflow_configs[workflow_id]
+
+
+@app.delete("/api/v1/workflows/{workflow_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_workflow_preset(workflow_id: str):
+    if workflow_id not in workflow_configs:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    workflow_configs.pop(workflow_id)
+    save_workflow_configs(workflow_configs)
+    return JSONResponse(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # --- WebSocket Endpoint ---
