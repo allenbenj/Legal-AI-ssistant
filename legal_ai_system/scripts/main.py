@@ -9,7 +9,6 @@
 # - Integration with all Legal AI System components
 
 
-import asyncio
 import json
 import logging
 import os
@@ -53,7 +52,6 @@ except Exception:  # pragma: no cover - fallback for testing/archive usage
 # Assuming these will be structured correctly during refactoring
 # Use absolute imports from the project root 'legal_ai_system'
 try:
-    from fastapi import Form  # Added Form
     from fastapi import (
         BackgroundTasks,
         Depends,
@@ -83,12 +81,11 @@ from pydantic import Field as PydanticField  # Alias Field
 from strawberry.fastapi import GraphQLRouter  # type: ignore
 from strawberry.types import Info  # type: ignore
 
-
+try:
     from legal_ai_system.core.detailed_logging import (
         LogCategory,
         get_detailed_logger,
     )
-
 
     SERVICES_AVAILABLE = True
 except ImportError as e:
