@@ -19,6 +19,7 @@ from collections import defaultdict
 # import logging # Replaced by detailed_logging
 from contextlib import asynccontextmanager
 import datetime
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Union
@@ -80,63 +81,7 @@ except ImportError:  # pragma: no cover - optional web dependency
 from pydantic import BaseModel
 from pydantic import Field as PydanticField  # Alias Field
 from strawberry.fastapi import GraphQLRouter  # type: ignore
-from strawberry.types import Info  # type: ignore
 
-# Attempt to import logging and security classes from the real package.
-try:
-    from legal_ai_system.core.detailed_logging import (
-        DetailedLogger,
-        get_detailed_logger,
-        LogCategory,
-    )
-    from legal_ai_system.services.service_container import ServiceContainer
-    from legal_ai_system.services.security_manager import (
-        SecurityManager,
-        AccessLevel,
-        User as AuthUser,
-    )
-
-    SERVICES_AVAILABLE = True
-except Exception as e:  # pragma: no cover - simplified runtime fallback
-    print(
-        f"WARNING: Core services import failed in main.py: {e}. API will run in a limited mock mode.",
-        file=sys.stderr,
-    )
-    SERVICES_AVAILABLE = False
-    ServiceContainer = None  # type: ignore
-    SecurityManager = None  # type: ignore
-    import logging
-
-    class LogCategory(Enum):
-        API = "API"
-
-    class DetailedLogger(logging.Logger):
-        pass
-
-    def get_detailed_logger(name: str, category: LogCategory) -> DetailedLogger:  # type: ignore
-        return DetailedLogger(name)
-
-    class AccessLevel(Enum):
-        READ = "read"
-        WRITE = "write"
-        ADMIN = "admin"
-        SUPER_ADMIN = "super_admin"
-
-    @dataclass
-    class AuthUser:
-        user_id: str
-        username: str
-        email: str
-        password_hash: str = ""
-        salt: str = ""
-        access_level: AccessLevel = AccessLevel.READ
-        created_at: datetime.datetime = field(
-            default_factory=lambda: datetime.datetime.now(tz=datetime.timezone.utc)
-        )
-        last_login: Optional[datetime.datetime] = None
-        is_active: bool = True
-        failed_attempts: int = 0
-        locked_until: Optional[datetime.datetime] = None
 
     class _SettingsFallback:
         """Minimal settings fallback when core settings are unavailable."""
@@ -154,8 +99,7 @@ except Exception as e:  # pragma: no cover - simplified runtime fallback
         settings = _SettingsFallback()
 
 
-# Initialize logger for this module
-main_api_logger: DetailedLogger = get_detailed_logger("FastAPI_Main", LogCategory.API)
+
 
 # Global state (will be initialized in lifespan)
 service_container_instance: Optional["ServiceContainer"] = None
