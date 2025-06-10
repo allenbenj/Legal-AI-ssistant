@@ -716,6 +716,7 @@ async def create_service_container(
         "ENTITY_INDEX_PATH": str(embed_conf.entity_index_path),
         "DEFAULT_INDEX_TYPE": embed_conf.type,
         "embedding_model_name": embed_conf.embedding_model,
+        "connection_pool": persistence_manager_service.connection_pool if persistence_manager_service else None,
     }
     # EmbeddingProvider instance can be fetched from EmbeddingManager if VectorStore is designed to take it
     # embedding_provider_instance = await container.get_service("embedding_manager").get_provider_instance() # Conceptual
