@@ -228,6 +228,44 @@ def save_workflow_configs() -> None:
             "Failed to save workflow configurations.", exception=e
         )
 
+# Workflow configuration storage
+WORKFLOW_CONFIG_FILE = Path(settings.data_dir) / "workflow_configs.json"
+workflow_configs: Dict[str, "WorkflowConfig"] = {}
+
+
+def load_workflow_configs() -> None:
+    """Load workflow presets from disk if available."""
+    if WORKFLOW_CONFIG_FILE.exists():
+        try:
+            data = json.load(open(WORKFLOW_CONFIG_FILE, "r"))
+            for item in data:
+                workflow_configs[item["id"]] = WorkflowConfig(**item)
+            main_api_logger.info(
+                "Loaded workflow configurations",
+                parameters={"count": len(workflow_configs)},
+            )
+        except Exception as e:  # pragma: no cover - startup resilience
+            main_api_logger.error(
+                "Failed to load workflow configurations.", exception=e
+            )
+
+
+def save_workflow_configs() -> None:
+    """Persist workflow presets to disk."""
+    try:
+        WORKFLOW_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(WORKFLOW_CONFIG_FILE, "w") as f:
+            json.dump(
+                [cfg.model_dump() for cfg in workflow_configs.values()],
+                f,
+                default=str,
+                indent=2,
+            )
+    except Exception as e:  # pragma: no cover - I/O failure shouldn't crash
+        main_api_logger.error(
+            "Failed to save workflow configurations.", exception=e
+        )
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -405,6 +443,34 @@ class ProcessingRequest(BaseModel):
         0.7, ge=0.0, le=1.0, description="Confidence threshold for extractions"
     )
     # Add other relevant options from RealTimeAnalysisWorkflow if user-configurable
+
+
+class WorkflowConfig(ProcessingRequest):
+    """Preset configuration for a document processing workflow."""
+
+    id: str = PydanticField(default_factory=lambda: uuid.uuid4().hex)
+    name: str
+    description: Optional[str] = None
+    created_at: datetime = PydanticField(
+        default_factory=lambda: datetime.now(tz=datetime.timezone.utc)
+    )
+    updated_at: datetime = PydanticField(
+        default_factory=lambda: datetime.now(tz=datetime.timezone.utc)
+    )
+
+
+class WorkflowConfigCreate(ProcessingRequest):
+    """Payload for creating a workflow preset."""
+
+    name: str
+    description: Optional[str] = None
+
+
+class WorkflowConfigUpdate(ProcessingRequest):
+    """Payload for updating a workflow preset."""
+
+    name: Optional[str] = None
+    description: Optional[str] = None
 
 
 class WorkflowConfig(ProcessingRequest):
@@ -1121,6 +1187,51 @@ async def get_document_status_rest(  # Renamed
     return DocumentStatusResponse(
         document_id=document_id, status="pending_or_unknown", progress=0.0
     )
+
+
+# ----- Workflow Config Endpoints -----
+
+@app.get("/api/v1/workflows", response_model=List[WorkflowConfig])
+async def list_workflow_configs():
+    """List all saved workflow presets."""
+    return list(workflow_configs.values())
+
+
+@app.post(
+    "/api/v1/workflows",
+    response_model=WorkflowConfig,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_workflow_config(config: WorkflowConfigCreate):
+    new_cfg = WorkflowConfig(**config.model_dump())
+    workflow_configs[new_cfg.id] = new_cfg
+    save_workflow_configs()
+    return new_cfg
+
+
+@app.put("/api/v1/workflows/{config_id}", response_model=WorkflowConfig)
+async def update_workflow_config(config_id: str, update: WorkflowConfigUpdate):
+    existing = workflow_configs.get(config_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Workflow config not found")
+    update_data = update.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(existing, key, value)
+    existing.updated_at = datetime.now(tz=datetime.timezone.utc)
+    workflow_configs[config_id] = existing
+    save_workflow_configs()
+    return existing
+
+
+@app.delete(
+    "/api/v1/workflows/{config_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+async def delete_workflow_config(config_id: str):
+    if config_id in workflow_configs:
+        del workflow_configs[config_id]
+        save_workflow_configs()
+        return JSONResponse(status_code=status.HTTP_204_NO_CONTENT)
+    raise HTTPException(status_code=404, detail="Workflow config not found")
 
 
 # ----- Workflow Config Endpoints -----
