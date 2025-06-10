@@ -29,9 +29,9 @@ class LegalWorkflowBuilder:
     ) -> None:
         """Add a parallel processing block.
 
-        Each function is executed concurrently and the results are combined
-        using ``merge_strategy``.  If no strategy is provided ``ListMerge`` is
-        used.
+        ``funcs`` will run concurrently. ``merge_strategy`` may be an instance
+        of :class:`MergeStrategy` used to combine their results. If ``None`` is
+        supplied a :class:`ListMerge` instance is used.
         """
 
         strategy = merge_strategy or ListMerge()
