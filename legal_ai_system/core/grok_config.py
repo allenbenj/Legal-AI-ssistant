@@ -5,36 +5,12 @@
 # as LLM providers for the Legal AI System.
 
 
-from typing import Dict, Any, List, Optional, Union  # Added List, Optional, Union
-import sys
-from pathlib import Path
+from typing import Dict, Any, List, Optional, Union
 
-# Add project root to path for absolute imports
-project_root = Path(__file__).parent.parent
-if str(project_root) not in sys.path:
-    sys.path.insert(0, str(project_root))
-
-# Use absolute imports instead of relative imports
-try:
-    from legal_ai_system.config.settings import LegalAISettings
-    from legal_ai_system.core.llm_providers import LLMConfig, BaseLLMProvider, LLMProviderEnum
-except ImportError:
-    # Fallback for when running directly
-    try:
-        from .settings import LegalAISettings
-        from ..core.llm_providers import LLMConfig, BaseLLMProvider, LLMProviderEnum
-    except ImportError:
-        # Final fallback - create minimal classes
-        class LegalAISettings:
-            pass
-        class LLMConfig:
-            def __init__(self, **kwargs):
-                for k, v in kwargs.items():
-                    setattr(self, k, v)
-        class BaseLLMProvider:
-            pass
-        class LLMProviderEnum:
-            XAI = "xai"
+# Simplified imports from local modules. These modules are part of the
+# ``legal_ai_system`` package, so standard relative imports are sufficient.
+from .settings import LegalAISettings
+from .llm_providers import LLMConfig, BaseLLMProvider, LLMProviderEnum
 
 # Grok model configurations
 GROK_MODELS_CONFIG: Dict[str, Dict[str, Any]] = {

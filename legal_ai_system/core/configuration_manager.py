@@ -15,9 +15,10 @@ import os
 from .detailed_logging import get_detailed_logger, LogCategory, detailed_log_function
 
 # Import configuration settings
-from ..config.settings import (
-    settings as global_settings,
+# Import configuration settings directly from core to avoid circular re-export issues
+from .settings import (
     LegalAISettings,
+    settings as global_settings,
 )
 from .constants import Constants
 
