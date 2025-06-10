@@ -95,6 +95,7 @@ try:
         RealTimeAnalysisResult,
         RealTimeAnalysisWorkflow,
     )
+    from legal_ai_system.config.settings import settings
 
     SERVICES_AVAILABLE = True
 except ImportError as e:
@@ -140,6 +141,10 @@ except ImportError as e:
 
     RealTimeAnalysisWorkflow = None  # type: ignore
     RealTimeAnalysisResult = None  # type: ignore
+    class _SettingsFallback:
+        frontend_dist_path = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+
+    settings = _SettingsFallback()
 
 
 # Initialize logger for this module
@@ -1311,22 +1316,12 @@ async def process_document_background_task(  # Renamed
             )
 
 
-# Serve static frontend assets if configured. A reverse proxy is recommended for
-# production deployments, but this allows quick local testing.
-frontend_dist_path = settings.frontend_dist_path
-if frontend_dist_path and Path(frontend_dist_path).exists():
     app.mount(
         "/",
         StaticFiles(directory=str(frontend_dist_path), html=True),
         name="static_frontend",
     )
     main_api_logger.info(
-        "Serving static frontend", parameters={"path": str(frontend_dist_path)}
-    )
-else:
-    main_api_logger.warning(
-        "Frontend 'dist' directory not found; skipping static mount.",
-        parameters={"path": str(frontend_dist_path)},
     )
 
 
