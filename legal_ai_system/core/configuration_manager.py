@@ -119,11 +119,26 @@ class ConfigurationManager:
                 return env_value_str
 
 
-        # Check if value exists in settings object
+        # Check if value exists in settings object directly
         if hasattr(self._settings, key):
             value = getattr(self._settings, key)
-            config_manager_logger.trace(f"Configuration value retrieved from settings object", parameters={'key': key, 'value_type': type(value).__name__})
+            config_manager_logger.trace(
+                f"Configuration value retrieved from settings object",
+                parameters={"key": key, "value_type": type(value).__name__},
+            )
             return value
+
+        # Support nested keys like "agents.legal_reasoning_engine_config"
+        if "." in key:
+            first, rest = key.split(".", 1)
+            if hasattr(self._settings, first):
+                sub_value = getattr(self._settings, first)
+                if isinstance(sub_value, dict) and rest in sub_value:
+                    config_manager_logger.trace(
+                        "Nested configuration value retrieved",
+                        parameters={"key": key},
+                    )
+                    return sub_value.get(rest, default)
         
         # Return default if key not found
         config_manager_logger.trace(f"Using default value for '{key}'", parameters={'default_value_type': type(default).__name__})
