@@ -6,7 +6,7 @@ import {
   BarChart, Network, Workflow, Eye, Download,
   Clock, Filter, Plus, Trash2, Edit, Save
 } from 'lucide-react';
-import useRealtimeSystemStatus from '../../frontend/src/hooks/useRealtimeSystemStatus';
+import useRealtimeSystemStatus from './web/src/hooks/useRealtimeSystemStatus';
 
 // Context for global state management
 const AppContext = createContext({});

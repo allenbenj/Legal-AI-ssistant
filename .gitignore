@@ -5,5 +5,5 @@ legal_ai_system/logs/
 coverage.xml
 htmlcov/
 storage/
-frontend/node_modules/
-frontend/dist/
+legal_ai_system/frontend/web/node_modules/
+legal_ai_system/frontend/dist/

@@ -6,12 +6,12 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      'legal-ai-gui': path.resolve(__dirname, '../legal_ai_system/frontend/legal-ai-gui.tsx'),
+      'legal-ai-gui': path.resolve(__dirname, '../legal-ai-gui.tsx'),
       'lucide-react': path.resolve(__dirname, 'node_modules/lucide-react'),
     },
   },
   build: {
-    outDir: 'dist',
+    outDir: '../dist',
     emptyOutDir: true,
   },
 });

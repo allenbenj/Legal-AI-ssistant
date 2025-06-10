@@ -13,11 +13,11 @@
     "strict": true,
     "baseUrl": "./",
     "paths": {
-      "legal-ai-gui": ["../legal_ai_system/frontend/legal-ai-gui.tsx"]
+      "legal-ai-gui": ["../legal-ai-gui.tsx"]
     }
   },
   "include": [
     "src",
-    "../legal_ai_system/frontend/legal-ai-gui.tsx"
+    "../legal-ai-gui.tsx"
   ]
 }

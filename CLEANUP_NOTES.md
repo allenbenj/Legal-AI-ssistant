@@ -23,3 +23,6 @@ organization work.
 - `.gitkeep` files added so empty directories persist in version control.
 - Added a project `.gitignore` to ignore logs, coverage outputs, and cache
   directories generated during tests.
+- Moved the React frontend project from the repository root into
+  `legal_ai_system/frontend/web/` and updated build paths so the compiled
+  assets continue to reside under `legal_ai_system/frontend/dist`.
