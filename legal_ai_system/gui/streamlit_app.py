@@ -7,6 +7,8 @@ if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
 import streamlit as st
+import requests
+from legal_ai_system.config.settings import settings
 
 # MUST be first Streamlit command - configure page
 st.set_page_config(
@@ -127,15 +129,14 @@ def run_streamlit_app_content():
     st.caption("Professional Edition - Document Analysis & Knowledge Management")
 
     st.sidebar.header("Navigation")
-    # Check if services are available (conceptual, replace with actual service status check)
-    # This would typically involve making an API call to the FastAPI backend's health check.
-    backend_status = "API Not Connected"  # Placeholder
+    # Check if backend API is reachable
+    backend_status = "API Not Connected"
     try:
-        # Conceptual: r = requests.get("http://localhost:8000/api/v1/system/health") # Assuming API is on port 8000
-        # if r.status_code == 200 and r.json().get("overall_status") == "HEALTHY": backend_status = "API Connected"
-        pass  # For now, skip actual API call
-    except Exception:
-        pass
+        r = requests.get(f"{settings.api_base_url}/api/v1/system/health", timeout=5)
+        if r.status_code == 200 and r.json().get("status") == "HEALTHY":
+            backend_status = "API Connected"
+    except Exception as e:
+        streamlit_logger.warning(f"Health check failed: {e}")
 
     st.sidebar.info(f"Status: {backend_status}")
 
@@ -182,36 +183,41 @@ def run_streamlit_app_content():
 
             if st.button("Process Document"):
                 with st.spinner("Sending document to backend for processing..."):
-                    # API Call to FastAPI backend's /documents/upload and /documents/{id}/process
-                    # For this example, simulate the process.
-                    # files = {'file': (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)}
-                    # try:
-                    #     upload_response = requests.post("http://localhost:8000/api/v1/documents/upload", files=files)
-                    #     upload_response.raise_for_status()
-                    #     upload_data = upload_response.json()
-                    #     document_id = upload_data.get("document_id")
-                    #     st.info(f"Document uploaded with ID: {document_id}. Initiating processing...")
-                    #
-                    #     proc_options = {
-                    #         "enable_ner": st.session_state.opt_ner,
-                    #         "enable_llm_extraction": st.session_state.opt_llm_extract,
-                    #         # ... map other options
-                    #     }
-                    #     process_response = requests.post(f"http://localhost:8000/api/v1/documents/{document_id}/process",
-                    #                                         json={"processing_options": proc_options})
-                    #     process_response.raise_for_status()
-                    #     st.success(f"Processing started for document ID: {document_id}. Check status page or notifications.")
-                    # except requests.exceptions.RequestException as e:
-                    #     st.error(f"API Error: {e}")
-                    # except Exception as e:
-                    #     st.error(f"An error occurred: {e}")
+                    files = {
+                        'file': (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)
+                    }
+                    try:
+                        upload_response = requests.post(
+                            f"{settings.api_base_url}/api/v1/documents/upload",
+                            files=files,
+                            timeout=30,
+                        )
+                        upload_response.raise_for_status()
+                        upload_data = upload_response.json()
+                        document_id = upload_data.get("document_id")
+                        st.info(
+                            f"Document uploaded with ID: {document_id}. Initiating processing..."
+                        )
 
-                    # Mocking the process
-                    time.sleep(2)  # Simulate API call
-                    st.success(
-                        f"Document '{uploaded_file.name}' sent for processing! (Mocked)")
-                    st.info(
-                        "In a real system, you would monitor progress via status page or WebSockets.")
+                        proc_options = {
+                            "enable_ner": st.session_state.opt_ner,
+                            "enable_llm_extraction": st.session_state.opt_llm_extract,
+                            "enable_confidence_calibration": st.session_state.opt_conf_calib,
+                            "confidence_threshold": st.session_state.opt_conf_thresh,
+                        }
+                        process_response = requests.post(
+                            f"{settings.api_base_url}/api/v1/documents/{document_id}/process",
+                            json={"processing_options": proc_options},
+                            timeout=30,
+                        )
+                        process_response.raise_for_status()
+                        st.success(
+                            f"Processing started for document ID: {document_id}."
+                        )
+                    except requests.exceptions.RequestException as e:
+                        st.error(f"API Error: {e}")
+                    except Exception as e:
+                        st.error(f"An error occurred: {e}")
 
     elif page == "Knowledge Graph":
         st.header("🕸️ Knowledge Graph Explorer")
@@ -285,16 +291,14 @@ def run_streamlit_app_content():
     elif page == "System Status":
         st.header("⚙️ System Status & Health")
         st.write(
-            "Monitor the health and performance of system components. (Conceptual)")
-        # API call to FastAPI backend's /system/health
-        # status_data = requests.get("http://localhost:8000/api/v1/system/health").json()
-        # st.json(status_data)
-        st.info(
-            "System health details would be fetched from the API and displayed here.")
-        st.json({
-            "Overall Status": "HEALTHY (Mocked)", "API Backend": "Online",
-            "LLM Provider": "Connected", "Database": "Operational"
-        })
+            "Monitor the health and performance of system components.")
+        try:
+            status_data = requests.get(
+                f"{settings.api_base_url}/api/v1/system/health", timeout=5
+            ).json()
+            st.json(status_data)
+        except Exception as e:
+            st.error(f"Failed to fetch system status: {e}")
 
     st.sidebar.markdown("---")
     st.sidebar.info("Legal AI System v2.1.0")
