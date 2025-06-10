@@ -48,8 +48,14 @@ class LegalAIIntegrationService:
             raise ConfigurationError(msg)
 
         self.service_container = service_container
-        # Services are retrieved lazily since `get_service` is async
+        # Cached service references (may be None if not yet registered)
         self.security_manager: Optional[SecurityManager] = None
+        self.llm_manager: Optional[Any] = None
+
+        # Attempt to load services synchronously if already available
+        existing_services = getattr(service_container, "_services", {})
+        self.security_manager = existing_services.get("security_manager")
+        self.llm_manager = existing_services.get("llm_manager")
         # Example: self.realtime_workflow: Optional[RealTimeAnalysisWorkflow] = None
 
         integration_service_logger.info(
@@ -209,14 +215,16 @@ class LegalAIIntegrationService:
     @detailed_log_function(LogCategory.API)
     async def analyze_text(self, text: str, topic: str = "general") -> str:
         """Analyze text using the configured LLM manager."""
-        llm_manager = None
-        if self.service_container:
+        if not self.llm_manager and self.service_container:
             try:
-                llm_manager = await self.service_container.get_service("llm_manager")
+                self.llm_manager = await self.service_container.get_service(
+                    "llm_manager"
+                )
             except Exception as e:  # pragma: no cover - service retrieval issue
                 integration_service_logger.warning(
                     "LLMManager unavailable for analysis", exception=e
                 )
+        llm_manager = self.llm_manager
         if not llm_manager:
             return text
         prompt = f"Analyze the following text about {topic}:\n{text}"
@@ -230,14 +238,16 @@ class LegalAIIntegrationService:
     @detailed_log_function(LogCategory.API)
     async def summarize_text(self, text: str, max_tokens: int = 200) -> str:
         """Summarize text using the LLM manager."""
-        llm_manager = None
-        if self.service_container:
+        if not self.llm_manager and self.service_container:
             try:
-                llm_manager = await self.service_container.get_service("llm_manager")
+                self.llm_manager = await self.service_container.get_service(
+                    "llm_manager"
+                )
             except Exception as e:  # pragma: no cover - service retrieval issue
                 integration_service_logger.warning(
                     "LLMManager unavailable for summarization", exception=e
                 )
+        llm_manager = self.llm_manager
         if not llm_manager:
             return text[:max_tokens]
         prompt = (
@@ -254,34 +264,82 @@ class LegalAIIntegrationService:
     async def get_system_status_summary(self) -> Dict[str, Any]:  # Renamed
         """Aggregates status from various core services."""
         integration_service_logger.info("Fetching system status summary.")
-        # This method would call health_check() or get_service_status() on key services
-        # registered in the service_container.
 
-        # Example of how it might work:
-        # status_summary = await self.service_container.get_system_health_summary()
-        # return status_summary
+        if not self.service_container or not hasattr(
+            self.service_container, "get_system_health_summary"
+        ):
+            integration_service_logger.error(
+                "Service container not available or missing health summary method."
+            )
+            return {
+                "overall_status": "unavailable",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
 
-        # Mocked response for now:
-        mock_summary = {
-            "overall_status": "HEALTHY",
-            "services_status": {
-                "llm_manager": {"status": "healthy"},
-                "knowledge_graph_manager": {"status": "healthy"},
-                "vector_store": {"status": "healthy"},
-                "persistence_manager": {"status": "healthy"},
-            },
-            "performance_metrics_summary": {
-                "avg_workflow_time_sec": 120.5,
-                "active_workflows": 3,
-            },
-            "active_documents_count": 5,
-            "pending_reviews_count": 2,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        }
+        try:
+            status_summary = await self.service_container.get_system_health_summary()
+        except Exception as e:  # pragma: no cover - container failure
+            integration_service_logger.error(
+                "Failed to obtain system health summary.", exception=e
+            )
+            return {
+                "overall_status": "error",
+                "details": str(e),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+
+        # Gather additional metrics from workflow orchestrator or managers
+        try:
+            orchestrator = await self.service_container.get_service(
+                "ultimate_orchestrator"
+            )
+        except Exception:
+            orchestrator = None
+
+        if not orchestrator:
+            try:
+                orchestrator = await self.service_container.get_service(
+                    "realtime_analysis_workflow"
+                )
+            except Exception:
+                orchestrator = None
+
+        if orchestrator and hasattr(orchestrator, "get_system_stats"):
+            try:
+                status_summary["workflow_metrics"] = await orchestrator.get_system_stats()
+            except Exception as e:
+                integration_service_logger.warning(
+                    "Workflow metrics unavailable.", exception=e
+                )
+
+        # Add metrics from realtime graph manager if available
+        try:
+            rt_graph_manager = await self.service_container.get_service(
+                "realtime_graph_manager"
+            )
+            if rt_graph_manager and hasattr(rt_graph_manager, "get_realtime_stats"):
+                status_summary["realtime_graph_stats"] = await rt_graph_manager.get_realtime_stats()
+        except Exception as e:
+            integration_service_logger.warning(
+                "Real-time graph stats unavailable.", exception=e
+            )
+
+        # Include reviewable memory statistics for pending reviews
+        try:
+            review_memory = await self.service_container.get_service(
+                "reviewable_memory"
+            )
+            if review_memory and hasattr(review_memory, "get_review_stats_async"):
+                status_summary["review_memory_stats"] = await review_memory.get_review_stats_async()
+        except Exception as e:
+            integration_service_logger.warning(
+                "Review memory stats unavailable.", exception=e
+            )
+
         integration_service_logger.info(
-            "System status summary retrieved (mocked).", parameters=mock_summary
+            "System status summary retrieved.", parameters=status_summary
         )
-        return mock_summary
+        return status_summary
 
     # Add other methods that FastAPI endpoints will call, e.g.:
     # async def search_knowledge_graph(...)
@@ -291,7 +349,27 @@ class LegalAIIntegrationService:
         integration_service_logger.info(
             "LegalAIIntegrationService (async) initialize called."
         )
-        # Nothing specific to init here as it relies on service_container being ready.
+        # Attempt to retrieve core services now that the container is initializing
+        if not self.security_manager:
+            try:
+                self.security_manager = await self.service_container.get_service(
+                    "security_manager"
+                )
+            except Exception as e:
+                integration_service_logger.debug(
+                    "SecurityManager not available during initialization.",
+                    exception=e,
+                )
+        if not self.llm_manager:
+            try:
+                self.llm_manager = await self.service_container.get_service(
+                    "llm_manager"
+                )
+            except Exception as e:
+                integration_service_logger.debug(
+                    "LLMManager not available during initialization.",
+                    exception=e,
+                )
         return self
 
     async def get_service_status(self) -> Dict[str, Any]:  # For service container
