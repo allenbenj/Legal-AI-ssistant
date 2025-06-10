@@ -20,6 +20,7 @@ from pathlib import Path # Not directly used but good for potential path ops
 
 # Use detailed_logging
 from ..core.detailed_logging import get_detailed_logger, LogCategory, detailed_log_function
+from ..core.agent_unified_config import _get_service_sync
 # Import exceptions
 from ..core.unified_exceptions import DatabaseError, ConfigurationError
 
@@ -781,8 +782,13 @@ class CacheManager:
 class EnhancedPersistenceManager:
     """Central persistence manager coordinating all data operations."""
     
-    def __init__(self, database_url: Optional[str], redis_url: Optional[str], 
-                 config: Optional[Dict[str,Any]] = None): # Added config
+    def __init__(
+        self,
+        database_url: Optional[str],
+        redis_url: Optional[str],
+        config: Optional[Dict[str, Any]] = None,
+        metrics_exporter: Optional[Any] = None,
+    ):
         self.config = config or {}
         min_pg = self.config.get("min_pg_connections", 5)
         max_pg = self.config.get("max_pg_connections", 20)
@@ -793,6 +799,7 @@ class EnhancedPersistenceManager:
         self.entity_repo = EntityRepository(self.connection_pool)
         self.workflow_repo = WorkflowRepository(self.connection_pool)
         self.cache_manager = CacheManager(self.connection_pool, default_ttl_seconds=cache_ttl)
+        self.metrics = metrics_exporter
         self.initialized = False
         self.logger = persistence_logger.getChild("Manager")
 
@@ -968,6 +975,15 @@ class EnhancedPersistenceManager:
             },
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
+        if self.metrics:
+            try:
+                self.metrics.update_pool_metrics(
+                    pg_in_use=health_report["connection_pool_stats"]["pg_pool_current_size"],
+                    pg_free=health_report["connection_pool_stats"]["pg_pool_free_size"],
+                    redis_in_use=cache_info.get("connected_clients", 0),
+                )
+            except Exception:
+                pass
         self.logger.info("Persistence health check complete.", parameters=health_report)
         return health_report
     
@@ -986,7 +1002,9 @@ class EnhancedPersistenceManager:
         return await self.health_check()
 
 # Factory function for service container
-def create_enhanced_persistence_manager(config: Dict[str, Any]) -> EnhancedPersistenceManager:
+def create_enhanced_persistence_manager(
+    service_container: Any, config: Dict[str, Any]
+) -> EnhancedPersistenceManager:
     db_url = config.get("database_url") # e.g., from ConfigurationManager: get_db_url("postgresql_primary")
     redis_url = config.get("redis_url") # e.g., from ConfigurationManager: get_redis_url("cache_primary")
     
@@ -996,4 +1014,10 @@ def create_enhanced_persistence_manager(config: Dict[str, Any]) -> EnhancedPersi
         persistence_logger.warning("REDIS_URL not provided for EnhancedPersistenceManager. Redis caching features will be unavailable.")
 
 
-    return EnhancedPersistenceManager(db_url, redis_url, config=config.get("persistence_config"))
+    metrics = _get_service_sync(service_container, "metrics_exporter")
+    return EnhancedPersistenceManager(
+        db_url,
+        redis_url,
+        config=config.get("persistence_config"),
+        metrics_exporter=metrics,
+    )
