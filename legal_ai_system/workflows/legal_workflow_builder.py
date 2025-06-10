@@ -7,6 +7,7 @@ from typing import Any, Awaitable, Callable, Iterable, List, Sequence
 from ..workflow_engine.merge import ListMerge, MergeStrategy
 
 
+
 @dataclass
 class _ParallelStep:
     funcs: Sequence[Callable[[Any], Awaitable[Any] | Any]]
@@ -39,6 +40,7 @@ class LegalWorkflowBuilder:
 
     async def run(self, initial_input: Any) -> Any:
         """Execute the workflow and return the final result."""
+
         data: Any = initial_input
         for step in self._steps:
             result = step(data)
@@ -46,4 +48,5 @@ class LegalWorkflowBuilder:
         return data
 
 
-__all__ = ["LegalWorkflowBuilder"]
+
+__all__ = ["LegalWorkflowBuilder", "MergeStrategy", "ListMerge"]

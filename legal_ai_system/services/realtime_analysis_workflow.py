@@ -30,6 +30,7 @@ try:  # Avoid heavy imports during tests
 except Exception:  # pragma: no cover - fallback for tests
 
 
+
 # Node classes are imported lazily by the workflow builder during tests.
 
 
@@ -103,11 +104,11 @@ class RealTimeAnalysisWorkflow:
     """
 
 
+
         # Performance tracking
         self.documents_processed = 0
         self.processing_times: List[float] = []
         self.performance_stats: Dict[str, Any] = {}
-
 
         self.progress_callbacks: List[Callable] = []
         self.update_callbacks: List[Callable] = []
@@ -148,10 +149,10 @@ class RealTimeAnalysisWorkflow:
             RealTimeAnalysisResult with comprehensive analysis
         """
         async with self.processing_lock:
-            processing_times: Dict[str, float] = {}
 
 
-        return result
+
+
     async def _process_entities_realtime(
         self, hybrid_result, ontology_result, document_id: str
     ) -> Dict[str, Any]:
