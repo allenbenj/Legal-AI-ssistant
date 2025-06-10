@@ -21,6 +21,15 @@ If you plan to use the optional **LexPredict** pipelines, also install `lexnlp`:
 pip install lexnlp
 ```
 
+### Optional Dependencies
+
+The system can optionally transcribe audio and perform speaker diarization. To
+enable these features, install additional libraries:
+
+```bash
+pip install ffmpeg-python openai-whisper whisperx pdfplumber pyannote.audio
+```
+
 For more detailed instructions see [ENV_SETUP.md](ENV_SETUP.md).
 
 Alternatively, run the helper script to automate the setup and validation:

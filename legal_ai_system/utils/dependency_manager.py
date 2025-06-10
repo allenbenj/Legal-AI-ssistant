@@ -19,8 +19,6 @@ class DependencyManager:
         "markdown": {"import": "markdown", "package": "markdown"},
         "bs4": {"import": "bs4", "package": "beautifulsoup4"},
         "striprtf": {"import": "striprtf", "package": "striprtf"},
-        "pydub": {"import": "pydub", "package": "pydub"},
-        "moviepy": {"import": "moviepy.editor", "package": "moviepy"},
     }
 
     def __init__(self) -> None:
