@@ -15,17 +15,21 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 import hashlib
 import uuid
 
-# Structured logging if available; otherwise, standard logging
-try:
-    import structlog
-    logger = structlog.get_logger()
+# Structured logging if available; otherwise, standard logging.  Annotate as
+# ``Any`` so optional keyword arguments do not trigger type checker errors when
+# ``structlog`` is unavailable and the standard logger is used.
+from typing import Any
+
+try:  # pragma: no cover - optional dependency
+    import structlog  # type: ignore
+    logger: Any = structlog.get_logger()
 except Exception:  # pragma: no cover - fallback when structlog is missing
     import logging
     logging.basicConfig(level=logging.INFO)
-    logger = logging.getLogger(__name__)
+    logger: Any = logging.getLogger(__name__)
 
 try:  # Optional dependency for circuit breaker support
-    from pybreaker import CircuitBreaker
+    from pybreaker import CircuitBreaker  # type: ignore
 except Exception:  # pragma: no cover - simple fallback implementation
     class CircuitBreaker:  # type: ignore
         """Basic asyncio-compatible circuit breaker."""
