@@ -160,9 +160,90 @@ class RealTimeAnalysisWorkflow:
         document_id = f"doc_{hash(document_path) % 100000}_{int(time.time())}"
 
         async with self.processing_lock:
+            processing_times: Dict[str, float] = {}
 
+            # Document processing
+            step_start = time.time()
+            processing_result = await self.document_processor.process(
+                document_path, **kwargs
+            )
+            processing_times["document_processing"] = time.time() - step_start
 
+            document_text = self._extract_text_from_result(processing_result)
 
+            # Document rewriting
+            step_start = time.time()
+            rewriting_result = await self.document_rewriter.rewrite_text(
+                document_text
+            )
+            if hasattr(rewriting_result, "corrected_text") and rewriting_result.corrected_text:
+                document_text = rewriting_result.corrected_text
+            processing_times["document_rewriting"] = time.time() - step_start
+
+            # Hybrid extraction
+            step_start = time.time()
+            hybrid_result = await self.hybrid_extractor.extract_from_document(
+                document_path
+            )
+            processing_times["hybrid_extraction"] = time.time() - step_start
+
+            # Ontology extraction
+            step_start = time.time()
+            legal_doc = self._create_legal_document(
+                {"content": document_text},
+                document_path,
+                document_id,
+                text_override=document_text,
+            )
+            ontology_result = await self.ontology_extractor.process(legal_doc)
+            processing_times["ontology_extraction"] = time.time() - step_start
+
+            graph_updates = await self._process_entities_realtime(
+                hybrid_result, ontology_result, document_id
+            )
+            vector_updates = await self._update_vector_store_realtime(
+                hybrid_result, document_text, document_id
+            )
+            memory_updates = await self._integrate_with_memory(
+                hybrid_result, ontology_result, document_path
+            )
+            validation_results = await self._validate_extraction_quality(
+                hybrid_result, ontology_result, graph_updates
+            )
+
+            confidence_scores = self._calculate_confidence_scores(
+                hybrid_result, ontology_result, validation_results
+            )
+            total_time = time.time() - start_time
+            processing_times["total"] = total_time
+
+            sync_status = await self._get_sync_status()
+
+            result = RealTimeAnalysisResult(
+                document_path=document_path,
+                document_id=document_id,
+                document_processing=processing_result,
+                ontology_extraction=ontology_result,
+                hybrid_extraction=hybrid_result,
+                graph_updates=graph_updates,
+                vector_updates=vector_updates,
+                memory_updates=memory_updates,
+                processing_times=processing_times,
+                total_processing_time=total_time,
+                confidence_scores=confidence_scores,
+                validation_results=validation_results,
+                sync_status=sync_status,
+            )
+
+        await self._update_performance_stats(result)
+        if (
+            getattr(self, "performance_monitoring", False)
+            and self.auto_optimization_threshold
+            and self.documents_processed % self.auto_optimization_threshold == 0
+        ):
+            await self._auto_optimize_system()
+
+        return result
     async def _process_entities_realtime(
         self, hybrid_result, ontology_result, document_id: str
     ) -> Dict[str, Any]:
