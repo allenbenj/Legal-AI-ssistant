@@ -130,7 +130,8 @@ class ViolationReviewDB:
     ) -> bool:
         """Update the status and review metadata for a violation.
 
-        The ``review_time`` is stored in ISO format using UTC.
+        The ``review_time`` is stored as an ISO-8601 timestamp in UTC using
+        ``datetime.now(timezone.utc).isoformat()``.
         """
         with self._get_conn() as conn:
             conn.execute(
