@@ -357,13 +357,13 @@ class RealTimeAnalysisWorkflow:
 
             # Add document-level vector
             await self.vector_store.add_vector_async(
-                content=document_text[:1000],  # Limit size
-                entity_type="DOCUMENT",
-                entity_id=document_id,
-                confidence=0.9,
-                metadata={
-                    "document_path": hybrid_result.document_id,
-                    "extraction_timestamp": datetime.now().isoformat(),
+                content_to_embed=document_text[:1000],  # Limit size
+                document_id_ref=document_id,
+                index_target="document",
+                confidence_score=0.9,
+                source_file=hybrid_result.document_id,
+                custom_metadata={
+                    "extraction_timestamp": datetime.now().isoformat()
                 },
             )
             vector_updates["vectors_added"] += 1
@@ -372,12 +372,13 @@ class RealTimeAnalysisWorkflow:
             for entity in hybrid_result.validated_entities:
                 if entity.confidence >= self.confidence_threshold:
                     await self.vector_store.add_vector_async(
-                        content=entity.entity_text,
-                        entity_type=entity.consensus_type,
-                        entity_id=f"{entity.consensus_type}_{hash(entity.entity_text) % 10000}",
-                        confidence=entity.confidence,
-                        metadata={
-                            "source_document": document_id,
+                        content_to_embed=entity.entity_text,
+                        document_id_ref=document_id,
+                        index_target="entity",
+                        vector_id_override=f"{entity.consensus_type}_{hash(entity.entity_text) % 10000}",
+                        confidence_score=entity.confidence,
+                        source_file=document_id,
+                        custom_metadata={
                             "extraction_method": "hybrid",
                             "discrepancy": entity.discrepancy,
                         },
@@ -389,12 +390,13 @@ class RealTimeAnalysisWorkflow:
                 for result in results:
                     if result.get("confidence", 0) >= self.confidence_threshold:
                         await self.vector_store.add_vector_async(
-                            content=result.get("description", ""),
-                            entity_type=extraction_type.upper(),
-                            entity_id=f"{extraction_type}_{hash(str(result)) % 10000}",
-                            confidence=result.get("confidence", 0.8),
-                            metadata={
-                                "source_document": document_id,
+                            content_to_embed=result.get("description", ""),
+                            document_id_ref=document_id,
+                            index_target="entity",
+                            vector_id_override=f"{extraction_type}_{hash(str(result)) % 10000}",
+                            confidence_score=result.get("confidence", 0.8),
+                            source_file=document_id,
+                            custom_metadata={
                                 "targeted_extraction": True,
                                 "extraction_type": extraction_type,
                             },
