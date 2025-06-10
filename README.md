@@ -18,16 +18,9 @@ This repository contains the core components for the Legal AI assistant. To run 
 
 For more detailed instructions see [ENV_SETUP.md](ENV_SETUP.md).
 
-## Building the Frontend
 
-The React GUI lives under `frontend/`. To build the static assets you need Node
-and npm installed (Node 18 or newer works well).
-
-```bash
-cd frontend
 npm install
 npm run build
 ```
 
-The build command creates a `dist` directory containing the optimized
-application bundle.
+
