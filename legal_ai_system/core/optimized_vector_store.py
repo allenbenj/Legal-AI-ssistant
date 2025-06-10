@@ -38,6 +38,8 @@ class OptimizedVectorStore(VectorStore):  # Inherits from the main VectorStore
         default_index_type: IndexType = IndexType.HNSW,  # HNSW is often good for performance
         enable_gpu_faiss: bool = False,
         service_config: Optional[Dict[str, Any]] = None,
+        document_index_path: Optional[str] = None,
+        entity_index_path: Optional[str] = None,
     ):
         ovs_logger.info("Initializing OptimizedVectorStore.")
         # Pass arguments to the parent VectorStore class
@@ -47,6 +49,8 @@ class OptimizedVectorStore(VectorStore):  # Inherits from the main VectorStore
             default_index_type=default_index_type,
             enable_gpu_faiss=enable_gpu_faiss,
             service_config=service_config,
+            document_index_path=document_index_path,
+            entity_index_path=entity_index_path,
         )
         # Add any specific optimizations or configurations here
         # For example, might tune FAISS parameters for speed, or use a different caching strategy.
@@ -133,4 +137,7 @@ def create_optimized_vector_store(
         ),
         default_index_type=IndexType(cfg.get("DEFAULT_INDEX_TYPE", "HNSW")),
         enable_gpu_faiss=cfg.get("ENABLE_GPU_FAISS", False),
-
+        service_config=cfg,
+        document_index_path=cfg.get("DOCUMENT_INDEX_PATH"),
+        entity_index_path=cfg.get("ENTITY_INDEX_PATH"),
+    )

@@ -653,13 +653,15 @@ async def create_service_container(
 
     from ..core.vector_store import create_vector_store  # Standard one
 
-    vs_conf = {  # Fetch from config_manager
+    vs_conf = {
         "STORAGE_PATH": str(
             config_manager_service.get("data_dir") / "vector_store_main"
         ),
+        "DOCUMENT_INDEX_PATH": embed_conf.get("document_index_path"),
+        "ENTITY_INDEX_PATH": embed_conf.get("entity_index_path"),
         "DEFAULT_INDEX_TYPE": embed_conf.get(
             "vector_store_type", "HNSW"
-        ),  # Map if needed
+        ),
         "embedding_model_name": embed_conf.get("embedding_model"),
     }
     # EmbeddingProvider instance can be fetched from EmbeddingManager if VectorStore is designed to take it
@@ -676,6 +678,8 @@ async def create_service_container(
         "STORAGE_PATH": str(
             config_manager_service.get("data_dir") / "vector_store_optimized"
         ),
+        "DOCUMENT_INDEX_PATH": embed_conf.get("document_index_path"),
+        "ENTITY_INDEX_PATH": embed_conf.get("entity_index_path"),
         "DEFAULT_INDEX_TYPE": "HNSW",  # Often optimized means HNSW or specific FAISS params
     }
     await container.register_service(

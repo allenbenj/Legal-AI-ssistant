@@ -198,14 +198,18 @@ class VectorStore:
     def __init__(
         self,
         storage_path_str: str,
-        embedding_provider: EmbeddingProviderVS, 
+        embedding_provider: EmbeddingProviderVS,
         default_index_type: IndexType = IndexType.HNSW,
         enable_gpu_faiss: bool = False,
-        service_config: Optional[Dict[str,Any]] = None
+        service_config: Optional[Dict[str,Any]] = None,
+        document_index_path: Optional[str] = None,
+        entity_index_path: Optional[str] = None,
     ):
         vector_store_logger.info("=== VectorStore: Instance Creation START ===")
         self.config = service_config or {}
         self.storage_path = Path(storage_path_str)
+        self.document_index_path = Path(document_index_path) if document_index_path else self.storage_path / "document_index.faiss"
+        self.entity_index_path = Path(entity_index_path) if entity_index_path else self.storage_path / "entity_index.faiss"
         
         if not isinstance(embedding_provider, EmbeddingProviderVS):
             raise ConfigurationError("Invalid EmbeddingProviderVS instance provided.", config_key="embedding_provider")
@@ -399,7 +403,7 @@ class VectorStore:
     def _load_faiss_indexes_sync(self):
         """Synchronous part of loading FAISS indexes from disk."""
         with self._sync_lock: # Ensure thread-safe access to self.document_index etc.
-            doc_index_path = self.storage_path / "document_index.faiss"
+            doc_index_path = self.document_index_path
             if doc_index_path.exists():
                 try:
                     self.document_index = faiss.read_index(str(doc_index_path))
@@ -422,7 +426,7 @@ class VectorStore:
             else:
                 vs_index_logger.info(f"No document FAISS index file found at '{doc_index_path}'. Starting with empty index.")
 
-            entity_index_path = self.storage_path / "entity_index.faiss"
+            entity_index_path = self.entity_index_path
             if entity_index_path.exists():
                 try:
                     self.entity_index = faiss.read_index(str(entity_index_path))
@@ -548,8 +552,8 @@ class VectorStore:
         with self._sync_lock: # Thread lock for FAISS C++ object access
             self._update_disk_usage_stats() # Update before saving
             if self.document_index and self.document_index.ntotal > 0:
-                doc_idx_path = self.storage_path / "document_index.faiss"
-                tmp_doc_idx_path = self.storage_path / f"document_index_{int(time.time())}.faiss.tmp"
+                doc_idx_path = self.document_index_path
+                tmp_doc_idx_path = doc_idx_path.with_name(f"{doc_idx_path.stem}_{int(time.time())}.faiss.tmp")
                 try:
                     faiss.write_index(self.document_index, str(tmp_doc_idx_path))
                     os.replace(tmp_doc_idx_path, doc_idx_path)
@@ -559,8 +563,8 @@ class VectorStore:
                     if tmp_doc_idx_path.exists(): os.remove(tmp_doc_idx_path)
 
             if self.entity_index and self.entity_index.ntotal > 0:
-                ent_idx_path = self.storage_path / "entity_index.faiss"
-                tmp_ent_idx_path = self.storage_path / f"entity_index_{int(time.time())}.faiss.tmp"
+                ent_idx_path = self.entity_index_path
+                tmp_ent_idx_path = ent_idx_path.with_name(f"{ent_idx_path.stem}_{int(time.time())}.faiss.tmp")
                 try:
                     faiss.write_index(self.entity_index, str(tmp_ent_idx_path))
                     os.replace(tmp_ent_idx_path, ent_idx_path)
@@ -1122,8 +1126,8 @@ class VectorStore:
     def _update_disk_usage_stats(self):
         """Updates statistics about disk usage for indexes and metadata DB."""
         try:
-            doc_idx_path = self.storage_path / "document_index.faiss"
-            ent_idx_path = self.storage_path / "entity_index.faiss"
+            doc_idx_path = self.document_index_path
+            ent_idx_path = self.entity_index_path
             meta_db_path = self.metadata_db_path
 
             doc_idx_size = doc_idx_path.stat().st_size if doc_idx_path.exists() else 0
@@ -1281,7 +1285,9 @@ def create_vector_store(service_container: Any, service_config_override: Optiona
         embedding_provider=embedding_provider_instance, # Pass the initialized provider
         default_index_type=IndexType(vs_cfg.get("DEFAULT_INDEX_TYPE", "HNSW").upper()),
         enable_gpu_faiss=bool(vs_cfg.get("ENABLE_GPU_FAISS", False)),
-        service_config=vs_cfg # Pass the specific vector_store_config slice
+        service_config=vs_cfg, # Pass the specific vector_store_config slice
+        document_index_path=vs_cfg.get("DOCUMENT_INDEX_PATH"),
+        entity_index_path=vs_cfg.get("ENTITY_INDEX_PATH"),
     )
         
     vector_store_logger.info("VectorStore instance created by factory (now needs async initialization by caller).")
