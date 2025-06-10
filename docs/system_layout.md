@@ -134,3 +134,22 @@ Documents move through several states as they are processed:
 6. **error** – an unrecoverable issue occurred during processing.
 
 Tracking these states helps the UI report progress and highlight any processing issues.
+### Workflow Orchestrator
+
+`WorkflowOrchestrator` is registered with the service container. During creation the container instance is passed into its constructor, which then instantiates `RealTimeAnalysisWorkflow` using that same container. The workflow fetches managers such as persistence, knowledge graph and vector store services from the container so the orchestrator can execute document processing without directly managing those dependencies.
+
+### Service Container Initialization Order
+
+The `create_service_container` function wires services together in a specific order:
+
+1. **ConfigurationManager** – loads settings used by every other component.
+2. **PersistenceManager** followed by **UserRepository**.
+3. **SecurityManager** and its **AuthenticationManager** which depend on persistence.
+4. **LLMManager**, **ModelSwitcher** and **EmbeddingManager** for language model operations.
+5. **KnowledgeGraphManager** and **VectorStore**, then **RealTimeGraphManager**.
+6. **UnifiedMemoryManager** and **ReviewableMemory** for state storage.
+7. **ViolationReviewDB** for tracking policy violations.
+8. **RealTimeAnalysisWorkflow** and the various agent factories.
+9. LangGraph node factories and finally **WorkflowOrchestrator**.
+10. The container then calls `initialize_all_services` so each registered service can prepare its resources.
+
