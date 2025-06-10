@@ -7,11 +7,11 @@ import {
   BarChart, Network, Workflow, Eye, Download,
   Clock, Filter, Plus, Trash2, Edit, Save
 } from 'lucide-react';
-import ErrorBoundary from '../../frontend/src/components/ErrorBoundary';
+import ErrorBoundary from '@/components/ErrorBoundary';
 import {
   DashboardErrorBoundary,
   DocumentProcessingErrorBoundary,
-} from '../../frontend/src/components/AsyncErrorBoundary';
+} from '@/components/AsyncErrorBoundary';
 
 
 
