@@ -1,6 +1,8 @@
 """Placeholder node classes for real-time workflow tests."""
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import Any, Callable
 
 
 @dataclass
