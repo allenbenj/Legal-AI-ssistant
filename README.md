@@ -51,6 +51,17 @@ enable these features, install additional libraries:
 pip install ffmpeg-python openai-whisper whisperx pdfplumber pyannote.audio
 ```
 
+To experiment with advanced workflow orchestration using the
+[`langgraph`](https://pypi.org/project/langgraph/) engine install it
+separately:
+
+```bash
+pip install langgraph==0.0.20
+```
+
+See [advanced_langgraph.md](docs/advanced_langgraph.md) for details on how the
+package integrates with document routing and WebSocket progress updates.
+
 For more detailed instructions see [ENV_SETUP.md](ENV_SETUP.md).
 
 The older `setup_environment_task.py` script can also be used to create the vir
@@ -78,3 +89,4 @@ See the documents in the `docs/` folder for architecture details and advanced
 usage. The [Integration Guide](docs/integration_plan.md) summarises the
 five-phase integration plan, WebSocket patterns and deployment tips and
 includes sections on security, testing, success metrics and troubleshooting.
+For LangGraph specific routing examples see [advanced_langgraph.md](docs/advanced_langgraph.md).

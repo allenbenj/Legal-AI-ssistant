@@ -44,7 +44,6 @@ class WorkflowOrchestrator:
         self.builder_topic = builder_topic or topic
         self.graph_builder = build_advanced_legal_workflow
         self._graph = None
-        self.connection_manager = None
 
         if workflow_config is None:
             workflow_config = config.get("workflow_config", WorkflowConfig())
@@ -59,10 +58,31 @@ class WorkflowOrchestrator:
 
         wo_logger.info("WorkflowOrchestrator initialized")
 
+    async def _forward_progress(self, message: str, progress: float) -> None:
+        """Forward workflow progress via WebSocket if manager available."""
+        if not self.websocket_manager:
+            return
+        try:
+            await self.websocket_manager.broadcast(
+                f"workflow_progress_{self.topic}",
+                {
+                    "type": "processing_progress",
+                    "message": message,
+                    "progress": float(progress),
+                },
+            )
+        except Exception as exc:  # pragma: no cover - network issues
+            wo_logger.error(
+                "Failed to broadcast progress update.", exception=exc
+            )
+
     @detailed_log_function(LogCategory.SYSTEM)
     async def initialize_service(self) -> None:
-        await self.service_container.initialize_all_services()
+
         await self.workflow.initialize()
+
+        if self.websocket_manager:
+            self.workflow.register_progress_callback(self._forward_progress)
         # lazily build graph for builder-based workflow
         if self._graph is None:
             self._graph = self.graph_builder(self.topic)
