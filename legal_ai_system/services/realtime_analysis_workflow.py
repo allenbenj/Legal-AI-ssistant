@@ -160,46 +160,7 @@ class RealTimeAnalysisWorkflow:
         document_id = f"doc_{hash(document_path) % 100000}_{int(time.time())}"
 
         async with self.processing_lock:
-            self.logger.info("Starting real-time analysis for: %s", document_path)
 
-            doc_result = await self.document_processor.process(document_path)
-            rewrite = await self.document_rewriter.rewrite_text(doc_result.data.content)
-            hybrid_result = await self.hybrid_extractor.extract_from_document(document_path)
-            ontology_result = await self.ontology_extractor.process(document_path)
-
-            graph_updates = await self._process_entities_realtime(
-                hybrid_result, ontology_result, document_id
-            )
-            vector_updates = await self._update_vector_store_realtime(
-                hybrid_result, rewrite.corrected_text, document_id
-            )
-            memory_updates = await self._integrate_with_memory(
-                hybrid_result, ontology_result, document_path
-            )
-            validation = await self._validate_extraction_quality(
-                hybrid_result, ontology_result
-            )
-            scores = self._calculate_confidence_scores(hybrid_result, ontology_result)
-            sync_status = await self._get_sync_status()
-            await self._update_performance_stats()
-
-        total_time = time.time() - start_time
-
-        return RealTimeAnalysisResult(
-            document_path=document_path,
-            document_id=document_id,
-            document_processing=doc_result,
-            ontology_extraction=ontology_result,
-            hybrid_extraction=hybrid_result,
-            graph_updates=graph_updates,
-            vector_updates=vector_updates,
-            memory_updates=memory_updates,
-            processing_times={},
-            total_processing_time=total_time,
-            confidence_scores=scores,
-            validation_results=validation,
-            sync_status=sync_status,
-        )
 
 
     async def _process_entities_realtime(

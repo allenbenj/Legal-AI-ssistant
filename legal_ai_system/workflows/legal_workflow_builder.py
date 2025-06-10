@@ -1,12 +1,7 @@
-"""Minimal workflow builder used for testing."""
-from __future__ import annotations
-
-import asyncio
-from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Iterable, List, Sequence
 
 from ..workflow_engine.merge import MergeStrategy, ListMerge
 
+        return result
 
 @dataclass
 class _ParallelStep:

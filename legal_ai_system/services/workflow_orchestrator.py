@@ -9,7 +9,6 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 from typing import Any, Dict, Optional
-from pathlib import Path
 
 from ..utils.document_utils import extract_text
 from ..workflows.langgraph_setup import build_graph
@@ -20,8 +19,6 @@ from ..core.detailed_logging import (
     detailed_log_function,
 )
 from .realtime_analysis_workflow import RealTimeAnalysisWorkflow
-from ..workflows.langgraph_setup import build_graph
-from ..utils.document_utils import extract_text
 
 wo_logger = get_detailed_logger("WorkflowOrchestrator", LogCategory.SYSTEM)
 
@@ -30,12 +27,23 @@ class WorkflowOrchestrator:
     """High level service to run document workflows."""
 
     @detailed_log_function(LogCategory.SYSTEM)
-    def __init__(self, service_container, workflow_config=None, **config: Any) -> None:
+    def __init__(
+        self,
+        service_container,
+        topic: str = "default",
+        builder_topic: Optional[str] = None,
+        workflow_config=None,
+        **config: Any,
+    ) -> None:
         """Initialize the orchestrator with optional workflow component config."""
         from ..config.workflow_config import WorkflowConfig
 
         self.service_container = service_container
         self.config = config
+        self.topic = topic
+        self.builder_topic = builder_topic or topic
+        self.graph_builder = build_graph
+        self._graph = None
 
         if workflow_config is None:
             workflow_config = config.get("workflow_config", WorkflowConfig())
