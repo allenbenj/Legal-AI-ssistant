@@ -118,7 +118,7 @@ class OntologyExtractionAgent(BaseAgent, MemoryMixin):
         # Get optimized Grok-Mini configuration for this agent
         self.llm_config = self.get_optimized_llm_config()
         self.logger.info(
-            f"OntologyExtractionAgentAgent configured with model: {self.llm_config.get('llm_model', 'default')}"
+            f"OntologyExtractionAgent configured with model: {self.llm_config.get('llm_model', 'default')}"
         )
         self.version = config.get("agent_version", "1.0.0")
         self.name = "OntologyExtractionAgent"

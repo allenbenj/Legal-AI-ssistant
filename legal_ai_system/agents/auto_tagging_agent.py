@@ -76,7 +76,9 @@ class AutoTaggingAgent(BaseAgent, MemoryMixin):
         
         # Get optimized Grok-Mini configuration for this agent
         self.llm_config = self.get_optimized_llm_config()
-        self.logger.info(f"AutoTaggingAgentAgent configured with model: {self.llm_config.get('llm_model', 'default')}")
+        self.logger.info(
+            f"AutoTaggingAgent configured with model: {self.llm_config.get('llm_model', 'default')}"
+        )
         self.llm_manager: Optional[LLMManager] = self._get_service("llm_manager")
         self.unified_memory_manager: Optional[UnifiedMemoryManager] = self._get_service("unified_memory_manager")
 

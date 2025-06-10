@@ -76,7 +76,9 @@ class CitationAnalysisAgent(BaseAgent, MemoryMixin):
         
         # Get optimized Grok-Mini configuration for this agent
         self.llm_config = self.get_optimized_llm_config()
-        self.logger.info(f"CitationAnalysisAgentAgent configured with model: {self.llm_config.get('llm_model', 'default')}")
+        self.logger.info(
+            f"CitationAnalysisAgent configured with model: {self.llm_config.get('llm_model', 'default')}"
+        )
         self.llm_manager: Optional[LLMManager] = self._get_service("llm_manager")
         self.model_switcher: Optional[ModelSwitcher] = self._get_service("model_switcher")
 

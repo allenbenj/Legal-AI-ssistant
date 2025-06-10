@@ -71,7 +71,9 @@ class NoteTakingAgent(BaseAgent, MemoryMixin):
         
         # Get optimized Grok-Mini configuration for this agent
         self.llm_config = self.get_optimized_llm_config()
-        self.logger.info(f"NoteTakingAgentAgent configured with model: {self.llm_config.get('llm_model', 'default')}")
+        self.logger.info(
+            f"NoteTakingAgent configured with model: {self.llm_config.get('llm_model', 'default')}"
+        )
         self.llm_manager: Optional[LLMManager] = self.get_llm_manager()
         self.memory_manager: Optional[UnifiedMemoryManager] = self._get_service("unified_memory_manager")
 
