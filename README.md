@@ -61,11 +61,7 @@ python legal_ai_system/scripts/setup_environment_task.py
 
 ### Start Task
 
-After installing the dependencies you can run a quick linkage verification and
-the full test suite with:
 
-```bash
-python scripts/start_linkage_check.py
 ```
 ### Example: Build a Workflow
 
