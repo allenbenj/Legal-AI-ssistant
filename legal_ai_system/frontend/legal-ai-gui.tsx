@@ -12,7 +12,7 @@ import {
   DashboardErrorBoundary,
   DocumentProcessingErrorBoundary,
 } from '../../frontend/src/components/AsyncErrorBoundary';
-import WorkflowDesigner from "@/components/WorkflowDesigner";
+
 
 
 
@@ -352,8 +352,10 @@ function DocumentProcessing() {
           {error && (
             <div className="text-red-600 space-x-2">
               <span>Error loading documents</span>
-              <button
-                className="underline"
+              <Button
+                variant="outline"
+                size="sm"
+                style={{ textDecoration: 'underline' }}
                 onClick={() =>
                   executeAsync(() =>
                     fetch('data/sample_documents.json').then(res => {
@@ -364,7 +366,7 @@ function DocumentProcessing() {
                 }
               >
                 Retry
-              </button>
+              </Button>
             </div>
           )}
           {documents &&

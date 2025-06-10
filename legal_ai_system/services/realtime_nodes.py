@@ -1,5 +1,6 @@
-"""Placeholder node classes for real-time workflow tests."""
-from __future__ import annotations
+
+
+from typing import Any
 
 
     "DocumentProcessingNode",
@@ -10,4 +11,3 @@ from __future__ import annotations
     "VectorStoreUpdateNode",
     "MemoryIntegrationNode",
     "ValidationNode",
-]

@@ -89,10 +89,8 @@ else:
             class AuthenticationManager:
                 pass
 
-    from .realtime_analysis_workflow import (
-        RealTimeAnalysisWorkflow,
-        WorkflowConfig,
-    )
+    from .realtime_analysis_workflow import RealTimeAnalysisWorkflow
+    from .workflow_config import WorkflowConfig
 
 
 # Initialize logger for this module

@@ -7,13 +7,25 @@ from typing import Any, Dict, Set
 from fastapi import WebSocket, WebSocketDisconnect
 
 try:
-    from legal_ai_system.core.detailed_logging import get_detailed_logger, LogCategory
+    from legal_ai_system.core.detailed_logging import (
+        DetailedLogger,
+        get_detailed_logger,
+        LogCategory,
+    )
 except Exception:  # pragma: no cover - fall back to std logging
     import logging
+
     class LogCategory:  # type: ignore
         API = "API"
-    def get_detailed_logger(name: str, category: LogCategory):  # type: ignore
-        return logging.getLogger(name)
+
+    class DetailedLogger(logging.Logger):
+        def __init__(self, name: str, category: LogCategory = LogCategory.API) -> None:
+            super().__init__(name)
+            self.category = category
+            self.logger = self
+
+    def get_detailed_logger(name: str, category: LogCategory) -> DetailedLogger:  # type: ignore
+        return DetailedLogger(name, category)
 
 
 class ConnectionManager:
