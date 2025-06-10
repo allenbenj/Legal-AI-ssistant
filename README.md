@@ -29,6 +29,13 @@ If you prefer manual installation:
    npm install
    (cd frontend && npm install)
    ```
+4. Build the frontend for production (optional when serving via FastAPI):
+   ```bash
+   (cd frontend && npm run build)
+   ```
+   This uses `vite.config.ts` which outputs to `frontend/dist`. FastAPI looks for
+   static files in `LegalAISettings.frontend_dist_path`, which defaults to the same directory,
+   so a production build will be served automatically when present.
 
 If you plan to use the optional **LexPredict** pipelines, also install `lexnlp`:
 ```bash
@@ -54,10 +61,7 @@ python legal_ai_system/scripts/setup_environment_task.py
 
 ### Start Task
 
-Launch the lightweight linkage check to verify your environment:
 
-```bash
-python legal_ai_system/scripts/start_linkage_check.py
 ```
 ### Example: Build a Workflow
 
