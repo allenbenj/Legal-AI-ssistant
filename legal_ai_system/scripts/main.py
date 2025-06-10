@@ -276,7 +276,14 @@ async def lifespan(app: FastAPI):
         )
 
     websocket_manager_instance = ConnectionManager()
-    realtime_publisher_instance = RealtimePublisher(websocket_manager_instance)
+    metrics_exporter_instance = (
+        service_container_instance.get_service("metrics_exporter")
+        if service_container_instance
+        else None
+    )
+    realtime_publisher_instance = RealtimePublisher(
+        websocket_manager_instance, metrics_exporter_instance
+    )
     realtime_publisher_instance.start_system_monitoring()
 
     main_api_logger.info(
@@ -1050,6 +1057,9 @@ async def get_system_health_rest(  # Renamed
     try:
         # This method should be on ServiceContainer or a dedicated HealthService
         health_summary = await service_container.get_system_health_summary()
+        metrics_exporter = await service_container.get_service("metrics_exporter")
+        if metrics_exporter:
+            health_summary["metrics"] = metrics_exporter.snapshot()
 
         return SystemHealthResponse(
             overall_status=health_summary.get("overall_status", "DEGRADED"),

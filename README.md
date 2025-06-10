@@ -59,8 +59,10 @@ separately:
 pip install langgraph==0.0.20
 ```
 
-See [advanced_langgraph.md](docs/advanced_langgraph.md) for details on how the
-package integrates with document routing and WebSocket progress updates.
+The [advanced LangGraph guide](docs/advanced_langgraph.md) explains how this
+optional dependency enables document classification routing, specialized
+subgraphs, and real-time progress updates over WebSocket. It also shows a
+`CaseWorkflowState` example for passing state between nodes.
 
 For more detailed instructions see [ENV_SETUP.md](ENV_SETUP.md).
 
@@ -69,6 +71,18 @@ tual environment and run the tests:
 ```bash
 python legal_ai_system/scripts/setup_environment_task.py
 ```
+
+### Extraction Options
+
+The ontology extraction agent supports multiple NER backends. Enable them in
+`config/defaults.yaml`:
+
+- `enable_spacy_ner`: load a spaCy pipeline specified by `spacy_ner_model`.
+- `enable_legal_bert`: use a HuggingFace Legal‑BERT model defined by
+  `legal_bert_model_name`.
+- `enable_regex_extraction`: apply regex patterns from the configuration files.
+
+All enabled methods are combined with confidence weighting during extraction.
 
 
 ### Start Task
@@ -89,4 +103,3 @@ See the documents in the `docs/` folder for architecture details and advanced
 usage. The [Integration Guide](docs/integration_plan.md) summarises the
 five-phase integration plan, WebSocket patterns and deployment tips and
 includes sections on security, testing, success metrics and troubleshooting.
-For LangGraph specific routing examples see [advanced_langgraph.md](docs/advanced_langgraph.md).

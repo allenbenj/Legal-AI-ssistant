@@ -12,6 +12,7 @@ import asyncio
 import time
 import uuid
 from dataclasses import dataclass
+from types import SimpleNamespace
 from datetime import datetime
 import uuid
 from pathlib import Path
@@ -86,7 +87,28 @@ class RealTimeAnalysisResult:
 class RealTimeAnalysisWorkflow:
     """Master workflow for real-time legal document analysis."""
 
+    def __init__(
+        self,
+        service_container: Any | None = None,
+        workflow_config: Any | None = None,
+    ) -> None:
+        """Initialize workflow settings and state."""
+        self.service_container = service_container
+        self.logger = get_detailed_logger(
+            "RealTimeWorkflow", LogCategory.SYSTEM
+        )
 
+        cfg = workflow_config or SimpleNamespace(
+            enable_real_time_sync=True,
+            confidence_threshold=0.75,
+            max_concurrent_documents=1,
+            auto_optimization_threshold=1000,
+        )
+
+        self.enable_real_time_sync = cfg.enable_real_time_sync
+        self.confidence_threshold = cfg.confidence_threshold
+        self.max_concurrent_documents = cfg.max_concurrent_documents
+        self.auto_optimization_threshold = cfg.auto_optimization_threshold
 
         # Performance tracking
         self.documents_processed = 0
@@ -141,25 +163,73 @@ class RealTimeAnalysisWorkflow:
         return await self._run_realtime_pipeline(document_path, **kwargs)
 
 
-
+    async def _run_realtime_pipeline(self, document_path: str, **kwargs):
+        """Run the end-to-end real-time processing pipeline."""
         document_id = kwargs.get("document_id") or f"doc_rt_{uuid.uuid4().hex}"
+
+        start_time = time.time()
+        processing_times: Dict[str, float] = {}
+
+        async with self.processing_lock:
+            await self._notify_progress("document_processing", 0.05)
+            t0 = time.time()
+            document_result = await self.document_processor.process(document_path)
+            processing_times["document_processing"] = time.time() - t0
+
+            text = self._extract_text_from_result(document_result)
+
+            await self._notify_progress("ontology_extraction", 0.15)
+            legal_doc = self._create_legal_document(document_result, document_path, document_id, text_override=text)
+            t0 = time.time()
+            ontology_result = await self.ontology_extractor.process(legal_doc)
+            processing_times["ontology_extraction"] = time.time() - t0
+
+            await self._notify_progress("hybrid_extraction", 0.35)
+            t0 = time.time()
+            hybrid_result = await self.hybrid_extractor.extract_from_document(document_path, document_id=document_id)
+            processing_times["hybrid_extraction"] = time.time() - t0
+
+            await self._notify_progress("graph_update", 0.55)
+            t0 = time.time()
+            graph_updates = await self._process_entities_realtime(hybrid_result, ontology_result, document_id)
+            processing_times["graph_updates"] = time.time() - t0
+
+            await self._notify_progress("vector_update", 0.7)
+            t0 = time.time()
+            vector_updates = await self._update_vector_store_realtime(hybrid_result, text, document_id)
+            processing_times["vector_updates"] = time.time() - t0
+
+            await self._notify_progress("memory_integration", 0.85)
+            t0 = time.time()
+            memory_updates = await self._integrate_with_memory(hybrid_result, ontology_result, document_path)
+            processing_times["memory_updates"] = time.time() - t0
+
+            validation = await self._validate_extraction_quality(hybrid_result, ontology_result, graph_updates)
+            confidence_scores = self._calculate_confidence_scores(hybrid_result, ontology_result, validation)
+            sync_status = await self._get_sync_status()
 
         total_processing_time = time.time() - start_time
 
+        result = RealTimeAnalysisResult(
             document_path=document_path,
             document_id=document_id,
-            document_processing=None,
-            ontology_extraction=None,
-            hybrid_extraction=None,
-            graph_updates={},
-            vector_updates={},
-            memory_updates={},
-            processing_times={},
+            document_processing=document_result,
+            ontology_extraction=ontology_result,
+            hybrid_extraction=hybrid_result,
+            graph_updates=graph_updates,
+            vector_updates=vector_updates,
+            memory_updates=memory_updates,
+            processing_times=processing_times,
             total_processing_time=total_processing_time,
-            confidence_scores={},
-            validation_results={},
-            sync_status={},
+            confidence_scores=confidence_scores,
+            validation_results=validation,
+            sync_status=sync_status,
         )
+
+        await self._update_performance_stats(result)
+        if self.auto_optimization_threshold and self.documents_processed % self.auto_optimization_threshold == 0:
+            await self._auto_optimize_system()
+
         await self._notify_progress("completed", 1.0)
         return result
 

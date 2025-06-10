@@ -251,6 +251,11 @@ class ServiceContainer:
 
             async with self._lock:
                 self._services[name] = instance
+        except Exception as e:
+            service_container_logger.error(
+                f"Failed to create service '{name}'.", exception=e
+            )
+            raise
 
     @detailed_log_function(LogCategory.SYSTEM)
     async def initialize_all_services(self) -> None:
@@ -507,6 +512,17 @@ async def create_service_container(
         instance=TaskQueue(redis_url=queue_url),
     )
 
+    # Create shared connection pool for all persistence layers
+    from ..core.enhanced_persistence import ConnectionPool
+
+    db_conf = config_manager_service.get_database_config()
+    pool = ConnectionPool(
+        db_conf.neo4j_uri,
+        config_manager_service.get("REDIS_URL_CACHE"),
+    )
+    await pool.initialize()
+    await container.register_service("connection_pool", instance=pool)
+
     # 2. Core Services (Loggers are implicitly available via get_detailed_logger)
     # ErrorHandler is a global singleton, usually not registered but can be if needed for explicit access.
     # from .unified_exceptions import get_error_handler
@@ -518,10 +534,8 @@ async def create_service_container(
     )
 
     db_conf = config_manager_service.get_database_config()
+    connection_pool_service = await container.get_service("connection_pool")
     persistence_cfg_for_factory = {
-        "database_url": db_conf.neo4j_uri,  # Example if EnhancedPersistence uses Neo4j
-        # Or better: db_conf.get_url_for_service("main_relational_db")
-        "redis_url": config_manager_service.get("REDIS_URL_CACHE"),  # Example
         "persistence_config": config_manager_service.get(
             "persistence_layer_details", {}
         ),
@@ -530,6 +544,7 @@ async def create_service_container(
         "persistence_manager",
         factory=create_enhanced_persistence_manager,
         is_async_factory=False,
+        connection_pool=connection_pool_service,
         config=persistence_cfg_for_factory,
     )
 
@@ -560,10 +575,10 @@ async def create_service_container(
     # Register UserRepository
     from ..utils.user_repository import UserRepository
 
-    if persistence_manager_service and persistence_manager_service.connection_pool:
+    if connection_pool_service:
         await container.register_service(
             "user_repository",
-            instance=UserRepository(persistence_manager_service.connection_pool),
+            instance=UserRepository(connection_pool_service),
         )
     else:
         service_container_logger.warning(
@@ -685,7 +700,8 @@ async def create_service_container(
     await container.register_service(
         "knowledge_graph_manager",
         factory=create_knowledge_graph_manager,
-        service_config=kg_conf,
+        connection_pool=connection_pool_service,
+        config=kg_conf,
     )
 
     from ..core.enhanced_vector_store import (
@@ -704,7 +720,10 @@ async def create_service_container(
     # EmbeddingProvider instance can be fetched from EmbeddingManager if VectorStore is designed to take it
     # embedding_provider_instance = await container.get_service("embedding_manager").get_provider_instance() # Conceptual
     await container.register_service(
-        "vector_store", factory=create_enhanced_vector_store, service_config=vs_conf
+        "vector_store",
+        factory=create_enhanced_vector_store,
+        connection_pool=connection_pool_service,
+        config=vs_conf,
     )
 
     from .realtime_graph_manager import create_realtime_graph_manager
