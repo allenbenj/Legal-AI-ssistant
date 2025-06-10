@@ -81,14 +81,7 @@ from pydantic import Field as PydanticField  # Alias Field
 from strawberry.fastapi import GraphQLRouter  # type: ignore
 from strawberry.types import Info  # type: ignore
 
-try:
-    from legal_ai_system.core.detailed_logging import (
-        LogCategory,
-        get_detailed_logger,
-    )
 
-    SERVICES_AVAILABLE = True
-except ImportError as e:
     # This fallback is for when main.py might be run before the full system is in place
     # or if there are circular dependencies during setup.
     print(
@@ -129,34 +122,7 @@ except ImportError as e:
             self.last_login = last_login
             self.is_active = is_active
 
-    class ConnectionManager:  # type: ignore
-        async def connect(self, websocket, client_id):
-            await websocket.accept()
 
-        def disconnect(self, client_id):
-            pass
-
-        async def broadcast_to_topic(self, message, topic):
-            pass
-
-        async def subscribe_to_topic(self, client_id, topic):
-            pass
-
-        async def unsubscribe_from_topic(self, client_id, topic):
-            pass
-
-        async def send_personal_message(self, message, client_id):
-            pass
-
-    class RealtimePublisher:  # type: ignore
-        def __init__(self, manager):
-            pass
-
-        def start_system_monitoring(self, interval: float = 1.0) -> None:
-            pass
-
-        def stop(self) -> None:
-            pass
 
     class _SettingsFallback:
         frontend_dist_path = (
@@ -184,10 +150,7 @@ def load_workflow_configs() -> Dict[str, WorkflowConfig]:
     if WORKFLOW_CONFIGS_FILE.exists():
         try:
             data = json.loads(WORKFLOW_CONFIGS_FILE.read_text())
-            return {
-                cfg["id"]: WorkflowConfig(**cfg)
-                for cfg in data
-            }
+            return {cfg["id"]: WorkflowConfig(**cfg) for cfg in data}
         except Exception as e:
             main_api_logger.error(
                 "Failed to load workflow configurations.", exception=e
@@ -205,43 +168,6 @@ def save_workflow_configs(configs: Dict[str, WorkflowConfig]) -> None:
             default=str,
         )
 
-# Workflow configuration storage
-WORKFLOW_CONFIG_FILE = Path(settings.data_dir) / "workflow_configs.json"
-workflow_configs: Dict[str, "WorkflowConfig"] = {}
-
-
-def load_workflow_configs() -> None:
-    """Load workflow presets from disk if available."""
-    if WORKFLOW_CONFIG_FILE.exists():
-        try:
-            data = json.load(open(WORKFLOW_CONFIG_FILE, "r"))
-            for item in data:
-                workflow_configs[item["id"]] = WorkflowConfig(**item)
-            main_api_logger.info(
-                "Loaded workflow configurations",
-                parameters={"count": len(workflow_configs)},
-            )
-        except Exception as e:  # pragma: no cover - startup resilience
-            main_api_logger.error(
-                "Failed to load workflow configurations.", exception=e
-            )
-
-
-def save_workflow_configs() -> None:
-    """Persist workflow presets to disk."""
-    try:
-        WORKFLOW_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-        with open(WORKFLOW_CONFIG_FILE, "w") as f:
-            json.dump(
-                [cfg.model_dump() for cfg in workflow_configs.values()],
-                f,
-                default=str,
-                indent=2,
-            )
-    except Exception as e:  # pragma: no cover - I/O failure shouldn't crash
-        main_api_logger.error(
-            "Failed to save workflow configurations.", exception=e
-        )
 
 # Workflow configuration storage
 WORKFLOW_CONFIG_FILE = Path(settings.data_dir) / "workflow_configs.json"
@@ -277,9 +203,8 @@ def save_workflow_configs() -> None:
                 indent=2,
             )
     except Exception as e:  # pragma: no cover - I/O failure shouldn't crash
-        main_api_logger.error(
-            "Failed to save workflow configurations.", exception=e
-        )
+        main_api_logger.error("Failed to save workflow configurations.", exception=e)
+
 
 # Workflow configuration storage
 WORKFLOW_CONFIG_FILE = Path(settings.data_dir) / "workflow_configs.json"
@@ -315,9 +240,44 @@ def save_workflow_configs() -> None:
                 indent=2,
             )
     except Exception as e:  # pragma: no cover - I/O failure shouldn't crash
-        main_api_logger.error(
-            "Failed to save workflow configurations.", exception=e
-        )
+        main_api_logger.error("Failed to save workflow configurations.", exception=e)
+
+
+# Workflow configuration storage
+WORKFLOW_CONFIG_FILE = Path(settings.data_dir) / "workflow_configs.json"
+workflow_configs: Dict[str, "WorkflowConfig"] = {}
+
+
+def load_workflow_configs() -> None:
+    """Load workflow presets from disk if available."""
+    if WORKFLOW_CONFIG_FILE.exists():
+        try:
+            data = json.load(open(WORKFLOW_CONFIG_FILE, "r"))
+            for item in data:
+                workflow_configs[item["id"]] = WorkflowConfig(**item)
+            main_api_logger.info(
+                "Loaded workflow configurations",
+                parameters={"count": len(workflow_configs)},
+            )
+        except Exception as e:  # pragma: no cover - startup resilience
+            main_api_logger.error(
+                "Failed to load workflow configurations.", exception=e
+            )
+
+
+def save_workflow_configs() -> None:
+    """Persist workflow presets to disk."""
+    try:
+        WORKFLOW_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(WORKFLOW_CONFIG_FILE, "w") as f:
+            json.dump(
+                [cfg.model_dump() for cfg in workflow_configs.values()],
+                f,
+                default=str,
+                indent=2,
+            )
+    except Exception as e:  # pragma: no cover - I/O failure shouldn't crash
+        main_api_logger.error("Failed to save workflow configurations.", exception=e)
 
 
 @asynccontextmanager
@@ -716,105 +676,6 @@ def require_permission(required_level: AccessLevel):
         return current_user
 
     return permission_checker
-
-
-# --- WebSocket Manager ---
-class WebSocketManager:
-    # ... (WebSocketManager from original file, with logging using main_api_logger.getChild("WebSocketManager"))
-    # I will assume this class is defined as in the original main.py and add logging.
-    def __init__(self):
-        self.active_connections: Dict[str, WebSocket] = {}  # user_id -> WebSocket
-        self.subscriptions: Dict[str, Set[str]] = defaultdict(
-            set
-        )  # user_id -> set of topics
-        self.topic_subscribers: Dict[str, Set[str]] = defaultdict(
-            set
-        )  # topic -> set of user_ids
-        self.logger = main_api_logger.getChild("WebSocketManager")  # Specific logger
-
-    async def connect(self, websocket: WebSocket, user_id: str):
-        await websocket.accept()
-        self.active_connections[user_id] = websocket
-        self.logger.info(
-            f"WebSocket connected.",
-            parameters={"user_id": user_id, "client": str(websocket.client)},
-        )
-        await self.send_personal_message(
-            {"type": "connection_ack", "status": "connected", "user_id": user_id},
-            user_id,
-        )
-
-    def disconnect(self, user_id: str):
-        if user_id in self.active_connections:
-            del self.active_connections[user_id]
-
-        topics_to_clean = list(self.subscriptions.pop(user_id, set()))
-        for topic in topics_to_clean:
-            if topic in self.topic_subscribers:
-                self.topic_subscribers[topic].discard(user_id)
-                if not self.topic_subscribers[topic]:  # Clean up empty topics
-                    del self.topic_subscribers[topic]
-        self.logger.info(f"WebSocket disconnected.", parameters={"user_id": user_id})
-
-    async def send_personal_message(self, message: Dict[str, Any], user_id: str):
-        if user_id in self.active_connections:
-            try:
-                await self.active_connections[user_id].send_text(
-                    json.dumps(message, default=str)
-                )
-            except WebSocketDisconnect:
-                self.logger.warning(
-                    f"WebSocket already disconnected for user during send.",
-                    parameters={"user_id": user_id},
-                )
-                self.disconnect(user_id)
-            except Exception as e:
-                self.logger.error(
-                    f"Failed to send WebSocket message.",
-                    parameters={"user_id": user_id},
-                    exception=e,
-                )
-                self.disconnect(user_id)  # Assume connection is broken
-
-    async def broadcast_to_topic(self, message: Dict[str, Any], topic: str):
-        self.logger.debug(
-            f"Broadcasting to topic.",
-            parameters={
-                "topic": topic,
-                "num_subscribers": len(self.topic_subscribers.get(topic, [])),
-            },
-        )
-        if topic in self.topic_subscribers:
-            # Create a copy for safe iteration as disconnects might modify the set
-            for user_id_subscriber in list(self.topic_subscribers[topic]):
-                await self.send_personal_message(message, user_id_subscriber)
-
-    async def subscribe_to_topic(self, user_id: str, topic: str):
-        self.subscriptions[user_id].add(topic)
-        self.topic_subscribers[topic].add(user_id)
-        self.logger.info(
-            f"User subscribed to topic.",
-            parameters={"user_id": user_id, "topic": topic},
-        )
-        await self.send_personal_message(
-            {"type": "subscription_ack", "topic": topic, "status": "subscribed"},
-            user_id,
-        )
-
-    async def unsubscribe_from_topic(self, user_id: str, topic: str):
-        self.subscriptions[user_id].discard(topic)
-        if topic in self.topic_subscribers:
-            self.topic_subscribers[topic].discard(user_id)
-            if not self.topic_subscribers[topic]:
-                del self.topic_subscribers[topic]
-        self.logger.info(
-            f"User unsubscribed from topic.",
-            parameters={"user_id": user_id, "topic": topic},
-        )
-        await self.send_personal_message(
-            {"type": "subscription_ack", "topic": topic, "status": "unsubscribed"},
-            user_id,
-        )
 
 
 # --- GraphQL Schema Definitions ---
@@ -1260,6 +1121,7 @@ async def get_document_status_rest(  # Renamed
 
 # ----- Workflow Config Endpoints -----
 
+
 @app.get("/api/v1/workflows", response_model=List[WorkflowConfig])
 async def list_workflow_configs():
     """List all saved workflow presets."""
@@ -1292,9 +1154,7 @@ async def update_workflow_config(config_id: str, update: WorkflowConfigUpdate):
     return existing
 
 
-@app.delete(
-    "/api/v1/workflows/{config_id}", status_code=status.HTTP_204_NO_CONTENT
-)
+@app.delete("/api/v1/workflows/{config_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_workflow_config(config_id: str):
     if config_id in workflow_configs:
         del workflow_configs[config_id]
@@ -1305,6 +1165,7 @@ async def delete_workflow_config(config_id: str):
 
 # ----- Workflow Config Endpoints -----
 
+
 @app.get("/api/v1/workflows", response_model=List[WorkflowConfig])
 async def list_workflow_configs():
     """List all saved workflow presets."""
@@ -1337,9 +1198,7 @@ async def update_workflow_config(config_id: str, update: WorkflowConfigUpdate):
     return existing
 
 
-@app.delete(
-    "/api/v1/workflows/{config_id}", status_code=status.HTTP_204_NO_CONTENT
-)
+@app.delete("/api/v1/workflows/{config_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_workflow_config(config_id: str):
     if config_id in workflow_configs:
         del workflow_configs[config_id]
@@ -1350,6 +1209,7 @@ async def delete_workflow_config(config_id: str):
 
 # ----- Workflow Config Endpoints -----
 
+
 @app.get("/api/v1/workflows", response_model=List[WorkflowConfig])
 async def list_workflow_configs():
     """List all saved workflow presets."""
@@ -1382,9 +1242,7 @@ async def update_workflow_config(config_id: str, update: WorkflowConfigUpdate):
     return existing
 
 
-@app.delete(
-    "/api/v1/workflows/{config_id}", status_code=status.HTTP_204_NO_CONTENT
-)
+@app.delete("/api/v1/workflows/{config_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_workflow_config(config_id: str):
     if config_id in workflow_configs:
         del workflow_configs[config_id]
@@ -1511,6 +1369,7 @@ async def submit_review_decision_rest(  # Renamed
 
 # --- Workflow Preset Endpoints ---
 
+
 @app.post("/api/v1/workflows", response_model=WorkflowConfig)
 async def create_workflow_preset(config: WorkflowConfig):
     workflow_configs[config.id] = config
@@ -1568,7 +1427,9 @@ async def websocket_endpoint_route(websocket: WebSocket, client_id: str):
             if msg_type == "subscribe":
                 topic = message.get("topic")
                 if topic:
-                    await websocket_manager_instance.subscribe_to_topic(client_id, topic)
+                    await websocket_manager_instance.subscribe_to_topic(
+                        client_id, topic
+                    )
             elif msg_type == "unsubscribe":
                 topic = message.get("topic")
                 if topic:
@@ -1625,12 +1486,23 @@ async def process_document_background_task(  # Renamed
         "stage": "Initializing",
     }
 
-        # Define progress callback for WebSocket
+    try:
+        from legal_ai_system.services.realtime_analysis_workflow import (
+            RealTimeAnalysisWorkflow,
+        )
+
+        if service_container_instance:
+            workflow = await service_container_instance.get_service(
+                "realtime_analysis_workflow"
+            )
+        else:
+            workflow = RealTimeAnalysisWorkflow()
+
         async def ws_progress_callback(
             stage: str,
             progress_percent: float,
             details: Optional[Dict[str, Any]] = None,
-        ):
+        ) -> None:
             global_processing_states[document_id].update(
                 {
                     "status": "processing",
@@ -1644,24 +1516,26 @@ async def process_document_background_task(  # Renamed
                     {
                         "type": "processing_progress",
                         "document_id": document_id,
-                        "progress": progress_percent,  # Send as 0-100
+                        "progress": progress_percent,
                         "stage": stage,
                         "details": details or {},
                     },
                     f"document_updates_{document_id}",
                 )
 
-        workflow.register_progress_callback(
-            ws_progress_callback
-        )  # Assuming workflow supports this
+        workflow.register_progress_callback(ws_progress_callback)
 
-        # Execute the workflow
+        analysis_result = await workflow.process_document_realtime(
+            document_file_path,
+            **processing_request_model.model_dump(),
+        )
+
         global_processing_states[document_id].update(
             {
                 "status": "completed",
                 "progress": 1.0,
                 "stage": "Complete",
-                "result_summary": {  # Example summary
+                "result_summary": {
                     "entities_found": (
                         len(analysis_result.hybrid_extraction.validated_entities)
                         if analysis_result.hybrid_extraction
@@ -1677,7 +1551,7 @@ async def process_document_background_task(  # Renamed
                 {
                     "type": "processing_complete",
                     "document_id": document_id,
-                    "result": analysis_result.to_dict(),  # Send full or summarized result
+                    "result": analysis_result.to_dict(),
                 },
                 f"document_updates_{document_id}",
             )
