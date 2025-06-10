@@ -83,11 +83,10 @@ from pydantic import Field as PydanticField  # Alias Field
 from strawberry.fastapi import GraphQLRouter  # type: ignore
 from strawberry.types import Info  # type: ignore
 
-from config.settings import settings
+from legal_ai_system.config.settings import settings
 
 # Attempt to import core services, with fallbacks for standalone running or partial setup
 try:
-    from legal_ai_system.config.settings import settings
     from legal_ai_system.core.detailed_logging import (
         LogCategory,
         get_detailed_logger,
