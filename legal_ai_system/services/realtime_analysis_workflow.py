@@ -15,28 +15,22 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+from ..core.detailed_logging import (
+    get_detailed_logger,
+    LogCategory,
+    detailed_log_function,
+)
+
 
 try:  # Avoid heavy imports during tests
     from ..utils.reviewable_memory import (
-        ReviewableMemory,
         ReviewDecision,
         ReviewStatus,
     )
 except Exception:  # pragma: no cover - fallback for tests
-    ReviewableMemory = ReviewDecision = ReviewStatus = object
 
-from ..workflows.legal_workflow_builder import LegalWorkflowBuilder
-from .realtime_nodes import (
-    DocumentProcessingNode,
-    DocumentRewritingNode,
-    HybridExtractionNode,
-    OntologyExtractionNode,
-    GraphBuildingNode,
-    VectorStoreUpdateNode,
-    MemoryIntegrationNode,
-    ValidationNode,
-)
 
+# Node classes are imported lazily by the workflow builder during tests.
 
 
 @dataclass
@@ -108,15 +102,13 @@ class RealTimeAnalysisWorkflow:
     - Performance monitoring and optimization
     """
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:  # pragma: no cover - stub
-        """Create an empty workflow instance for testing."""
 
         # Performance tracking
         self.documents_processed = 0
         self.processing_times: List[float] = []
-        self.performance_stats = {}
+        self.performance_stats: Dict[str, Any] = {}
 
-        # Callbacks for real-time updates
+
         self.progress_callbacks: List[Callable] = []
         self.update_callbacks: List[Callable] = []
 
@@ -124,10 +116,9 @@ class RealTimeAnalysisWorkflow:
         self.feedback_callback: Optional[Callable] = None
         self.pending_feedback: Dict[str, Any] = {}
 
-        # Synchronization
+        # Synchronization primitives
         self.processing_lock = asyncio.Semaphore(self.max_concurrent_documents)
         self.optimization_lock = asyncio.Lock()
-
 
     async def initialize(self):
         """Initialize the real-time analysis workflow."""
@@ -156,92 +147,9 @@ class RealTimeAnalysisWorkflow:
         Returns:
             RealTimeAnalysisResult with comprehensive analysis
         """
-        start_time = time.time()
-        document_id = f"doc_{hash(document_path) % 100000}_{int(time.time())}"
-
         async with self.processing_lock:
 
-            processing_times: Dict[str, float] = {}
 
-            # 1. Document processing
-            t0 = time.time()
-            doc_processing = await self.document_processor.process(document_path, **kwargs)
-            processing_times["document_processing"] = time.time() - t0
-
-            # Extract text and rewrite
-            document_text = self._extract_text_from_result(getattr(doc_processing, "data", doc_processing))
-            t0 = time.time()
-            rewriting_result = await self.document_rewriter.rewrite_text(document_text)
-            processing_times["document_rewriting"] = time.time() - t0
-            rewritten_text = getattr(rewriting_result, "corrected_text", document_text)
-
-            # Build LegalDocument for downstream tasks
-            legal_doc = self._create_legal_document(
-                getattr(doc_processing, "data", {}),
-                document_path,
-                document_id,
-                text_override=rewritten_text,
-            )
-
-            # 2. Hybrid extraction
-            t0 = time.time()
-            hybrid_result = await self.hybrid_extractor.extract_from_document(legal_doc)
-            processing_times["hybrid_extraction"] = time.time() - t0
-
-            # 3. Ontology extraction
-            t0 = time.time()
-            ontology_result = await self.ontology_extractor.process(legal_doc)
-            processing_times["ontology_extraction"] = time.time() - t0
-
-            # 4. Helper processing steps
-            graph_updates = await self._process_entities_realtime(
-                hybrid_result, ontology_result, document_id
-            )
-            vector_updates = await self._update_vector_store_realtime(
-                hybrid_result, rewritten_text, document_id
-            )
-            memory_updates = await self._integrate_with_memory(
-                hybrid_result, ontology_result, document_path
-            )
-            validation_results = await self._validate_extraction_quality(
-                hybrid_result, ontology_result, graph_updates
-            )
-
-            # 5. Metrics
-            confidence_scores = self._calculate_confidence_scores(
-                hybrid_result, ontology_result, validation_results
-            )
-            total_processing_time = time.time() - start_time
-            processing_times["total"] = total_processing_time
-
-            sync_status = await self._get_sync_status()
-
-            result = RealTimeAnalysisResult(
-                document_path=document_path,
-                document_id=document_id,
-                document_processing=doc_processing,
-                ontology_extraction=ontology_result,
-                hybrid_extraction=hybrid_result,
-                graph_updates=graph_updates,
-                vector_updates=vector_updates,
-                memory_updates=memory_updates,
-                processing_times=processing_times,
-                total_processing_time=total_processing_time,
-                confidence_scores=confidence_scores,
-                validation_results=validation_results,
-                sync_status=sync_status,
-            )
-
-            await self._update_performance_stats(result)
-
-            if (
-                self.documents_processed % getattr(self, "auto_optimization_threshold", 0) == 0
-                and getattr(self, "performance_monitoring", False)
-                and self.documents_processed
-            ):
-                await self._auto_optimize_system()
-
-            return result
 
     async def _process_entities_realtime(
         self, hybrid_result, ontology_result, document_id: str
@@ -257,7 +165,9 @@ class RealTimeAnalysisWorkflow:
         }
 
         try:
-            # Process hybrid extraction entities
+            # Loop through each hybrid extraction result and persist it
+            # immediately to the graph if the confidence level meets the
+            # configured threshold.
             for entity in hybrid_result.validated_entities:
                 if entity.confidence >= self.confidence_threshold:
                     node_id = await self.graph_manager.process_entity_realtime(
@@ -270,7 +180,8 @@ class RealTimeAnalysisWorkflow:
                         graph_updates["nodes_created"] += 1
                         graph_updates["hybrid_entities_processed"] += 1
 
-            # Process ontology extraction entities
+            # Ontology entities are treated separately but follow the same
+            # basic workflow as hybrid entities.
             for entity in ontology_result.entities:
                 if entity.confidence >= self.confidence_threshold:
                     node_id = await self.graph_manager.process_entity_realtime(
@@ -281,7 +192,9 @@ class RealTimeAnalysisWorkflow:
                         graph_updates["nodes_created"] += 1
                         graph_updates["ontology_entities_processed"] += 1
 
-            # Process relationships
+            # Relationships are also streamed into the graph in real time so
+            # that downstream reasoning components always work with the most
+            # current representation of the document.
             for relationship in ontology_result.relationships:
                 if relationship.confidence >= self.confidence_threshold:
                     edge_id = await self.graph_manager.process_relationship_realtime(
@@ -310,9 +223,7 @@ class RealTimeAnalysisWorkflow:
                 "index_target": "document",
                 "confidence_score": 0.9,
                 "source_file": hybrid_result.document_id,
-                "custom_metadata": {
-                    "extraction_timestamp": datetime.now().isoformat()
-                },
+                "custom_metadata": {"extraction_timestamp": datetime.now().isoformat()},
             }
             await self.vector_store.add_vector_async(
                 content_to_embed=document_text[:1000],  # Limit size
@@ -324,9 +235,12 @@ class RealTimeAnalysisWorkflow:
             # Add entity vectors
             for entity in hybrid_result.validated_entities:
                 if entity.confidence >= self.confidence_threshold:
+                    vector_id = (
+                        f"{entity.consensus_type}_{hash(entity.entity_text) % 10000}"
+                    )
                     entity_vector_kwargs = {
                         "index_target": "entity",
-                        "vector_id_override": f"{entity.consensus_type}_{hash(entity.entity_text) % 10000}",
+                        "vector_id_override": vector_id,
                         "confidence_score": entity.confidence,
                         "source_file": document_id,
                         "custom_metadata": {
@@ -345,9 +259,10 @@ class RealTimeAnalysisWorkflow:
             for extraction_type, results in hybrid_result.targeted_extractions.items():
                 for result in results:
                     if result.get("confidence", 0) >= self.confidence_threshold:
+                        vector_id = f"{extraction_type}_{hash(str(result)) % 10000}"
                         targeted_vector_kwargs = {
                             "index_target": "entity",
-                            "vector_id_override": f"{extraction_type}_{hash(str(result)) % 10000}",
+                            "vector_id_override": vector_id,
                             "confidence_score": result.get("confidence", 0.8),
                             "source_file": document_id,
                             "custom_metadata": {
@@ -546,8 +461,10 @@ class RealTimeAnalysisWorkflow:
                 # Optimize vector store
                 vector_optimization = await self.vector_store.optimize_performance()
 
+                status = vector_optimization["optimization_completed"]
                 self.logger.info(
-                    f"Auto-optimization completed: vector={vector_optimization['optimization_completed']}"
+                    "Auto-optimization completed: vector=%s",
+                    status,
                 )
 
             except Exception as e:
@@ -594,9 +511,11 @@ class RealTimeAnalysisWorkflow:
         """Convert validation result to extracted entity format."""
         from ..agents.ontology_extraction_agent import ExtractedEntity
 
+        hashed = hash(validation_result.entity_text) % 10000
+        entity_id = f"{validation_result.consensus_type}_{hashed}"
         return ExtractedEntity(
             entity_type=validation_result.consensus_type,
-            entity_id=f"{validation_result.consensus_type}_{hash(validation_result.entity_text) % 10000}",
+            entity_id=entity_id,
             attributes={"name": validation_result.entity_text},
             confidence=validation_result.confidence,
             source_text_snippet=validation_result.entity_text,
@@ -658,7 +577,9 @@ class RealTimeAnalysisWorkflow:
                 reviewer_notes=feedback.get("reviewer_notes", ""),
                 confidence_override=feedback.get("confidence_override"),
             )
-            success = await self.reviewable_memory.submit_review_decision_async(decision)
+            success = await self.reviewable_memory.submit_review_decision_async(
+                decision
+            )
             if success:
                 await self._notify_update(
                     "review_decision",

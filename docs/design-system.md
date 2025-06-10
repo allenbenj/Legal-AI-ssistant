@@ -31,6 +31,14 @@ import { Button } from '../design-system';
 <Button variant="primary" size="md">Save</Button>
 ```
 
+When referencing the design system from code outside of the `frontend/src`
+directory (for example, inside the `legal_ai_system` package), use a relative
+import path:
+
+```tsx
+import { Button } from '../../frontend/src/design-system';
+```
+
 ## Extending
 
 When building new features, prefer using these base components or create additional ones in the same folder referencing token values. This keeps styles unified and reduces duplication.

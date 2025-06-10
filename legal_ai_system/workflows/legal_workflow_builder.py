@@ -4,6 +4,7 @@ import asyncio
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Iterable, List, Sequence
 
+from ..workflow_engine.merge import MergeStrategy, ListMerge
 
 class MergeStrategy:
     """Basic merge strategy interface."""
@@ -59,6 +60,7 @@ class LegalWorkflowBuilder:
             result = step(data)
             data = await result if asyncio.iscoroutine(result) else result
         return data
+
 
 
 __all__ = ["LegalWorkflowBuilder", "MergeStrategy", "ListMerge"]

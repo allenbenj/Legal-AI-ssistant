@@ -1,6 +1,3 @@
-"""Placeholder node classes for real-time workflow tests."""
-from __future__ import annotations
-
 
 class DocumentProcessingNode:  # pragma: no cover - placeholder
     pass
@@ -43,4 +40,3 @@ __all__ = [
     "VectorStoreUpdateNode",
     "MemoryIntegrationNode",
     "ValidationNode",
-]
