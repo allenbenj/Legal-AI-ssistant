@@ -77,6 +77,7 @@ from pydantic import BaseModel
 from pydantic import Field as PydanticField  # Alias Field
 from strawberry.fastapi import GraphQLRouter  # type: ignore
 from strawberry.types import Info  # type: ignore
+from config.settings import settings
 
 # Attempt to import core services, with fallbacks for standalone running or partial setup
 try:
@@ -1315,20 +1316,12 @@ async def process_document_background_task(  # Renamed
             )
 
 
-# Serve compiled frontend if available
-frontend_dist_path = Path(settings.frontend_dist_path)
-if frontend_dist_path.exists():
     app.mount(
         "/",
         StaticFiles(directory=str(frontend_dist_path), html=True),
         name="static_frontend",
     )
     main_api_logger.info(
-        f"Serving static frontend from: {frontend_dist_path}"
-    )
-else:
-    main_api_logger.warning(
-        f"Frontend 'dist' directory not found at {frontend_dist_path}. Frontend will not be served by this API."
     )
 
 
