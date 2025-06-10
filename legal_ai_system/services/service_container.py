@@ -855,6 +855,33 @@ async def create_service_container(
         is_async_factory=False,
     )
 
+    # Register LangGraph nodes and builder for the orchestrator
+    from ..agents.agent_nodes import AnalysisNode, SummaryNode
+    from ..workflows.langgraph_setup import build_graph
+    from .workflow_orchestrator import WorkflowOrchestrator
+
+    await container.register_service(
+        "analysis_node_factory",
+        factory=lambda sc, topic="default": AnalysisNode(topic),
+        is_async_factory=False,
+    )
+    await container.register_service(
+        "summary_node_factory",
+        factory=lambda sc: SummaryNode(),
+        is_async_factory=False,
+    )
+    await container.register_service(
+        "langgraph_builder",
+        instance=build_graph,
+    )
+    await container.register_service(
+        "workflow_orchestrator",
+        factory=lambda sc: WorkflowOrchestrator(
+            sc, workflow_config=WorkflowConfig(**sc.get_active_workflow_config())
+        ),
+        is_async_factory=False,
+    )
+
     # Initialize all services that were registered with factories or need explicit init
     await container.initialize_all_services()
 
