@@ -1,9 +1,5 @@
 
 
-@dataclass
-class _ParallelStep:
-    funcs: Sequence[Callable[[Any], Awaitable[Any] | Any]]
-    merge_strategy: MergeStrategy
 
     async def __call__(self, input_data: Any) -> Any:
         results = await asyncio.gather(*(f(input_data) for f in self.funcs))
@@ -81,6 +77,11 @@ class LegalWorkflowBuilder:
             result = step(data)
             data = await result if asyncio.iscoroutine(result) else result
         return data
+
+class LegalWorkflowBuilder(_BaseBuilder):
+    """Workflow builder for orchestrating async processing steps."""
+
+    pass
 
 
 __all__ = ["LegalWorkflowBuilder"]

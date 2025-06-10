@@ -161,6 +161,7 @@ class RealTimeAnalysisWorkflow:
 
         async with self.processing_lock:
 
+
     async def _process_entities_realtime(
         self, hybrid_result, ontology_result, document_id: str
     ) -> Dict[str, Any]:

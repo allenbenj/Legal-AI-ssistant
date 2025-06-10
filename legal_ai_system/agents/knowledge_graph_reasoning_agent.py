@@ -13,7 +13,6 @@ class ConnectedEntities:
 @dataclass
 class CaseEntities:
 
-
     case_id: str
     entities: List[Entity]
 
