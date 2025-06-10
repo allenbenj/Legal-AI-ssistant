@@ -23,6 +23,7 @@ class MemoryBrainPanel:
         """Load memory entries from the :class:`UnifiedMemoryManager`."""
 
         async def _load() -> None:
+            # Retrieve previously stored statements from UnifiedMemoryManager
             async with memory_manager_context() as manager:
                 entries = await manager.get_context_window("memory_brain")
                 self.memory_entries = [
