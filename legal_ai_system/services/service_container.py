@@ -495,6 +495,15 @@ async def create_service_container(
     )
     config_manager_service = await container.get_service("configuration_manager")
 
+    # Task Queue setup for background processing
+    from .task_queue import TaskQueue
+
+    queue_url = config_manager_service.get("REDIS_URL_QUEUE", "redis://localhost:6379/0")
+    await container.register_service(
+        "task_queue",
+        instance=TaskQueue(redis_url=queue_url),
+    )
+
     # 2. Core Services (Loggers are implicitly available via get_detailed_logger)
     # ErrorHandler is a global singleton, usually not registered but can be if needed for explicit access.
     # from .unified_exceptions import get_error_handler

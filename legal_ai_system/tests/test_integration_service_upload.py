@@ -23,13 +23,18 @@ for name in [
     "asyncpg",
     "legal_ai_system.utils.user_repository",
     "legal_ai_system.services.security_manager",
-    "legal_ai_system.services.service_container",
     "legal_ai_system.services.workflow_orchestrator",
     "legal_ai_system.services.realtime_analysis_workflow",
+    "legal_ai_system.integration_ready.vector_store_enhanced",
     "yaml",
 ]:
     if name not in sys.modules:
         sys.modules[name] = ModuleType(name)
+
+# Provide placeholder class so imports succeed when stubbing modules
+sys.modules[
+    "legal_ai_system.services.realtime_analysis_workflow"
+].RealTimeAnalysisWorkflow = object
 
 sys.modules["faiss"].StandardGpuResources = object
 sys.modules["faiss"].index_cpu_to_gpu = lambda *a, **k: None
@@ -41,6 +46,11 @@ sys.modules["faiss"].IndexPQ = object
 sys.modules["faiss"].IndexIVFPQ = object
 sys.modules["faiss"].get_num_gpus = lambda: 0
 sys.modules["faiss"].read_index = lambda *a, **k: object()
+
+# Provide placeholder MemoryStore used by memory_manager
+sys.modules[
+    "legal_ai_system.integration_ready.vector_store_enhanced"
+].MemoryStore = object
 
 sys.modules["numpy"].array = lambda *a, **k: a
 sys.modules["numpy"].ndarray = object
@@ -67,10 +77,8 @@ sec_mod.SecurityManager = object
 sec_mod.User = User
 sys.modules["legal_ai_system.utils.user_repository"].UserRepository = object
 
-svc_mod = sys.modules["legal_ai_system.services.service_container"]
 class ServiceContainer:
     pass
-svc_mod.ServiceContainer = ServiceContainer
 
 sys.modules["legal_ai_system.services.workflow_orchestrator"].WorkflowOrchestrator = object
 
