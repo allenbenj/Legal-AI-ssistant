@@ -48,18 +48,20 @@ except ImportError:
 
     np = FakeNumPy()
     HAS_NUMPY = False
-from typing import Dict, List, Any, Optional, Tuple
-from dataclasses import dataclass, asdict
-from datetime import datetime, timedelta
-from collections import deque, defaultdict
-from enum import Enum
+import hashlib
 import sqlite3
 import threading
-import hashlib
+from collections import defaultdict, deque
+from dataclasses import asdict, dataclass
+from datetime import datetime, timedelta
+from enum import Enum
+from typing import Any, Dict, List, Optional, Tuple
+
+from .config_models import MLOptimizerConfig
+from .constants import Constants
 
 # Import detailed logging
-from .detailed_logging import get_detailed_logger, LogCategory, detailed_log_function
-from .config_models import MLOptimizerConfig
+from .detailed_logging import LogCategory, detailed_log_function, get_detailed_logger
 
 # Initialize loggers
 ml_logger = get_detailed_logger("ML_Optimizer", LogCategory.SYSTEM)
@@ -189,6 +191,15 @@ class OptimizationResult:
     based_on_samples: int
 
 
+@dataclass
+class TokenUsageRecord:
+    """Record of token usage for a session."""
+
+    session_id: str
+    tokens_used: int
+    timestamp: datetime
+
+
 class MLOptimizer:
     """
     Machine learning optimizer for processing parameters.
@@ -223,6 +234,7 @@ class MLOptimizer:
         self.performance_history: deque = deque(maxlen=10000)
         self.document_features_cache: Dict[str, DocumentFeatures] = {}
         self.optimization_cache: Dict[str, OptimizationResult] = {}
+        self.token_usage_history: deque = deque(maxlen=10000)
 
         # Analysis settings
         self.min_samples_for_optimization = self.config.min_samples
@@ -231,6 +243,7 @@ class MLOptimizer:
 
         # Load recent performance data
         self._load_recent_performance()
+        self._load_recent_token_usage()
 
         # Threading
         self._lock = threading.RLock()
@@ -242,6 +255,7 @@ class MLOptimizer:
                 "min_samples": self.min_samples_for_optimization,
                 "similarity_threshold": self.similarity_threshold,
                 "performance_history_size": len(self.performance_history),
+                "token_usage_records": len(self.token_usage_history),
             },
         )
 
@@ -280,9 +294,19 @@ class MLOptimizer:
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     expires_at DATETIME NOT NULL
                 );
-                
+
                 CREATE INDEX IF NOT EXISTS idx_cache_key ON optimization_cache(cache_key);
                 CREATE INDEX IF NOT EXISTS idx_cache_expires ON optimization_cache(expires_at);
+
+                CREATE TABLE IF NOT EXISTS session_token_usage (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id TEXT NOT NULL,
+                    tokens_used INTEGER NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_token_session ON session_token_usage(session_id);
+                CREATE INDEX IF NOT EXISTS idx_token_created ON session_token_usage(created_at);
             """
             )
 
@@ -323,6 +347,36 @@ class MLOptimizer:
 
         except Exception as e:
             ml_logger.error("Failed to load recent performance data", exception=e)
+
+    @detailed_log_function(LogCategory.SYSTEM)
+    def _load_recent_token_usage(self):
+        """Load recent token usage data into memory cache."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute(
+                    """
+                    SELECT session_id, tokens_used, created_at
+                    FROM session_token_usage
+                    WHERE created_at > datetime('now', '-7 days')
+                    ORDER BY created_at DESC
+                    LIMIT 5000
+                """
+                )
+
+                for row in cursor.fetchall():
+                    record = TokenUsageRecord(
+                        session_id=row[0],
+                        tokens_used=row[1],
+                        timestamp=datetime.fromisoformat(row[2]),
+                    )
+                    self.token_usage_history.append(record)
+
+            ml_logger.info(
+                f"Loaded {len(self.token_usage_history)} recent token usage records"
+            )
+
+        except Exception as e:
+            ml_logger.error("Failed to load recent token usage", exception=e)
 
     @detailed_log_function(LogCategory.PERFORMANCE)
     def record_performance(
@@ -405,6 +459,28 @@ class MLOptimizer:
             performance_logger.error(
                 f"Failed to record performance for {document_path}", exception=e
             )
+
+    @detailed_log_function(LogCategory.SYSTEM)
+    def record_token_usage(self, session_id: str, tokens_used: int) -> None:
+        """Record token usage for a session."""
+        try:
+            with self._lock, sqlite3.connect(self.db_path) as conn:
+                conn.execute(
+                    "INSERT INTO session_token_usage (session_id, tokens_used) VALUES (?, ?)",
+                    (session_id, tokens_used),
+                )
+                conn.commit()
+
+            self.token_usage_history.append(
+                TokenUsageRecord(
+                    session_id=session_id,
+                    tokens_used=tokens_used,
+                    timestamp=datetime.now(),
+                )
+            )
+
+        except Exception as e:
+            ml_logger.error("Failed to record token usage", exception=e)
 
     @detailed_log_function(LogCategory.SYSTEM)
     async def get_optimal_parameters(
@@ -718,6 +794,24 @@ class MLOptimizer:
             optimization_reason="Default parameters - insufficient training data",
             based_on_samples=0,
         )
+
+    @detailed_log_function(LogCategory.SYSTEM)
+    def predict_optimal_context_tokens(
+        self, default: int = Constants.Size.MAX_CONTEXT_TOKENS
+    ) -> int:
+        """Predict an optimal max_context_tokens value based on usage history."""
+        try:
+            tokens = [record.tokens_used for record in self.token_usage_history]
+            if not tokens:
+                return default
+
+            tokens.sort()
+            index = max(0, int(0.9 * len(tokens)) - 1)
+            predicted = int(tokens[index] * 1.1)
+            return min(predicted, Constants.Size.MAX_CONTEXT_TOKENS)
+        except Exception as e:
+            ml_logger.error("Failed to predict context tokens", exception=e)
+            return default
 
     @detailed_log_function(LogCategory.SYSTEM)
     def get_optimization_statistics(self) -> Dict[str, Any]:
