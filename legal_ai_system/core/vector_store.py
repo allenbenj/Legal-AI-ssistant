@@ -1,4 +1,4 @@
-# legal_ai_system/knowledge/vector_store/vector_store.py
+# legal_ai_system/core/vector_store.py
 """
 Vector Store - Consolidated with DETAILED Logging and Full Implementation
 ==========================================================================
@@ -106,9 +106,7 @@ class SearchResult:
     rank: int
 
     def to_dict(self) -> Dict[str, Any]:
-        data = asdict(self)
-        data["metadata"] = self.metadata.to_dict()
-        return data
+        return asdict(self)
 
 
 @dataclass
@@ -295,7 +293,6 @@ class VectorStore:
         service_config: Optional[Dict[str, Any]] = None,
         cache_manager: Optional[Any] = None,
         metrics_exporter: Optional[Any] = None,
-        metadata_repo: VectorMetadataRepository | None = None,
     ):
         vector_store_logger.info("=== VectorStore: Instance Creation START ===")
         self.config = service_config or {}
@@ -849,6 +846,16 @@ class VectorStore:
                 await loop.run_in_executor(None, self._save_faiss_indexes_sync)
             finally:
                 vs_index_logger.debug("Released lock after saving FAISS indexes.")
+
+    @detailed_log_function(LogCategory.VECTOR_STORE)
+    async def flush_updates(self) -> None:
+        """Persist any pending updates for real-time synchronization."""
+        await self._save_faiss_indexes_async()
+        if self.metadata_repo and hasattr(self.metadata_repo, "flush"):
+            try:
+                await self.metadata_repo.flush()
+            except Exception as e:  # pragma: no cover - best effort
+                vector_store_logger.error("Metadata repository flush failed", exception=e)
 
     async def _initialize_metadata_storage_async(self) -> None:
         """Ensure metadata storage is ready."""
@@ -1503,21 +1510,38 @@ class VectorStore:
     async def _get_metadata_by_faiss_internal_id_async(
         self, faiss_id: int, index_target: str
     ) -> Optional[VectorMetadata]:
+        """Retrieve metadata using a FAISS internal ID."""
+        vector_id = None
+        if self.metadata_repo:
+            try:
+                vector_id = await self.metadata_repo.get_vector_id_by_faiss_id(
+                    faiss_id, index_target
+                )
+            except Exception as e:  # pragma: no cover - repository failures
+                vs_cache_logger.error(
+                    "Failed to get vector_id from repository", exception=e
+                )
+        if vector_id is None:
+            vector_id = self._get_vector_id_by_faiss_id_sync(faiss_id, index_target)
+        if not vector_id:
+            return None
+        return await self._get_metadata_async_from_db_or_cache(vector_id)
+
     def _get_metadata_from_db_sync(self, vector_id: str) -> Optional[Dict[str, Any]]:
         """Synchronously fetches a single metadata record from SQLite."""
         try:
-            with sqlite3.connect(
-                self.metadata_db_path, timeout=5
-            ) as conn:
+            with sqlite3.connect(self.metadata_db_path, timeout=5) as conn:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.execute(
-                    "SELECT * FROM vector_metadata WHERE vector_id = ?", (vector_id,)
+                    "SELECT * FROM vector_metadata WHERE vector_id = ?",
+                    (vector_id,),
                 )
                 row = cursor.fetchone()
                 return dict(row) if row else None
         except sqlite3.Error as e:
             vs_cache_logger.error(
-                f"SQLite error fetching metadata for '{vector_id}'.", exception=e
+                f"SQLite error fetching metadata for '{vector_id}'.",
+                exception=e,
             )
             return None
 
@@ -2006,6 +2030,5 @@ def create_vector_store(
         service_config=vs_cfg,
         cache_manager=getattr(_get_service_sync(service_container, "persistence_manager"), "cache_manager", None),
         metrics_exporter=_get_service_sync(service_container, "metrics_exporter"),
-        metadata_repo=metadata_repo,
     )
     return vs_instance

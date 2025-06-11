@@ -89,6 +89,17 @@ except ImportError:  # pragma: no cover - optional web dependency
 
 from pydantic import BaseModel
 from pydantic import Field as PydanticField  # Alias Field
+from legal_ai_system.api.review_models import (
+    ReviewItem,
+    ReviewDecisionRequest,
+    ReviewDecisionResponse,
+    ReviewStatsResponse,
+)
+from legal_ai_system.utils.reviewable_memory import (
+    ReviewPriority,
+    ReviewStatus,
+    ReviewDecision,
+)
 from strawberry.fastapi import GraphQLRouter  # type: ignore
 
 try:
@@ -432,14 +443,6 @@ class DocumentStatusResponse(BaseModel):  # Renamed for clarity
     stage: Optional[str] = None  # Current processing stage
     estimated_completion_sec: Optional[int] = None  # Renamed
     result_summary: Optional[Dict[str, Any]] = None  # If processing is complete
-
-
-class ReviewDecisionRequest(BaseModel):
-    item_id: str  # Renamed from entity_id for generality
-    decision: str  # 'approve', 'reject', 'modify'
-    modified_data: Optional[Dict[str, Any]] = None
-    reviewer_notes: Optional[str] = None  # Added
-    # confidence_adjustment: Optional[float] = None # This might be complex to expose directly
 
 
 class ThresholdUpdateRequest(BaseModel):
@@ -1119,73 +1122,84 @@ async def optimize_thresholds(service_container: ServiceContainer = Depends(get_
     return ThresholdResponse(**asdict(result))
 
 
-@app.post("/api/v1/calibration/review", status_code=status.HTTP_200_OK)
-async def submit_review_decision_rest(  # Renamed
-    review_request: ReviewDecisionRequest,
-    # current_user: AuthUser = Depends(require_permission(AccessLevel.WRITE)) # Auth
+@app.get(
+    "/api/v1/reviews/pending",
+    response_model=List[ReviewItem],
+    status_code=status.HTTP_200_OK,
+)
+async def get_pending_reviews(
+    limit: int = 20,
+    priority: Optional[ReviewPriority] = None,
     service_container: ServiceContainer = Depends(get_service_container),
 ):
+    """Retrieve pending review items from the reviewable memory."""
+    rev_mem = await service_container.get_service("reviewable_memory")
+    items = await rev_mem.get_pending_reviews_async(priority=priority, limit=limit)
+    return [ReviewItem.model_validate(asdict(i)) for i in items]
+
+
+@app.post(
+    "/api/v1/reviews/decision",
+    response_model=ReviewDecisionResponse,
+    status_code=status.HTTP_200_OK,
+)
+@app.post(
+    "/api/v1/calibration/review",
+    response_model=ReviewDecisionResponse,
+    status_code=status.HTTP_200_OK,
+    include_in_schema=False,
+)
+async def submit_review_decision_rest(
+    review_request: ReviewDecisionRequest,
+    service_container: ServiceContainer = Depends(get_service_container),
+):
+    """Submit an approve/reject/modify decision for a review item."""
     main_api_logger.info(
         "Review decision submitted.", parameters=review_request.model_dump()
     )
-    if not service_container:
+    rev_mem = await service_container.get_service("reviewable_memory")
+    decision = ReviewDecision(
+        item_id=review_request.item_id,
+        decision=review_request.decision,
+        reviewer_id=review_request.reviewer_id or "gui_user",
+        modified_content=review_request.modified_content,
+        reviewer_notes=review_request.reviewer_notes or "",
+        confidence_override=review_request.confidence_override,
+    )
+    success = await rev_mem.submit_review_decision_async(decision)
+    if not success:
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Review service not configured.",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to process review decision.",
         )
 
-    review_service = service_container.get_service(
-        "reviewable_memory"
-    )  # Or 'confidence_calibration_manager'
-    if not review_service or not hasattr(review_service, "submit_review_decision"):
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Review submission component not available.",
+    if websocket_manager_instance:
+        await websocket_manager_instance.broadcast_to_topic(
+            {
+                "type": "review_processed",
+                "item_id": decision.item_id,
+                "decision": decision.decision.value,
+                "user": decision.reviewer_id,
+                "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+            },
+            "review_updates",
         )
 
-    try:
-        # Assuming submit_review_decision on the service takes similar params
-        # success = await review_service.submit_review_decision(
-        #     item_id=review_request.item_id,
-        #     decision_status=review_request.decision, # Map string to enum if needed by service
-        #     modified_content=review_request.modified_data,
-        #     notes=review_request.reviewer_notes
-        # )
-        # Mocking success for now
-        success = True
+    return ReviewDecisionResponse(status="review_processed", item_id=decision.item_id)
 
-        if success:
-            if websocket_manager_instance:  # Check if initialized
-                await websocket_manager_instance.broadcast_to_topic(
-                    {
-                        "type": "review_processed",  # Standardized event type
-                        "item_id": review_request.item_id,
-                        "decision": review_request.decision,
-                        # "user": current_user.username, # If auth is on
-                        "user": "mock_reviewer",
-                        "timestamp": datetime.now(
-                            tz=timezone.utc
-                        ).isoformat(),
-                    },
-                    "calibration_updates",
-                )  # Specific topic for calibration
-            return {"status": "review_processed", "item_id": review_request.item_id}
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Failed to process review decision.",
-            )
 
-    except Exception as e:
-        main_api_logger.error(
-            "Review decision submission failed.",
-            parameters={"item_id": review_request.item_id},
-            exception=e,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Review processing failed: {str(e)}",
-        )
+@app.get(
+    "/api/v1/reviews/stats",
+    response_model=ReviewStatsResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def get_review_stats(
+    service_container: ServiceContainer = Depends(get_service_container),
+):
+    """Return summary statistics for the review queue."""
+    rev_mem = await service_container.get_service("reviewable_memory")
+    stats = await rev_mem.get_review_stats_async()
+    return ReviewStatsResponse(**stats)
 
 
 # --- WebSocket Endpoint ---

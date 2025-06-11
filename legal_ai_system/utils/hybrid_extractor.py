@@ -6,7 +6,7 @@ Combines multiple extraction methods for comprehensive legal entity extraction.
 """
 
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -62,17 +62,7 @@ class HybridExtractionResult:
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
-        return {
-            "document_id": self.document_id,
-            "document_path": self.document_path,
-            "total_entities_found": self.total_entities_found,
-            "high_confidence_entities": self.high_confidence_entities,
-            "extraction_methods_used": self.extraction_methods_used,
-            "processing_time": self.processing_time,
-            "confidence_scores": self.confidence_scores,
-            "validation_results": self.validation_results,
-            "created_at": self.created_at.isoformat(),
-        }
+        return asdict(self)
 
 
 class HybridLegalExtractor(BaseAgent):
