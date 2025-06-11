@@ -32,6 +32,9 @@ pip install PyQt6
 
 This GUI lets you open a document and run the default analysis graph locally.
 
+See the [PyQt6 Interface](../README.md#pyqt6-interface) section in the main
+README for a summary of its capabilities and limitations.
+
 
 ## React Frontend
 
