@@ -15,6 +15,7 @@ pydantic-settings>=2.0.0
 # Frontend GUI
 streamlit>=1.25.0
 requests>=2.30.0 # For Streamlit to call FastAPI, etc.
+PyQt6>=6.4.0  # Required for the optional PyQt GUI
 
 # Data Handling & Numerics
 pandas>=2.0.0
