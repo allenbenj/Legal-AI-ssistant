@@ -24,6 +24,8 @@ from ..core.detailed_logging import (
     LogCategory,
     detailed_log_function,
 )
+from ..analytics.quality_classifier import PreprocessingErrorPredictor
+from ..core.model_switcher import TaskComplexity
 from .metrics_exporter import MetricsExporter, metrics_exporter
 from ..core.ml_optimizer import PerformanceMetrics
 
@@ -122,6 +124,7 @@ class RealTimeAnalysisWorkflow:
         # User feedback integration
         self.feedback_callback: Optional[Callable] = None
         self.pending_feedback: Dict[str, Any] = {}
+        self.preproc_predictor = PreprocessingErrorPredictor()
 
         # Synchronization primitives
         self.processing_lock = asyncio.Semaphore(self.max_concurrent_documents)
@@ -212,6 +215,22 @@ class RealTimeAnalysisWorkflow:
                 "document_processing",
                 PerformanceMetrics(processing_time=duration, success=success),
             )
+
+            risk = self.preproc_predictor.predict_risk(
+                {
+                    "content_preview": text[:1000] if text else "",
+                    "size": Path(document_path).stat().st_size,
+                }
+            )
+            if risk > 0.5:
+                if hasattr(self.hybrid_extractor, "model_switcher"):
+                    await self.hybrid_extractor.model_switcher.switch_for_task(
+                        "hybrid_extraction", TaskComplexity.COMPLEX
+                    )
+                if hasattr(self.ontology_extractor, "model_switcher"):
+                    await self.ontology_extractor.model_switcher.switch_for_task(
+                        "ontology_extraction", TaskComplexity.COMPLEX
+                    )
 
             await self._notify_progress("ontology_extraction", 0.15)
             legal_doc = self._create_legal_document(

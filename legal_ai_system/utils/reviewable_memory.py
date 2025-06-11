@@ -17,6 +17,11 @@ import uuid
 from pathlib import Path
 import threading
 
+from ..analytics.quality_classifier import (
+    QualityClassifier,
+    QualityModelMonitor,
+)
+
 # Use detailed_logging
 from ..core.detailed_logging import (
     get_detailed_logger,
@@ -107,11 +112,7 @@ class ReviewableMemory:
     """Manages the review process for extracted legal information."""
     
     @detailed_log_function(LogCategory.DATABASE)
-    def __init__(self,
-                 db_path_str: str = "./storage/databases/review_memory.db",
-                 unified_memory_manager: Optional[Any] = None,
-                 ml_optimizer: Optional[Any] = None,
-                 service_config: Optional[Dict[str, Any]] = None):
+
         review_mem_logger.info("Initializing ReviewableMemory.")
         self.config = service_config or {}
         
@@ -139,6 +140,14 @@ class ReviewableMemory:
         ]))
         
         self.feedback_history_cache: List[Dict[str, Any]] = [] # In-memory cache for recent feedback
+
+        self.quality_classifier = quality_classifier or QualityClassifier()
+        monitor_threshold = self.config.get("quality_accuracy_threshold", 0.8)
+        self.quality_monitor = QualityModelMonitor(
+            self.quality_classifier,
+            threshold=monitor_threshold,
+            alert_cb=self._alert_quality_drift,
+        )
         review_mem_logger.info("ReviewableMemory initialized.", parameters=self.get_config_summary())
 
     def get_config_summary(self) -> Dict[str, Any]:
@@ -151,13 +160,6 @@ class ReviewableMemory:
             'types_always_review': list(self.require_review_for_types)
         }
 
-    async def get_thresholds_async(self) -> Dict[str, float]:
-        """Return current confidence thresholds."""
-        return {
-            'auto_approve_threshold': self.auto_approve_threshold,
-            'review_threshold': self.review_threshold,
-            'reject_threshold': self.reject_threshold,
-        }
 
     @detailed_log_function(LogCategory.DATABASE)
     async def initialize(self): # Made async
@@ -301,25 +303,49 @@ class ReviewableMemory:
 
     async def _calculate_item_priority(self, item_type_str: str, confidence: float, text_context: str) -> ReviewPriority: # Renamed param
         """Calculate review priority based on item type, confidence, and context keywords."""
-        # This logic can be significantly enhanced
+        # Baseline heuristics with ML-driven adjustment
         text_context_lower = text_context.lower()
         if any(kw in text_context_lower for kw in ['violation', 'misconduct', 'fraud', 'brady']):
             return ReviewPriority.CRITICAL
         if item_type_str.upper() in self.require_review_for_types:
             return ReviewPriority.HIGH
-        if confidence < self.review_threshold: # If below general review threshold but not reject threshold
-            return ReviewPriority.HIGH 
-        if confidence < (self.review_threshold + self.auto_approve_threshold) / 2: # Mid-range
+        if confidence < self.review_threshold:
+            return ReviewPriority.HIGH
+
+        prob = self.quality_classifier.predict_error_probability(
+            {
+                "item_type": item_type_str,
+                "confidence": confidence,
+                "text_context": text_context,
+            }
+        )
+        if prob > 0.8:
+            return ReviewPriority.CRITICAL
+        if prob > 0.6:
+            return ReviewPriority.HIGH
+        if prob > 0.3:
+            return ReviewPriority.MEDIUM
+        if confidence < (self.review_threshold + self.auto_approve_threshold) / 2:
             return ReviewPriority.MEDIUM
         return ReviewPriority.LOW
 
     async def _should_auto_approve(self, item: ReviewableItem) -> bool:
         if not self.enable_auto_approval: return False
         if item.review_priority == ReviewPriority.CRITICAL: return False
-        
+
         item_main_type = item.content.get('entity_type', item.content.get('relationship_type', item.content.get('finding_type', '')))
         if item_main_type.upper() in self.require_review_for_types: return False
-        
+
+        prob = self.quality_classifier.predict_error_probability(
+            {
+                "item_type": item_main_type,
+                "confidence": item.confidence,
+                "text_context": item.extraction_context.get("text", "") if item.extraction_context else "",
+            }
+        )
+        if prob > 0.3:
+            return False
+
         return item.confidence >= self.auto_approve_threshold
 
     async def _should_auto_reject(self, item: ReviewableItem) -> bool:
@@ -640,6 +666,60 @@ class ReviewableMemory:
         review_mem_logger.info("ReviewableMemory health check complete.", parameters=status_report)
         return status_report
 
+    async def train_quality_model_async(self) -> None:
+        """Train quality classifier from historical review data."""
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, self._train_quality_model_sync)
+
+    def _train_quality_model_sync(self) -> None:
+        with self._lock, self._get_db_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                "SELECT item_type, confidence, extraction_context, review_status FROM review_items"
+            ).fetchall()
+            items: List[Dict[str, Any]] = []
+            labels: List[int] = []
+            for row in rows:
+                context = json.loads(row["extraction_context"] or "{}")
+                items.append(
+                    {
+                        "item_type": row["item_type"],
+                        "confidence": row["confidence"],
+                        "text_context": context.get("text", ""),
+                    }
+                )
+                labels.append(1 if row["review_status"] in ("rejected", "modified") else 0)
+            if items:
+                self.quality_classifier.train(items, labels)
+
+    async def evaluate_quality_model_async(self) -> float:
+        """Evaluate classifier accuracy and trigger drift alerts."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self._evaluate_quality_model_sync)
+
+    def _evaluate_quality_model_sync(self) -> float:
+        with self._lock, self._get_db_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                "SELECT item_type, confidence, extraction_context, review_status FROM review_items ORDER BY created_at DESC LIMIT 200"
+            ).fetchall()
+            items: List[Dict[str, Any]] = []
+            labels: List[int] = []
+            for row in rows:
+                ctx = json.loads(row["extraction_context"] or "{}")
+                items.append(
+                    {
+                        "item_type": row["item_type"],
+                        "confidence": row["confidence"],
+                        "text_context": ctx.get("text", ""),
+                    }
+                )
+                labels.append(1 if row["review_status"] in ("rejected", "modified") else 0)
+            if not items:
+                return 0.0
+            acc = self.quality_monitor.check_drift(items, labels)
+            return acc
+
     async def close(self): # For service container
         review_mem_logger.info("Closing ReviewableMemory.")
         # SQLite connections are opened/closed per operation. No explicit pool to close.
@@ -650,7 +730,6 @@ class ReviewableMemory:
 def create_reviewable_memory(
     service_config: Optional[Dict[str, Any]] = None,
     unified_memory_manager: Optional[Any] = None,
-    ml_optimizer: Optional[Any] = None,
 ) -> ReviewableMemory:
     cfg = service_config.get("reviewable_memory_config", {}) if service_config else {}
     # db_path = cfg.get("DB_PATH", global_settings.data_dir / "databases" / "review_memory.db")
@@ -659,6 +738,4 @@ def create_reviewable_memory(
     return ReviewableMemory(
         db_path_str=str(db_path),
         unified_memory_manager=unified_memory_manager,
-        ml_optimizer=ml_optimizer,
-        service_config=cfg,
     )
