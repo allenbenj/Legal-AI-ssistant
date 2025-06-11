@@ -17,6 +17,12 @@ export const colors = {
   info: '#0EA5E9',
   infoLight: '#38BDF8',
   infoDark: '#0369A1',
+  primaryMuted: '#DBEAFE',
+  secondaryMuted: '#E2E8F0',
+  successMuted: '#DCFCE7',
+  dangerMuted: '#FEE2E2',
+  warningMuted: '#FEF3C7',
+  infoMuted: '#E0F2FE',
   white: '#ffffff',
   black: '#000000',
   gray100: '#F3F4F6',
@@ -38,6 +44,8 @@ export const spacing = {
   xl: '2rem',
   '2xl': '3rem',
   '3xl': '4rem',
+  '4xl': '6rem',
+  '5xl': '8rem',
 };
 
 export const typography = {

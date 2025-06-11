@@ -470,7 +470,6 @@ class VectorStore:
             raise VectorStoreError("VectorStore failed to initialize.", cause=e)
 
 
-
     def _migrate_metadata_to_id_map_sync(self, conn: sqlite3.Connection) -> None:
         """Populate faiss_id_map table from existing metadata if missing."""
         try:
@@ -964,45 +963,6 @@ class VectorStore:
             vs_cache_logger.error("Failed loading id mapping cache from repository", exception=e)
 
     def _save_faiss_indexes_sync(self):
-        doc_idx_path = self.document_index_path
-        tmp_doc_idx_path = doc_idx_path.with_suffix(".tmp")
-        ent_idx_path = self.entity_index_path
-        tmp_ent_idx_path = ent_idx_path.with_suffix(".tmp")
-
-        self._update_disk_usage_stats()  # Update before saving
-        if self.document_index and self.document_index.ntotal > 0:
-            try:
-                faiss.write_index(self.document_index, str(tmp_doc_idx_path))
-                os.replace(tmp_doc_idx_path, doc_idx_path)
-                vs_index_logger.info(
-                    "Document FAISS index saved.",
-                    parameters={"path": str(doc_idx_path)},
-                )
-            except Exception as e:
-                vs_index_logger.error(
-                    "Failed to save document FAISS index.",
-                    exception=e,
-                    exc_info=True,
-                )
-                if tmp_doc_idx_path.exists():
-                    os.remove(tmp_doc_idx_path)
-
-        if self.entity_index and self.entity_index.ntotal > 0:
-            try:
-                faiss.write_index(self.entity_index, str(tmp_ent_idx_path))
-                os.replace(tmp_ent_idx_path, ent_idx_path)
-                vs_index_logger.info(
-                    "Entity FAISS index saved.",
-                    parameters={"path": str(ent_idx_path)},
-                )
-            except Exception as e:
-                vs_index_logger.error(
-                    "Failed to save entity FAISS index.", exception=e, exc_info=True
-                )
-                if tmp_ent_idx_path.exists():
-                    os.remove(tmp_ent_idx_path)
-
-    @detailed_log_function(LogCategory.VECTOR_STORE_DB)
 
     # --- FAISS ID Mapping Helpers ---
     def _get_next_faiss_id_sync(self, index_target: str) -> int:
@@ -1026,10 +986,9 @@ class VectorStore:
             if index_target.lower() == "document"
             else self.faissid_to_vectorid_entity
         )
-        mapping_v2f[vector_id] = faiss_id
-        mapping_f2v[faiss_id] = vector_id
 
     def _delete_id_mapping_sync(self, vector_id: str) -> None:
+
         if vector_id in self.vectorid_to_faissid_doc:
             fid = self.vectorid_to_faissid_doc.pop(vector_id)
             self.faissid_to_vectorid_doc.pop(fid, None)
@@ -1647,27 +1606,10 @@ class VectorStore:
             vector_store_logger.info(f"Metadata updated for vector_id '{vector_id}'.")
 
 
+
     @detailed_log_function(LogCategory.VECTOR_STORE)
     async def delete_vector_async(self, vector_id: str, index_target: str = "document"):
         async with self._async_lock:
-            faiss_id = await self._get_faiss_id_for_vector_id_async(vector_id, index_target)
-            if faiss_id is not None:
-                target_index = (
-                    self.document_index if index_target.lower() == "document" else self.entity_index
-                )
-                if target_index and faiss_id < target_index.ntotal:
-                    try:
-                        target_index.remove_ids(np.array([faiss_id], dtype="int64"))
-                    except Exception as e:
-                        vs_index_logger.error("Failed removing vector from index", exception=e)
-                await self._delete_id_mapping_async(vector_id)
-            await self._delete_metadata_async(vector_id)
-
-    async def _delete_metadata_async(self, vector_id: str) -> None:
-        async with self.metadata_lock:
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, self._delete_metadata_sync, vector_id)
-
     def _update_disk_usage_stats(self):
         """Updates statistics about disk usage for indexes and metadata DB."""
         try:

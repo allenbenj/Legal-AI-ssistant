@@ -10,11 +10,12 @@ if [ ! -d "$VENV_PATH" ]; then
   python3 -m venv "$VENV_PATH"
 fi
 
+# shellcheck source=/dev/null
 source "$VENV_PATH/bin/activate"
 cd "$REPO_ROOT"
 
-pip install --upgrade pip
-pip install -r requirements.txt
-pip install -e .[dev]
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python -m pip install -e ".[dev]"
 
 pytest "$@"

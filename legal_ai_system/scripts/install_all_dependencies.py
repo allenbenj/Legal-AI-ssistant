@@ -8,7 +8,9 @@ from pathlib import Path
 from typing import Iterable
 
 
-def run(cmd: Iterable[str], cwd: Path | None = None, timeout: int = 1800) -> None:
+def run(
+    cmd: Iterable[str], cwd: Path | None = None, timeout: int = 1800
+) -> None:
     """Run a command and raise an error if it fails."""
     print(f"Running: {' '.join(cmd)}")
     # Convert to list to satisfy type checkers expecting ``Sequence[str]``
@@ -63,22 +65,28 @@ def main() -> None:
     pip(venv_path, ["install", "-r", str(repo_root / "requirements.txt")])
     pip(venv_path, ["install", "lexnlp"])
     pip(venv_path, ["install", "langgraph", "sqlalchemy", "lancedb"])
-    pip(venv_path, [
-        "install",
-        "ffmpeg-python",
-        "openai-whisper",
-        "whisperx",
-        "pdfplumber",
-        "pyannote.audio",
-    ])
+    pip(
+        venv_path,
+        [
+            "install",
+            "ffmpeg-python",
+            "openai-whisper",
+            "whisperx",
+            "pdfplumber",
+            "pyannote.audio",
+        ],
+    )
 
     verify_imports(venv_path)
     run_tests(venv_path)
 
     # Node dependencies
-    npm(["install"], cwd=repo_root)
+    root_pkg = repo_root / "package.json"
+    if root_pkg.exists():
+        npm(["install"], cwd=repo_root)
+
     frontend_dir = repo_root / "frontend"
-    if frontend_dir.exists():
+    if (frontend_dir / "package.json").exists():
         npm(["install"], cwd=frontend_dir)
 
     print("All dependencies installed successfully")

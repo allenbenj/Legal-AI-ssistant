@@ -31,10 +31,10 @@ config_manager_logger = get_detailed_logger("ConfigurationManager", LogCategory.
 
 
 class ConfigurationManager:
-    """
-    Service-oriented configuration manager that provides centralized
-    access to all Legal AI System configuration settings.
-    """
+    """Centralized access to configuration settings."""
+
+    # Path to the YAML file containing default settings
+    DEFAULTS_FILE = Path(__file__).resolve().parents[2] / "config" / "defaults.yaml"
     
     @detailed_log_function(LogCategory.CONFIG)
     def __init__(self, custom_settings_instance: Optional[LegalAISettings] = None): # Renamed for clarity
@@ -61,7 +61,7 @@ class ConfigurationManager:
     @detailed_log_function(LogCategory.CONFIG)
     def _load_defaults(self) -> LegalAISettings:
         """Load default settings from YAML file."""
-        defaults_path = Path(__file__).resolve().parents[2] / "config" / "defaults.yaml"
+        defaults_path = self.DEFAULTS_FILE
         if defaults_path.exists():
             try:
                 with defaults_path.open("r") as f:
