@@ -39,6 +39,7 @@ python-pptx>=0.6.21
 markdown>=3.4.0
 beautifulsoup4>=4.12.0
 striprtf>=0.0.21
+langdetect>=1.0.9
 
 
 # Knowledge Graph (If Neo4j is used)

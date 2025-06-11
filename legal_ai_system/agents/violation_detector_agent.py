@@ -7,7 +7,7 @@ This agent identifies and analyzes various types of legal violations.
 import json
 import re
 import uuid
-from collections import defaultdict
+from collections import defaultdict, Counter
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -88,9 +88,13 @@ class ViolationDetectorAgent(BaseAgent, MemoryMixin):
         self.enable_llm_analysis = bool(
             config.get("enable_llm_analysis", True)
         )  # Renamed from enable_llm_validation
+        self.enable_dynamic_discovery = bool(
+            config.get("enable_dynamic_discovery", False)
+        )
         self.max_text_for_llm = int(config.get("max_text_for_llm", 8000))  # Chars
 
         self._init_violation_patterns()
+        self.dynamic_patterns: List[str] = []
 
         self.logger.info(
             f"{self.name} initialized.",
@@ -159,6 +163,27 @@ class ViolationDetectorAgent(BaseAgent, MemoryMixin):
             f"Initialized {len(self.all_violation_pattern_groups)} violation pattern groups."
         )
 
+    def discover_violation_patterns(self, texts: List[str], top_k: int = 5) -> None:
+        """Discover new potential violation patterns from *texts*."""
+        token_re = re.compile(r"[a-zA-Z]{3,}")
+        counter: Counter[str] = Counter()
+        for text in texts:
+            tokens = token_re.findall(text.lower())
+            for n in (2, 3):
+                for i in range(len(tokens) - n + 1):
+                    ngram = " ".join(tokens[i : i + n])
+                    counter[ngram] += 1
+        for phrase, _ in counter.most_common(top_k):
+            if any(
+                phrase in pat.lower()
+                for _, pats in self.all_violation_pattern_groups
+                for pat in pats
+            ):
+                continue
+            self.all_violation_pattern_groups.append(("dynamic", [phrase]))
+            self.dynamic_patterns.append(phrase)
+            self.logger.debug(f"Discovered dynamic violation pattern: {phrase}")
+
     async def _process_task(
         self, task_data: Dict[str, Any], metadata: Dict[str, Any]
     ) -> Dict[str, Any]:
@@ -172,6 +197,9 @@ class ViolationDetectorAgent(BaseAgent, MemoryMixin):
         start_time_obj = datetime.now(timezone.utc)
 
         output = ViolationDetectionOutput(document_id=document_id)
+
+        if self.enable_dynamic_discovery:
+            self.discover_violation_patterns([text_content])
 
         if not text_content or len(text_content.strip()) < 50:
             self.logger.warning(
@@ -573,12 +601,12 @@ class ViolationDetectorAgent(BaseAgent, MemoryMixin):
                     violation_type=item_data.get(
                         "violation_type", "Unknown LLM Violation"
                     ),
-                    description=description
-                    if description
-                    else exact_quote,  # Prefer description, fallback to quote
-                    context=exact_quote
-                    if exact_quote
-                    else description[:250],  # Use quote as context if available
+                    description=(
+                        description if description else exact_quote
+                    ),  # Prefer description, fallback to quote
+                    context=(
+                        exact_quote if exact_quote else description[:250]
+                    ),  # Use quote as context if available
                     confidence=confidence_val,
                     severity=str(item_data.get("severity", "medium")).lower(),
                     start_pos=start_pos,
