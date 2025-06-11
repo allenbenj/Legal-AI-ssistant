@@ -9,7 +9,7 @@ available."""
 import hashlib
 import json
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from functools import lru_cache
 from typing import Any, Dict, List, Optional, Set
@@ -137,28 +137,7 @@ class EntityResolutionResult:
     processing_time: float
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
-            "resolved_entities": [
-                {
-                    "entity_id": e.entity_id,
-                    "canonical_name": e.canonical_name,
-                    "entity_type": e.entity_type,
-                    "aliases": list(e.aliases),
-                    "attributes": e.attributes,
-                    "confidence_score": e.confidence_score,
-                    "source_documents": list(e.source_documents),
-                    "relationships": e.relationships,
-                    "created_at": e.created_at.isoformat(),
-                    "updated_at": e.updated_at.isoformat(),
-                }
-                for e in self.resolved_entities
-            ],
-            "resolution_metrics": self.resolution_metrics,
-            "organizational_structure": self.organizational_structure,
-            "analytical_insights": self.analytical_insights,
-            "processing_time": self.processing_time,
-            "resolved_at": datetime.now().isoformat(),
-        }
+        return asdict(self)
 
 
 class KnowledgeBaseAgent(BaseAgent):
