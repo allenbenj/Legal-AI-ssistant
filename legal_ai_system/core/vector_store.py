@@ -850,6 +850,16 @@ class VectorStore:
             finally:
                 vs_index_logger.debug("Released lock after saving FAISS indexes.")
 
+    @detailed_log_function(LogCategory.VECTOR_STORE)
+    async def flush_updates(self) -> None:
+        """Persist any pending updates for real-time synchronization."""
+        await self._save_faiss_indexes_async()
+        if self.metadata_repo and hasattr(self.metadata_repo, "flush"):
+            try:
+                await self.metadata_repo.flush()
+            except Exception as e:  # pragma: no cover - best effort
+                vector_store_logger.error("Metadata repository flush failed", exception=e)
+
     async def _initialize_metadata_storage_async(self) -> None:
         """Ensure metadata storage is ready."""
         if self.metadata_repo:
