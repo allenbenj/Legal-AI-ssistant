@@ -28,9 +28,11 @@ It requires the `PyQt6` package which is now listed in `requirements.txt`:
 
 ```bash
 pip install PyQt6
+
 ```
 
 This GUI lets you open a document and run the default analysis graph locally.
+
 
 ## React Frontend
 
