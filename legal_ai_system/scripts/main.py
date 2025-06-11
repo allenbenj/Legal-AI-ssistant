@@ -17,7 +17,7 @@ import uuid  # For generating IDs
 
 # import logging # Replaced by detailed_logging
 from contextlib import asynccontextmanager
-import datetime
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass, field, asdict
 from enum import Enum
 from pathlib import Path
@@ -404,10 +404,10 @@ class WorkflowConfig(ProcessingRequest):
     name: str
     description: Optional[str] = None
     created_at: datetime = PydanticField(
-        default_factory=lambda: datetime.datetime.now(tz=datetime.timezone.utc)
+        default_factory=lambda: datetime.now(tz=timezone.utc)
     )
     updated_at: datetime = PydanticField(
-        default_factory=lambda: datetime.datetime.now(tz=datetime.timezone.utc)
+        default_factory=lambda: datetime.now(tz=timezone.utc)
     )
 
 
@@ -461,20 +461,18 @@ class SystemHealthResponse(BaseModel):
     active_documents_count: int  # Renamed
     pending_reviews_count: int  # Renamed
     timestamp: str = PydanticField(
-        default_factory=lambda: datetime.datetime.now(
-            tz=datetime.timezone.utc
-        ).isoformat()
+        default_factory=lambda: datetime.now(tz=timezone.utc).isoformat()
     )
 
 
 # --- JWT Utilities & Auth Mock ---
 # In a real app, these would use SecurityManager
 def create_access_token(
-    data: dict, expires_delta: Optional[datetime.timedelta] = None
+    data: dict, expires_delta: Optional[timedelta] = None
 ) -> str:
     to_encode = data.copy()
-    expire_time = datetime.datetime.now(tz=datetime.timezone.utc) + (
-        expires_delta or datetime.timedelta(hours=Constants.Time.SESSION_TIMEOUT_HOURS)
+    expire_time = datetime.now(tz=timezone.utc) + (
+        expires_delta or timedelta(hours=Constants.Time.SESSION_TIMEOUT_HOURS)
     )
     to_encode.update(
         {
@@ -499,7 +497,7 @@ async def get_current_active_user(
             username="test_user",
             email="test@example.com",
             access_level=AccessLevel.ADMIN,
-            last_login=datetime.datetime.now(tz=datetime.timezone.utc),
+            last_login=datetime.now(tz=timezone.utc),
         )
 
     token = credentials.credentials
@@ -677,7 +675,7 @@ class Query:
                 healthy_services_count=0,
                 active_documents_count=0,
                 pending_reviews_count=0,
-                timestamp=datetime.datetime.now().isoformat(),
+                timestamp=datetime.now().isoformat(),
             )
         # This should call a method on service_container_instance or a dedicated status service
         # status_data = await service_container_instance.get_system_status_summary()
@@ -687,7 +685,7 @@ class Query:
             healthy_services_count=5,
             active_documents_count=2,
             pending_reviews_count=1,
-            timestamp=datetime.datetime.now().isoformat(),
+            timestamp=datetime.now().isoformat(),
         )  # Mock
 
 
@@ -840,7 +838,7 @@ async def upload_document_rest(  # Renamed to avoid conflict
             username="api_uploader",
             email="uploader@example.com",
             access_level=AccessLevel.ADMIN,
-            last_login=datetime.datetime.now(tz=datetime.timezone.utc),
+            last_login=datetime.now(tz=timezone.utc),
         )
 
         result = await integration_service_instance.upload_and_process_document(
@@ -1025,7 +1023,7 @@ async def update_workflow_config(config_id: str, update: WorkflowConfigUpdate):
     update_data = update.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(existing, key, value)
-    existing.updated_at = datetime.datetime.now(tz=datetime.timezone.utc)
+    existing.updated_at = datetime.now(tz=timezone.utc)
     workflow_configs[config_id] = existing
     save_workflow_configs()
     return existing
@@ -1062,7 +1060,7 @@ async def get_system_health_rest(  # Renamed
             performance_metrics_summary={},
             active_documents_count=0,
             pending_reviews_count=0,
-            timestamp=datetime.datetime.now(tz=datetime.timezone.utc).isoformat(),
+            timestamp=datetime.now(tz=timezone.utc).isoformat(),
         )
 
     try:
@@ -1081,7 +1079,7 @@ async def get_system_health_rest(  # Renamed
             active_documents_count=health_summary.get("active_documents_count", 0),
             pending_reviews_count=health_summary.get("pending_reviews_count", 0),
             timestamp=health_summary.get(
-                "timestamp", datetime.datetime.now(tz=datetime.timezone.utc).isoformat()
+                "timestamp", datetime.now(tz=timezone.utc).isoformat()
             ),
         )
     except Exception as e:
@@ -1165,8 +1163,8 @@ async def submit_review_decision_rest(  # Renamed
                         "decision": review_request.decision,
                         # "user": current_user.username, # If auth is on
                         "user": "mock_reviewer",
-                        "timestamp": datetime.datetime.now(
-                            tz=datetime.timezone.utc
+                        "timestamp": datetime.now(
+                            tz=timezone.utc
                         ).isoformat(),
                     },
                     "calibration_updates",
@@ -1227,7 +1225,7 @@ async def websocket_endpoint_route(websocket: WebSocket, client_id: str):
                     )
             elif msg_type == "ping":
                 await websocket_manager_instance.send_personal_message(
-                    {"type": "pong", "timestamp": datetime.datetime.now().isoformat()},
+                    {"type": "pong", "timestamp": datetime.now().isoformat()},
                     client_id,
                 )
             # Add more message type handlers as needed
