@@ -57,4 +57,10 @@ See [docs/test_setup.md](test_setup.md) for details.
 - [API Endpoints](api_endpoints.md) – REST API documentation
 - [Integration Guide](integration_plan.md) – deployment and WebSocket usage
 
+## Understanding the Architecture
+Sequence diagrams illustrating how services initialize and how workflows
+execute can be found under [docs/diagrams](diagrams/). Reviewing these diagrams
+along with [system_layout.md](system_layout.md) provides a good overview of the
+project structure.
+
 Happy coding!
