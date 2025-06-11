@@ -130,6 +130,19 @@ choose the one that suits your workflow:
    development. Use `npm run build` to generate `frontend/dist`, which FastAPI
    serves automatically when present.
 
+### PyQt6 Interface
+
+Install `PyQt6` and launch the desktop GUI module:
+
+```bash
+pip install PyQt6
+python -m legal_ai_system.gui.main_gui
+```
+
+This interface can open local documents and run the default analysis workflow
+without a browser. It is primarily a demo and lacks the advanced features of the
+Streamlit and React frontends.
+
 Detailed instructions are available in [docs/gui_setup.md](docs/gui_setup.md).
 
 ### Extraction Options
