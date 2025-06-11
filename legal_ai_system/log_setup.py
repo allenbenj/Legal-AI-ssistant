@@ -48,7 +48,10 @@ def init_logging(
     )
 
     context_filter = ContextFilter("LegalAISystem")
-    logging.getLogger().addFilter(context_filter)
+    root_logger = logging.getLogger()
+    root_logger.addFilter(context_filter)
+    for handler in root_logger.handlers:
+        handler.addFilter(context_filter)
 
     if log_file is None:
         log_file = LOG_DIR / "app.log"
@@ -56,6 +59,7 @@ def init_logging(
     if log_file:
         fh = logging.FileHandler(log_file)
         fh.setLevel(level)
+        fh.addFilter(context_filter)
         formatter = logging.Formatter(
             "%(asctime)s [%(levelname)s] %(app)s %(name)s:%(lineno)d - %(message)s"
         )

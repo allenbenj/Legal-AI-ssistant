@@ -9,36 +9,23 @@ from typing import Any, Awaitable, Callable, Dict, Iterable, List, Tuple
 END = "END"
 
 
-class BaseNode:
-    """Lightweight base class used as a stand-in when ``langgraph`` is absent."""
+"""Minimal local stub for the optional :mod:`langgraph` package."""
 
+from __future__ import annotations
+
+import asyncio
+import inspect
+from typing import Any, Awaitable, Callable, Dict, Iterable, List, Optional, Tuple
+
+
+class BaseNode:
     pass
 
-
-# Helper to await values if needed
-async def _maybe_await(value: Any) -> Any:
-    if asyncio.iscoroutine(value) or isinstance(value, Awaitable):
-        return await value
-    return value
-
-
-class StateGraph:
-    """Simplified asynchronous graph structure for local workflows."""
 
     def __init__(self) -> None:
         self._nodes: Dict[str, Callable[[Any], Any]] = {}
         self._edges: Dict[str, List[str]] = {}
-        self._conditional_edges: Dict[
-            str, List[Tuple[Callable[[Any], bool], str]]
-        ] = {}
-        self._parallel: Dict[str, Tuple[List[str], str]] = {}
-        self._entry_point: str | None = None
 
-    # ------------------------------------------------------------------
-    # Graph construction helpers
-    # ------------------------------------------------------------------
-    def add_node(self, name: str, node: Callable[[Any], Any]) -> None:
-        """Register a node callable under ``name``."""
         self._nodes[name] = node
 
     def add_edge(self, src: str, dest: str) -> None:
@@ -58,25 +45,7 @@ class StateGraph:
         self._parallel[src] = (nodes, merge)
 
     def set_entry_point(self, name: str) -> None:
-        """Specify the starting node for execution."""
-        self._entry_point = name
 
-    # ------------------------------------------------------------------
-    # Execution helpers
-    # ------------------------------------------------------------------
-    def run(self, data: Any) -> Any:
-        """Execute the graph synchronously starting with ``data``."""
-        return asyncio.run(self._run(data))
-
-    async def _run(self, data: Any) -> Any:
-        if self._entry_point is None:
-            raise RuntimeError("Entry point not set")
-
-        node_name = self._entry_point
-        state = data
-        while node_name != END:
-            node = self._nodes[node_name]
-            state = await _maybe_await(node(state))
 
             # Handle parallel execution if configured
             if node_name in self._parallel:
