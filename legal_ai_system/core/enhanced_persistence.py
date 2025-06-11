@@ -897,11 +897,6 @@ class CacheManager:
 class EnhancedPersistenceManager:
     """Central persistence manager coordinating all data operations."""
 
-    def __init__(
-        self,
-        connection_pool: ConnectionPool,
-        config: Optional[Dict[str, Any]] | None = None,
-    ) -> None:
         self.config = config or {}
         cache_ttl = self.config.get("cache_default_ttl_seconds", 3600)
 
@@ -909,9 +904,6 @@ class EnhancedPersistenceManager:
         self.entity_repo = EntityRepository(self.connection_pool)
         self.relationship_repo = RelationshipRepository(self.connection_pool)
         self.workflow_repo = WorkflowRepository(self.connection_pool)
-        self.cache_manager = CacheManager(
-            self.connection_pool, default_ttl_seconds=cache_ttl
-        )
         self.metrics = metrics_exporter
         self.initialized = False
         self.logger = persistence_logger.getChild("Manager")
@@ -1138,10 +1130,4 @@ class EnhancedPersistenceManager:
 
 # Factory function for service container
 def create_enhanced_persistence_manager(
-    service_container: "ServiceContainer",
-    *,
-    connection_pool: ConnectionPool,
-    config: Optional[Dict[str, Any]] | None = None,
-) -> EnhancedPersistenceManager:
-    """Factory for :class:`ServiceContainer`."""
-    return EnhancedPersistenceManager(connection_pool=connection_pool, config=config)
+

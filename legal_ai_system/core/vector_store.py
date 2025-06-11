@@ -374,9 +374,6 @@ class VectorStore:
         self.metadata_mem_cache: LRUCache[str, VectorMetadata] = LRUCache(
             maxsize=cache_size
         )
-        self.metadata_repo: Optional[VectorMetadataRepository] = self.config.get(
-            "metadata_repository"
-        )
 
         self.vectorid_to_faissid_doc: Dict[str, int] = {}
         self.vectorid_to_faissid_entity: Dict[str, int] = {}
@@ -749,7 +746,7 @@ class VectorStore:
                     # _initialize_faiss_indexes_sync updates instance attributes in-place
                     self._initialize_faiss_indexes_sync()
 
-        
+
     async def _optimization_worker_async(self):
         vs_index_logger.info("Async optimization worker task started.")
         while not self._stop_background_tasks_event.is_set():
@@ -1504,12 +1501,6 @@ class VectorStore:
     async def _get_metadata_by_faiss_internal_id_async(
         self, faiss_id: int, index_target: str
     ) -> Optional[VectorMetadata]:
-        """Retrieve metadata using faiss_id mapping via cache and repository."""
-        vector_id = await self._get_vector_id_by_faiss_id_async(faiss_id, index_target)
-        if not vector_id:
-            return None
-        metadata = await self._get_metadata_async_from_db_or_cache(vector_id)
-        return metadata
     def _get_metadata_from_db_sync(self, vector_id: str) -> Optional[Dict[str, Any]]:
         """Synchronously fetches a single metadata record from SQLite."""
         try:
