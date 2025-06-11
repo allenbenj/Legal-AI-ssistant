@@ -13,6 +13,8 @@ except Exception:  # ImportError or other issues if langgraph not installed
 
         pass
 
+BaseNode = LangGraphBaseNode
+
 
 if TYPE_CHECKING:  # pragma: no cover - hint for type checkers
     from langgraph.graph import BaseNode as _RealBaseNode

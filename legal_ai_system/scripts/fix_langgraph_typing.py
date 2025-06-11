@@ -34,19 +34,7 @@ def update_file(path: Path) -> bool:
     original = path.read_text(encoding="utf-8")
     lines = original.splitlines()
     changed = False
-    for i, line in enumerate(lines):
-        if "from langgraph.graph" in line and "BaseNode as" not in line and "BaseNode" in line:
-            lines[i] = line.replace("BaseNode", "BaseNode as LangGraphBaseNode")
-            changed = True
-        if line.lstrip().startswith("class BaseNode"):
-            lines[i] = line.replace("class BaseNode", "class LangGraphBaseNode", 1)
-            changed = True
-    text = "\n".join(lines)
-    if "BaseNode = LangGraphBaseNode" not in text and "class LangGraphBaseNode" in text:
-        text += "\nBaseNode = LangGraphBaseNode\n"
-        changed = True
-    if changed:
-        path.write_text(text + ("" if text.endswith("\n") else "\n"), encoding="utf-8")
+
     return changed
 
 

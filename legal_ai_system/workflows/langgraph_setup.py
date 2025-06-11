@@ -27,6 +27,8 @@ except Exception:  # pragma: no cover - during tests
 
     class LangGraphBaseNode:
         pass
+    BaseNode = LangGraphBaseNode
+
 
 if TYPE_CHECKING:  # pragma: no cover
     from langgraph.graph import StateGraph as _RealStateGraph
