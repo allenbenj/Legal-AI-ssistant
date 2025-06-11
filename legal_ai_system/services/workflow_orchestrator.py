@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 from typing import Any, Dict, Optional
+import time
 
 from ..utils.document_utils import extract_text
 from ..workflows.langgraph_setup import build_graph
@@ -20,6 +21,7 @@ from ..core.detailed_logging import (
     detailed_log_function,
 )
 from .realtime_analysis_workflow import RealTimeAnalysisWorkflow
+from .metrics_exporter import metrics_exporter
 
 wo_logger = get_detailed_logger("WorkflowOrchestrator", LogCategory.SYSTEM)
 
@@ -125,33 +127,45 @@ class WorkflowOrchestrator:
     ) -> str:
         """Run the workflow and return the generated document ID."""
 
-        # 1. Run the async real-time workflow
-        result = await self.workflow.process_document_realtime(
-            document_path=document_path_str,
-            **(custom_metadata or {}),
-        )
+        start_time = time.time()
+        metrics = metrics_exporter
 
-        if self._graph is None:
-            self._graph = self.graph_builder(self.topic)
+        try:
+            # 1. Run the async real-time workflow
+            result = await self.workflow.process_document_realtime(
+                document_path=document_path_str,
+                **(custom_metadata or {}),
+            )
 
-        # Prepare text to feed the graph. When a case state object is provided
-        # we keep a cumulative context so the graph can reason over multiple
-        # documents from the same case.
-        text = extract_text(Path(document_path_str))
-        if case_state is not None:
-            case_state.process_new_document(result.document_id, text)
-            graph_input = case_state.get_case_context()
-        else:
-            graph_input = text
+            if self._graph is None:
+                self._graph = self.graph_builder(self.topic)
 
-        # 2. Execute the builder based graph for additional processing
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, self._graph.run, graph_input)
+            # Prepare text to feed the graph. When a case state object is provided
+            # we keep a cumulative context so the graph can reason over multiple
+            # documents from the same case.
+            text = extract_text(Path(document_path_str))
+            if case_state is not None:
+                case_state.process_new_document(result.document_id, text)
+                graph_input = case_state.get_case_context()
+            else:
+                graph_input = text
 
-        if case_state is not None:
-            case_state.update_case_state({"last_processed": result.document_id})
+            # 2. Execute the builder based graph for additional processing
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, self._graph.run, graph_input)
 
-        return result.document_id
+            if case_state is not None:
+                case_state.update_case_state({"last_processed": result.document_id})
+
+            return result.document_id
+        except Exception as exc:  # pragma: no cover - propagate after logging
+            if metrics:
+                metrics.inc_workflow_error()
+            wo_logger.error("Workflow execution failed", exception=exc)
+            raise
+        finally:
+            if metrics:
+                metrics.observe_workflow_time(time.time() - start_time)
 
     @detailed_log_function(LogCategory.SYSTEM)
     async def execute_builder_workflow(
