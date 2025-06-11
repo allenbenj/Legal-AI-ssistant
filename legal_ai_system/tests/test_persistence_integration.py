@@ -17,7 +17,6 @@ async def test_entity_create_and_fetch():
 
     pool = ConnectionPool(dsn, None)
     manager = create_enhanced_persistence_manager(
-        None,
         config={"database_url": dsn},
         connection_pool=pool,
     )
