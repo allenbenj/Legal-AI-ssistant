@@ -64,7 +64,7 @@ optional dependency enables document classification routing, specialized
 subgraphs, and real-time progress updates over WebSocket. It also shows a
 `CaseWorkflowState` example for passing state between nodes.
 
-For more detailed instructions see [ENV_SETUP.md](ENV_SETUP.md).
+For more detailed instructions see [ENV_SETUP.md](docs/ENV_SETUP.md).
 
 The older `setup_environment_task.py` script can also be used to create the vir
 tual environment and run the tests:
