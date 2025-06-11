@@ -8,14 +8,10 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 
 
 def extract_keywords(text: str, top_k: int = 5) -> List[Tuple[str, float]]:
-    """Extract top-ranked keywords from text using TF-IDF.
-
     Parameters
     ----------
     text : str
         Input document text.
-    top_k : int
-        Number of keywords to return.
 
     Returns
     -------
