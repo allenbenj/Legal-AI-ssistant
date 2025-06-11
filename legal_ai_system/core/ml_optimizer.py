@@ -59,6 +59,7 @@ import hashlib
 
 # Import detailed logging
 from .detailed_logging import get_detailed_logger, LogCategory, detailed_log_function
+from .config_models import MLOptimizerConfig
 
 # Initialize loggers
 ml_logger = get_detailed_logger("ML_Optimizer", LogCategory.SYSTEM)
@@ -204,7 +205,7 @@ class MLOptimizer:
     def __init__(
         self,
         storage_dir: str = "./storage/databases",
-        service_config: Optional[Dict[str, Any]] = None,
+        service_config: Optional[MLOptimizerConfig] = None,
     ):
         """Initialize ML optimizer with performance tracking."""
         ml_logger.info("=== INITIALIZING ML OPTIMIZER ===")
@@ -212,7 +213,7 @@ class MLOptimizer:
         self.storage_dir = Path(storage_dir)
         self.storage_dir.mkdir(parents=True, exist_ok=True)
 
-        self.config = service_config or {}
+        self.config = service_config or MLOptimizerConfig()
         self.db_path = self.storage_dir / "ml_optimizer.db"
 
         # Initialize database
@@ -224,11 +225,9 @@ class MLOptimizer:
         self.optimization_cache: Dict[str, OptimizationResult] = {}
 
         # Analysis settings
-        self.min_samples_for_optimization = self.config.get("min_samples", 50)
-        self.similarity_threshold = self.config.get("similarity_threshold", 0.8)
-        self.max_optimization_age_hours = self.config.get(
-            "max_optimization_age_hours", 24
-        )
+        self.min_samples_for_optimization = self.config.min_samples
+        self.similarity_threshold = self.config.similarity_threshold
+        self.max_optimization_age_hours = self.config.max_optimization_age_hours
 
         # Load recent performance data
         self._load_recent_performance()
@@ -793,6 +792,6 @@ class MLOptimizer:
 
 
 # Service container factory function
-def create_ml_optimizer(config: Optional[Dict[str, Any]] = None) -> MLOptimizer:
+def create_ml_optimizer(config: Optional[MLOptimizerConfig] = None) -> MLOptimizer:
     """Factory function for service container integration."""
-    return MLOptimizer(service_config=config or {})
+    return MLOptimizer(service_config=config or MLOptimizerConfig())
