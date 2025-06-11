@@ -899,12 +899,17 @@ class EnhancedPersistenceManager:
 
     def __init__(
         self,
-        connection_pool: ConnectionPool,
-        config: Optional[Dict[str, Any]] = None,
-        metrics_exporter: Optional[Any] = None,
-    ) -> None:
         self.config = config or {}
         cache_ttl = self.config.get("cache_default_ttl_seconds", 3600)
+
+        if connection_pool is None:
+            connection_pool = ConnectionPool(
+                database_url,
+                redis_url,
+                min_pg_connections=self.config.get("min_pg_connections", 5),
+                max_pg_connections=self.config.get("max_pg_connections", 20),
+                max_redis_connections=self.config.get("max_redis_connections", 10),
+            )
 
         self.connection_pool = connection_pool
         self.entity_repo = EntityRepository(self.connection_pool)
@@ -1138,3 +1143,8 @@ class EnhancedPersistenceManager:
 # Factory function for service container
 def create_enhanced_persistence_manager(
 
+    return EnhancedPersistenceManager(
+        connection_pool,
+        config.get("persistence_config", {}),
+        metrics_exporter,
+    )

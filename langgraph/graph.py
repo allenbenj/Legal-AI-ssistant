@@ -1,4 +1,12 @@
+"""Local fallback implementation of a minimal workflow graph."""
 
+from __future__ import annotations
+
+import asyncio
+from typing import Any, Awaitable, Callable, Dict, Iterable, List, Tuple
+
+
+END = "END"
 
 
 """Minimal local stub for the optional :mod:`langgraph` package."""
@@ -11,109 +19,58 @@ from typing import Any, Awaitable, Callable, Dict, Iterable, List, Optional, Tup
 
 
 class BaseNode:
-    """Lightweight interface for callable workflow nodes."""
-
     pass
 
-
-
-class StateGraph:
-    """Simple asynchronous graph executor used for local development."""
 
     def __init__(self) -> None:
         self._nodes: Dict[str, Callable[[Any], Any]] = {}
         self._edges: Dict[str, List[str]] = {}
-        self._cond_edges: Dict[str, List[Tuple[Callable[[Any], bool], str]]] = {}
-        self._parallel: Dict[str, Tuple[List[str], str]] = {}
-        self._entry_point: Optional[str] = None
-
-    # ------------------------------------------------------------------
-    # Node registration utilities
-    # ------------------------------------------------------------------
-    def add_node(self, name: str, node: Callable[[Any], Any]) -> None:
-        """Register a callable node by name."""
 
         self._nodes[name] = node
 
-    def set_entry_point(self, name: str) -> None:
-        """Set the starting node for graph execution."""
-
-        self._entry_point = name
-
-    def add_edge(self, start: str, end: str) -> None:
-        """Add a linear edge from ``start`` to ``end``."""
-
-        self._edges.setdefault(start, []).append(end)
+    def add_edge(self, src: str, dest: str) -> None:
+        """Connect ``src`` node to ``dest`` node."""
+        self._edges.setdefault(src, []).append(dest)
 
     def add_conditional_edges(
         self,
-        start: str,
+        src: str,
         mapping: Iterable[Tuple[Callable[[Any], bool], str]],
     ) -> None:
-        """Add conditional transitions executed in order."""
+        """Route to different nodes based on predicate results."""
+        self._conditional_edges[src] = list(mapping)
 
-        self._cond_edges[start] = list(mapping)
+    def add_parallel_nodes(self, src: str, nodes: List[str], merge: str) -> None:
+        """Run ``nodes`` in parallel after ``src`` and send results to ``merge``."""
+        self._parallel[src] = (nodes, merge)
 
-    def add_parallel_nodes(self, start: str, nodes: List[str], merge: str) -> None:
-        """Execute ``nodes`` concurrently and merge the results."""
+    def set_entry_point(self, name: str) -> None:
 
-        self._parallel[start] = (nodes, merge)
 
-    # ------------------------------------------------------------------
-    # Execution helpers
-    # ------------------------------------------------------------------
-    async def _call_node(self, name: str, data: Any) -> Any:
-        func = self._nodes[name]
-        result = func(data)
-        if inspect.isawaitable(result):
-            result = await result
-        return result
-
-    async def _run_async(self, data: Any) -> Any:
-        if self._entry_point is None:
-            raise RuntimeError("Entry point not set")
-
-        node = self._entry_point
-        result = data
-
-        while node != END:
-            result = await self._call_node(node, result)
-
-            # Handle fan-out/fan-in style parallel execution
-            if node in self._parallel:
-                branches, merge = self._parallel[node]
-                branch_results = await asyncio.gather(
-                    *[self._call_node(n, result) for n in branches]
+            # Handle parallel execution if configured
+            if node_name in self._parallel:
+                parallel_nodes, merge_node = self._parallel[node_name]
+                results = await asyncio.gather(
+                    *[
+                        _maybe_await(self._nodes[n](state))
+                        for n in parallel_nodes
+                    ]
                 )
-                result = await self._call_node(merge, branch_results)
-                node = merge
+                state = await _maybe_await(self._nodes[merge_node](results))
+                node_name = self._next_node(merge_node, state)
+                continue
 
-            if node in self._cond_edges:
-                dest = END
-                for cond, target in self._cond_edges[node]:
-                    try:
-                        if cond(result):
-                            dest = target
-                            break
-                    except Exception:
-                        continue
-                node = dest
-            elif node in self._edges:
-                node = self._edges[node][0]
-            else:
-                node = END
-        return result
+            node_name = self._next_node(node_name, state)
+        return state
 
-    # Public API --------------------------------------------------------
-    def run(self, data: Any) -> Any:
-        """Execute the graph synchronously."""
-
-        return asyncio.run(self._run_async(data))
-
-    async def arun(self, data: Any) -> Any:
-        """Asynchronously execute the graph."""
-
-        return await self._run_async(data)
+    def _next_node(self, current: str, result: Any) -> str:
+        """Determine the next node after ``current`` given ``result``."""
+        if current in self._conditional_edges:
+            for predicate, dest in self._conditional_edges[current]:
+                if predicate(result):
+                    return dest
+            return END
+        return self._edges.get(current, [END])[0]
 
 
-END = "END"
+__all__ = ["BaseNode", "StateGraph", "END"]
