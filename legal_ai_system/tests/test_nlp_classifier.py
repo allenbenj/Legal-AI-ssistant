@@ -42,7 +42,7 @@ def test_nlp_classifier_fallback(monkeypatch):
 
 
 @pytest.mark.asyncio
-def test_document_processor_integration(monkeypatch, tmp_path):
+async def test_document_processor_integration(monkeypatch, tmp_path):
     # stub heavy dependencies to import agent
     for name in [
         "fitz",
@@ -99,4 +99,11 @@ class FakePipelineClassifier(nlp_mod.NLPDocumentClassifier):
         self._pipeline = lambda text, labels: {"labels": ["contract"], "scores": [1.0]}
         self._fallback = LegalDocumentClassifier()
 
-
+    def classify(self, text: str, filename: str | None = None):
+        return {
+            "is_legal_document": True,
+            "primary_type": "contract",
+            "primary_score": 1.0,
+            "filename": filename,
+            "used_ml_model": True,
+        }
