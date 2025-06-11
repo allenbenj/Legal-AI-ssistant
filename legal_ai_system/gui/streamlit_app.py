@@ -1,30 +1,56 @@
 import sys
 import os
-import sentry_sdk
-# Add the parent directory to sys.path to resolve imports
-parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-if parent_dir not in sys.path:
-    sys.path.insert(0, parent_dir)
+from pathlib import Path
+
+try:  # Sentry is optional
+    import sentry_sdk  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    sentry_sdk = None  # type: ignore
+
+# Add the parent directory to sys.path to resolve imports when running via
+# `streamlit run` directly from the GUI folder.
+parent_dir = Path(__file__).resolve().parent.parent
+if str(parent_dir) not in sys.path:
+    sys.path.insert(0, str(parent_dir))
 
 import streamlit as st
 import requests
 from legal_ai_system.config.settings import settings
 
+import logging  # Using standard logging for this standalone part initially
+
+# Using standard logging initially, can be augmented by detailed_logging if main system is run first
+streamlit_logger = logging.getLogger("StreamlitAppGUI")
+if not streamlit_logger.hasHandlers():
+    handler = logging.StreamHandler(sys.stdout)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    streamlit_logger.addHandler(handler)
+    streamlit_logger.setLevel(logging.INFO)
+
 # MUST be first Streamlit command - configure page
 st.set_page_config(
     page_title="Legal AI System",
     page_icon="⚖️",
-    layout="wide", 
-    initial_sidebar_state="expanded"
+    layout="wide",
+    initial_sidebar_state="expanded",
 )
 
-# Fix for Streamlit execution - use absolute imports
-sentry_sdk.init(
-    dsn="https://2fbad862414aad747dba577c60110470@o4509439121489920.ingest.us.sentry.io/4509439123587072",
-    # Add request headers and IP for users,
-    # see https://docs.sentry.io/platforms/python/data-management/data-collected/ for more info
-    send_default_pii=True,
-)
+
+def configure_sentry() -> None:
+    """Initialize Sentry if the SDK and DSN are available."""
+    dsn = os.environ.get("SENTRY_DSN")
+    if sentry_sdk and dsn:
+        sentry_sdk.init(dsn=dsn, send_default_pii=True)
+        streamlit_logger.info("Sentry initialized")
+    else:
+        if sentry_sdk is None:
+            streamlit_logger.debug("sentry_sdk not installed; skipping init")
+        else:
+            streamlit_logger.debug("SENTRY_DSN not provided; Sentry disabled")
+
+
+configure_sentry()
 try:
     from legal_ai_system.core.constants import Constants
 except ImportError:  # pragma: no cover - fallback for standalone execution
@@ -34,7 +60,6 @@ except ImportError:  # pragma: no cover - fallback for standalone execution
 
     Constants = FallbackConstants
 
-import logging  # Using standard logging for this standalone part initially
 from pathlib import Path
 import time  # For simulate processing
 import asyncio
@@ -46,16 +71,6 @@ except Exception:
     RealTimeAnalysisWorkflow = None  # type: ignore
 
 workflow_for_gui: Optional[RealTimeAnalysisWorkflow] = None
-
-# Using standard logging initially, can be augmented by detailed_logging if main system is run first
-streamlit_logger = logging.getLogger("StreamlitAppGUI")
-if not streamlit_logger.hasHandlers():
-    handler = logging.StreamHandler(sys.stdout)
-    formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    handler.setFormatter(formatter)
-    streamlit_logger.addHandler(handler)
-    streamlit_logger.setLevel(logging.INFO)
 
 
 def setup_main_app_logging_gui() -> None:  # Renamed to avoid conflict if imported elsewhere
