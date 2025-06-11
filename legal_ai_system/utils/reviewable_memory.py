@@ -107,10 +107,11 @@ class ReviewableMemory:
     """Manages the review process for extracted legal information."""
     
     @detailed_log_function(LogCategory.DATABASE)
-    def __init__(self, 
-                 db_path_str: str = "./storage/databases/review_memory.db", # Renamed param
-                 unified_memory_manager: Optional[Any] = None, # For storing approved items
-                 service_config: Optional[Dict[str, Any]] = None): # For config injection
+    def __init__(self,
+                 db_path_str: str = "./storage/databases/review_memory.db",
+                 unified_memory_manager: Optional[Any] = None,
+                 ml_optimizer: Optional[Any] = None,
+                 service_config: Optional[Dict[str, Any]] = None):
         review_mem_logger.info("Initializing ReviewableMemory.")
         self.config = service_config or {}
         
@@ -119,8 +120,9 @@ class ReviewableMemory:
         self.connection: Optional[sqlite3.Connection] = None # Initialized in async init
         self._lock = threading.RLock() # For DB operations
         self._initialized = False
-        
+
         self.unified_memory_manager = unified_memory_manager # To store approved items
+        self.ml_optimizer = ml_optimizer
 
         # Confidence thresholds
         self.auto_approve_threshold: float = self.config.get('auto_approve_threshold', 0.9)
@@ -147,6 +149,14 @@ class ReviewableMemory:
             'reject_thresh': self.reject_threshold,
             'auto_approval_on': self.enable_auto_approval,
             'types_always_review': list(self.require_review_for_types)
+        }
+
+    async def get_thresholds_async(self) -> Dict[str, float]:
+        """Return current confidence thresholds."""
+        return {
+            'auto_approve_threshold': self.auto_approve_threshold,
+            'review_threshold': self.review_threshold,
+            'reject_threshold': self.reject_threshold,
         }
 
     @detailed_log_function(LogCategory.DATABASE)
@@ -518,8 +528,8 @@ class ReviewableMemory:
         
         with self._lock, self._get_db_connection() as conn:
             conn.execute('''
-                INSERT INTO review_feedback_history 
-                (feedback_id, item_id, item_type_reviewed, original_confidence, review_decision, 
+                INSERT INTO review_feedback_history
+                (feedback_id, item_id, item_type_reviewed, original_confidence, review_decision,
                  confidence_adjustment, feedback_notes, reviewer_id, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
@@ -529,6 +539,22 @@ class ReviewableMemory:
                 datetime.now(timezone.utc).isoformat()
             ))
             conn.commit()
+
+        if self.ml_optimizer:
+            try:
+                self.ml_optimizer.record_review_feedback(
+                    item_id=item_id,
+                    item_type=original_item_data_for_confidence.item_type,
+                    original_confidence=original_item_data_for_confidence.confidence,
+                    decision=decision.decision.value,
+                    confidence_adjustment=confidence_adjustment,
+                    notes=decision.reviewer_notes,
+                    user_id=decision.reviewer_id,
+                )
+            except Exception as e:  # pragma: no cover - log only
+                review_mem_logger.error(
+                    "Failed to log feedback in MLOptimizer.", exception=e
+                )
         review_mem_logger.debug("Feedback recorded for item.", parameters={'item_id': item_id, 'decision': decision.decision.value})
     
     async def _send_to_unified_memory(self, item: ReviewableItem): # Renamed
@@ -621,8 +647,11 @@ class ReviewableMemory:
         review_mem_logger.info("ReviewableMemory closed.")
 
 # Factory for service container
-def create_reviewable_memory(service_config: Optional[Dict[str, Any]] = None, 
-                             unified_memory_manager: Optional[Any] = None) -> ReviewableMemory:
+def create_reviewable_memory(
+    service_config: Optional[Dict[str, Any]] = None,
+    unified_memory_manager: Optional[Any] = None,
+    ml_optimizer: Optional[Any] = None,
+) -> ReviewableMemory:
     cfg = service_config.get("reviewable_memory_config", {}) if service_config else {}
     # db_path = cfg.get("DB_PATH", global_settings.data_dir / "databases" / "review_memory.db")
     db_path = cfg.get("DB_PATH", "./storage/databases/review_memory.db") # Simpler default for now
@@ -630,5 +659,6 @@ def create_reviewable_memory(service_config: Optional[Dict[str, Any]] = None,
     return ReviewableMemory(
         db_path_str=str(db_path),
         unified_memory_manager=unified_memory_manager,
-        service_config=cfg
+        ml_optimizer=ml_optimizer,
+        service_config=cfg,
     )
