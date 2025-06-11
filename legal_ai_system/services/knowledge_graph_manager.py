@@ -18,6 +18,7 @@ import asyncio
 import hashlib
 
 from ..core.enhanced_persistence import (
+    ConnectionPool,
     EnhancedPersistenceManager,
     EntityRecord,
     RelationshipRecord,
@@ -133,7 +134,8 @@ class KnowledgeGraphManager:
         self,
         storage_dir: str = "./storage/knowledge_graph",
         service_config: Optional[Dict[str, Any]] = None,
-    ):
+        connection_pool: ConnectionPool | None = None,
+    ) -> None:
         """Initialize knowledge graph manager."""
         kg_logger.info("=== INITIALIZING KNOWLEDGE GRAPH MANAGER ===")
 
@@ -141,6 +143,7 @@ class KnowledgeGraphManager:
         self.storage_dir.mkdir(parents=True, exist_ok=True)
 
         self.config = service_config or {}
+        self.connection_pool = connection_pool
         self.entities: Dict[str, Entity] = {}
         self.relationships: Dict[str, Relationship] = {}
         self.entity_index: Dict[EntityType, List[str]] = {et: [] for et in EntityType}
@@ -159,6 +162,9 @@ class KnowledgeGraphManager:
         
         if self.neo4j_enabled:
             self._init_neo4j()
+
+        # Initialize persistence layer using the shared connection pool if provided
+        self._init_persistence()
         
         kg_logger.info("Knowledge graph manager initialization complete", parameters={
             'storage_dir': str(self.storage_dir),
@@ -171,11 +177,17 @@ class KnowledgeGraphManager:
         """Initialize database persistence layer."""
         persistence_cfg = self.config.get("persistence", {})
         if not self.persistence:
-            self.persistence = EnhancedPersistenceManager(
-                persistence_cfg.get("database_url"),
-                persistence_cfg.get("redis_url"),
-                config=persistence_cfg,
-            )
+            if self.connection_pool:
+                self.persistence = EnhancedPersistenceManager(
+                    connection_pool=self.connection_pool,
+                    config=persistence_cfg,
+                )
+            else:
+                self.persistence = EnhancedPersistenceManager(
+                    persistence_cfg.get("database_url"),
+                    persistence_cfg.get("redis_url"),
+                    config=persistence_cfg,
+                )
         if self.persistence:
             try:
                 loop = asyncio.get_event_loop()
@@ -466,28 +478,13 @@ class KnowledgeGraphManager:
                                      relationship_types: Optional[List[RelationshipType]] = None,
                                      max_depth: int = 2) -> List[Entity]:
         """Find entities connected to the given entity."""
-        query_logger.info(f"Finding connected entities for {entity_id}", parameters={
-            'max_depth': max_depth,
-            'relationship_types': [rt.value for rt in relationship_types] if relationship_types else None
-        })
+        connected_entities: set[str] = set()
 
-        cache_key = None
-        if self.cache_manager:
-            base = {
-                "entity": entity_id,
-                "rel_types": [rt.value for rt in relationship_types] if relationship_types else None,
-                "depth": max_depth,
-            }
-            cache_key = "kg_connected:" + hashlib.sha256(str(base).encode()).hexdigest()
-            cached = await self.cache_manager.get(cache_key)
-            if cached:
-                if self.metrics:
-                    self.metrics.inc_kg_query(cache_hit=True)
-                return [Entity(**c) for c in cached]
-
-        if self.metrics:
-            self.metrics.inc_kg_query()
-        
+        if self.persistence:
+            records = await self.persistence.relationship_repo.get_relationships_by_entity(entity_id)
+            for rec in records:
+                rel_type = RelationshipType(rec.relationship_type)
+                if relationship_types and rel_type not in relationship_types:
                     continue
                 target_id = rec.target_entity_id if rec.source_entity_id == entity_id else rec.source_entity_id
                 if target_id != entity_id:
@@ -497,13 +494,13 @@ class KnowledgeGraphManager:
                 for rel in self.relationships.values():
                     if relationship_types and rel.type not in relationship_types:
                         continue
-                    target_id = None
-                    if rel.source_entity_id == entity_id:
-                        target_id = rel.target_entity_id
-                    elif rel.target_entity_id == entity_id:
-                        target_id = rel.source_entity_id
-                    if target_id:
+                    target_id = (
+                        rel.target_entity_id if rel.source_entity_id == entity_id else rel.source_entity_id
+                    )
+                    if target_id != entity_id:
                         connected_entities.add(target_id)
+
+        return [self.entities[eid] for eid in connected_entities if eid in self.entities]
     
     # ==================== UTILITY METHODS ====================
     
@@ -630,4 +627,14 @@ class KnowledgeGraphManager:
 
 # Service container factory function
 def create_knowledge_graph_manager(
+    service_container: "ServiceContainer",
+    *,
+    connection_pool: ConnectionPool,
+    config: Optional[Dict[str, Any]] = None,
+) -> KnowledgeGraphManager:
+    """Factory for :class:`ServiceContainer`"""
+    return KnowledgeGraphManager(
+        storage_dir=config.get("STORAGE_DIR", "./storage/knowledge_graph") if config else "./storage/knowledge_graph",
+        service_config=config,
+        connection_pool=connection_pool,
     )
