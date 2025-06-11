@@ -295,11 +295,13 @@ class VectorStore:
         service_config: Optional[Dict[str, Any]] = None,
         cache_manager: Optional[Any] = None,
         metrics_exporter: Optional[Any] = None,
+        metadata_repo: VectorMetadataRepository | None = None,
     ):
         vector_store_logger.info("=== VectorStore: Instance Creation START ===")
         self.config = service_config or {}
         self.cache_manager = cache_manager
         self.metrics = metrics_exporter
+        self.metadata_repo = metadata_repo
         self.storage_path = Path(storage_path_str)
         self.document_index_path = (
             Path(document_index_path)
@@ -1519,6 +1521,22 @@ class VectorStore:
             )
             return None
 
+    def _update_metadata_fields_db_sync(self, vector_id: str, updates: Dict[str, Any]) -> None:
+        """Update metadata fields in the local SQLite database."""
+        if not updates:
+            return
+        try:
+            with sqlite3.connect(self.metadata_db_path, timeout=5) as conn:
+                set_clause = ", ".join(f"{k} = ?" for k in updates.keys())
+                values = list(updates.values()) + [vector_id]
+                conn.execute(
+                    f"UPDATE vector_metadata SET {set_clause} WHERE vector_id = ?",
+                    values,
+                )
+                conn.commit()
+        except sqlite3.Error as e:
+            vs_cache_logger.error("SQLite error updating metadata.", exception=e)
+
     def _apply_filters_to_results(
         self, results: List[SearchResult], filters: Dict[str, Any]
     ) -> List[SearchResult]:
@@ -1599,9 +1617,20 @@ class VectorStore:
                 ).isoformat()  # Also treat as access
                 cached_meta.access_count += 1
 
-            # Persist to DB
-            await self.metadata_repo.update_metadata_fields(vector_id, metadata_updates)
-            vector_store_logger.info(f"Metadata updated for vector_id '{vector_id}'.")
+            # Persist to DB or repository if available
+            if self.metadata_repo:
+                await self.metadata_repo.update_metadata_fields(vector_id, metadata_updates)
+            else:
+                loop = asyncio.get_event_loop()
+                await loop.run_in_executor(
+                    None,
+                    self._update_metadata_fields_db_sync,
+                    vector_id,
+                    metadata_updates,
+                )
+            vector_store_logger.info(
+                f"Metadata updated for vector_id '{vector_id}'."
+            )
 
 
 
@@ -1902,7 +1931,10 @@ class VectorStore:
 
 # Factory function at the end of vector_store.py
 def create_vector_store(
-    service_container: Any, service_config_override: Optional[Dict[str, Any]] = None
+    service_container: Any,
+    service_config_override: Optional[Dict[str, Any]] = None,
+    *,
+    metadata_repo: VectorMetadataRepository | None = None,
 ) -> VectorStore:
     """
     Factory function to create a VectorStore instance.
@@ -1916,6 +1948,11 @@ def create_vector_store(
         else service_container
     )
     vs_cfg = cfg_source.get_config("vector_store_config", {})  # Get config slice
+
+    if metadata_repo is None:
+        metadata_repo = _get_service_sync(
+            service_container, "vector_metadata_repository"
+        )
 
     # Resolve EmbeddingProviderVS dependency from service_container
     # This is crucial: embedding_provider must be INITIALIZED before VectorStore uses its dimension.
@@ -1969,5 +2006,6 @@ def create_vector_store(
         service_config=vs_cfg,
         cache_manager=getattr(_get_service_sync(service_container, "persistence_manager"), "cache_manager", None),
         metrics_exporter=_get_service_sync(service_container, "metrics_exporter"),
+        metadata_repo=metadata_repo,
     )
     return vs_instance
