@@ -33,7 +33,7 @@ Welcome to the Legal AI System project! This guide helps new contributors set up
    ```
 4. **Optional extras**
    Additional libraries for audio transcription and advanced parsing are listed in
-   [ENV_SETUP.md](../ENV_SETUP.md). Install them as needed.
+   [ENV_SETUP.md](ENV_SETUP.md). Install them as needed.
 
 ## Running Tests
 Tests use **pytest**. After installing the `dev` dependencies:
