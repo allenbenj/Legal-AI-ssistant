@@ -11,8 +11,8 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from ..utils.document_utils import extract_text
-
-
+from ..workflows.langgraph_setup import build_graph
+from ..workflows.case_workflow_state import CaseWorkflowState
 
 from ..core.detailed_logging import (
     get_detailed_logger,
@@ -114,6 +114,7 @@ class WorkflowOrchestrator:
     def _create_builder_graph(self, topic: Optional[str] = None):
         """Return a LangGraph graph for the provided topic."""
         actual_topic = topic or self.builder_topic
+        return self.graph_builder(actual_topic)
 
     @detailed_log_function(LogCategory.SYSTEM)
     async def execute_workflow_instance(
