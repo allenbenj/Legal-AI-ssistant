@@ -897,13 +897,47 @@ class CacheManager:
 class EnhancedPersistenceManager:
     """Central persistence manager coordinating all data operations."""
 
+    def __init__(
+        self,
+        database_url: Optional[str] = None,
+        redis_url: Optional[str] = None,
+        *,
+        connection_pool: ConnectionPool | None = None,
+        config: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Create a new :class:`EnhancedPersistenceManager` instance.
+
+        Parameters
+        ----------
+        database_url:
+            PostgreSQL connection string. Only used if ``connection_pool`` is not
+            provided.
+        redis_url:
+            Redis connection string. Only used if ``connection_pool`` is not
+            provided.
+        connection_pool:
+            Pre-created :class:`ConnectionPool` to reuse across managers.
+        config:
+            Optional configuration dictionary for tuning behaviour.
+        """
+
         self.config = config or {}
         cache_ttl = self.config.get("cache_default_ttl_seconds", 3600)
+
+        if connection_pool is None:
+            connection_pool = ConnectionPool(
+                database_url,
+                redis_url,
+                min_pg_connections=self.config.get("min_pg_connections", 5),
+                max_pg_connections=self.config.get("max_pg_connections", 20),
+                max_redis_connections=self.config.get("max_redis_connections", 10),
+            )
 
         self.connection_pool = connection_pool
         self.entity_repo = EntityRepository(self.connection_pool)
         self.relationship_repo = RelationshipRepository(self.connection_pool)
         self.workflow_repo = WorkflowRepository(self.connection_pool)
+        self.cache_manager = CacheManager(self.connection_pool, cache_ttl)
         self.metrics = metrics_exporter
         self.initialized = False
         self.logger = persistence_logger.getChild("Manager")
@@ -1130,4 +1164,30 @@ class EnhancedPersistenceManager:
 
 # Factory function for service container
 def create_enhanced_persistence_manager(
+    *,
+    config: Optional[Dict[str, Any]] | None = None,
+    connection_pool: ConnectionPool | None = None,
+) -> "EnhancedPersistenceManager":
+    """Convenience factory for :class:`EnhancedPersistenceManager`.
+
+    This helper mirrors the service container factory API where configuration
+    and an optional :class:`ConnectionPool` can be supplied. If no pool is
+    provided, one will be created using the database information from
+    ``config``.
+    """
+
+    cfg = config.get("persistence_config") if config else None
+    cfg = cfg or config or {}
+    if connection_pool is None:
+        connection_pool = ConnectionPool(
+            cfg.get("database_url"),
+            cfg.get("redis_url"),
+            min_pg_connections=cfg.get("min_pg_connections", 5),
+            max_pg_connections=cfg.get("max_pg_connections", 20),
+            max_redis_connections=cfg.get("max_redis_connections", 10),
+        )
+    return EnhancedPersistenceManager(
+        connection_pool=connection_pool,
+        config=cfg,
+    )
 
