@@ -70,6 +70,15 @@ optional dependency enables document classification routing, specialized
 subgraphs, and real-time progress updates over WebSocket. It also shows a
 `CaseWorkflowState` example for passing state between nodes.
 
+If Pylance or other type checkers report assignment errors for ``BaseNode``
+after installing ``langgraph``, run the helper script below. It scans all Python
+files and rewrites optional imports so that the fallback ``BaseNode`` is always
+aliased consistently:
+
+```bash
+python legal_ai_system/scripts/fix_langgraph_typing.py
+```
+
 For more detailed instructions see [ENV_SETUP.md](docs/ENV_SETUP.md).
 
 The older `setup_environment_task.py` script can also be used to create the vir
