@@ -28,21 +28,10 @@ It requires the `PyQt6` package which is now listed in `requirements.txt`:
 
 ```bash
 pip install PyQt6
-python -m legal_ai_system --mode qt
 ```
 
 This GUI lets you open a document and run the default analysis graph locally.
 
-## FastAPI Server Only
-
-To launch just the backend API without any GUI, run:
-
-```bash
-python -m legal_ai_system --mode api
-```
-
-The server listens on `LEGAL_AI_API_HOST` and `LEGAL_AI_API_PORT` environment
-variables if set, otherwise defaults to `0.0.0.0:8000`.
 
 ## React Frontend
 
