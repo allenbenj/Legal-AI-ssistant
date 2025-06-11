@@ -51,10 +51,13 @@ class WorkflowOrchestrator:
             workflow_config = config.get("workflow_config", WorkflowConfig())
 
         # RealTimeAnalysisWorkflow used for async document processing
+        task_queue = config.get("task_queue") or service_container._services.get(
+            "task_queue"
+        )
         self.workflow = RealTimeAnalysisWorkflow(
             service_container,
             workflow_config=workflow_config,
-            **config,
+            task_queue=task_queue,
         )
 
 

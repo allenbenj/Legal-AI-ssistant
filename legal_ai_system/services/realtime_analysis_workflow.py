@@ -91,9 +91,11 @@ class RealTimeAnalysisWorkflow:
         self,
         service_container: Any | None = None,
         workflow_config: Any | None = None,
+        task_queue: Any | None = None,
     ) -> None:
         """Initialize workflow settings and state."""
         self.service_container = service_container
+        self.task_queue = task_queue
         self.logger = get_detailed_logger(
             "RealTimeWorkflow", LogCategory.SYSTEM
         )
