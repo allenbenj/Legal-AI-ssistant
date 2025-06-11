@@ -128,12 +128,14 @@ class APIClient:
     def get_workflows(self) -> List[Dict[str, Any]]:
         """Retrieve available workflows"""
         try:
-            response = self.session.get(f"{self.base_url}/api/v1/workflows")
+            response = self.session.get(
+                f"{self.base_url}/api/v1/workflows"
+            )
             response.raise_for_status()
-            return response.json()
         except Exception as e:
             logger.error(f"Get workflows failed: {e}")
             return []
+        return response.json()
 
 class ErrorHandler:
     """Centralized error handling and user notifications"""
