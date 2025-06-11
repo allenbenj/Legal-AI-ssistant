@@ -13,6 +13,18 @@ from .core.detailed_logging import (
 )
 
 
+class ContextFilter(logging.Filter):
+    """Add application-level context to log records."""
+
+    def __init__(self, app_name: str) -> None:
+        super().__init__()
+        self.app_name = app_name
+
+    def filter(self, record: logging.LogRecord) -> bool:  # pragma: no cover - trivial
+        record.app = self.app_name
+        return True
+
+
 LOG_DIR = Path(__file__).resolve().parent / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -31,9 +43,12 @@ def init_logging(
     """
     logging.basicConfig(
         level=level,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        format="%(asctime)s [%(levelname)s] %(app)s %(name)s: %(message)s",
         handlers=[logging.StreamHandler()],
     )
+
+    context_filter = ContextFilter("LegalAISystem")
+    logging.getLogger().addFilter(context_filter)
 
     if log_file is None:
         log_file = LOG_DIR / "app.log"
@@ -42,7 +57,7 @@ def init_logging(
         fh = logging.FileHandler(log_file)
         fh.setLevel(level)
         formatter = logging.Formatter(
-            "%(asctime)s [%(levelname)s] %(name)s:%(lineno)d - %(message)s"
+            "%(asctime)s [%(levelname)s] %(app)s %(name)s:%(lineno)d - %(message)s"
         )
         fh.setFormatter(formatter)
         logging.getLogger().addHandler(fh)
@@ -51,6 +66,7 @@ def init_logging(
         json_log_path = log_file.with_suffix(".jsonl")
         json_handler = JSONHandler(json_log_path)
         json_handler.setLevel(level)
+        json_handler.addFilter(context_filter)
         logging.getLogger().addHandler(json_handler)
 
     # Ensure our detailed logger for the application exists

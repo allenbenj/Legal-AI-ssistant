@@ -14,15 +14,17 @@ import json
 import logging  # For tenacity's before_sleep_log
 import os
 import sqlite3
-import threading  # Retained for _sync_lock, though asyncio.Lock is primary
 import time
 from abc import ABC, abstractmethod
 from collections import deque
+from cachetools import LRUCache
 from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Deque, Dict, List, Optional
+
+from .vector_metadata_repository import VectorMetadataRepository
 
 import faiss  # type: ignore
 import numpy as np  # type: ignore
@@ -30,6 +32,7 @@ import tenacity  # For retries
 
 # Core imports
 from .detailed_logging import LogCategory, detailed_log_function, get_detailed_logger
+from .agent_unified_config import _get_service_sync
 from .unified_exceptions import ConfigurationError, DatabaseError, VectorStoreError
 
 # Initialize loggers for this module
@@ -290,9 +293,13 @@ class VectorStore:
         document_index_path: str | None = None,
         entity_index_path: str | None = None,
         service_config: Optional[Dict[str, Any]] = None,
+        cache_manager: Optional[Any] = None,
+        metrics_exporter: Optional[Any] = None,
     ):
         vector_store_logger.info("=== VectorStore: Instance Creation START ===")
         self.config = service_config or {}
+        self.cache_manager = cache_manager
+        self.metrics = metrics_exporter
         self.storage_path = Path(storage_path_str)
         self.document_index_path = (
             Path(document_index_path)
@@ -351,10 +358,25 @@ class VectorStore:
         self.pending_vectors_entity: List[np.ndarray] = []
         self.pending_vector_ids_entity: List[int] = []
 
+        # Product Quantization configuration
+        self.pq_m = int(self.config.get("pq_m", 8))
+        self.pq_nbits = int(self.config.get("pq_nbits", 8))
+        self.pq_quantizer = faiss.ProductQuantizer(
+            self.dimension, self.pq_m, self.pq_nbits
+        )
+        self.pq_trained = False
+        self._pq_training_data: List[np.ndarray] = []
+
         self.metadata_db_path = (
             self.storage_path / "vector_metadata.sqlite"
         )  # Changed extension
-        self.metadata_mem_cache: Dict[str, VectorMetadata] = {}
+        cache_size = int(self.config.get("metadata_memory_cache_size", 10000))
+        self.metadata_mem_cache: LRUCache[str, VectorMetadata] = LRUCache(
+            maxsize=cache_size
+        )
+        self.metadata_repo: Optional[VectorMetadataRepository] = self.config.get(
+            "metadata_repository"
+        )
 
         self.vectorid_to_faissid_doc: Dict[str, int] = {}
         self.vectorid_to_faissid_entity: Dict[str, int] = {}
@@ -367,9 +389,8 @@ class VectorStore:
         )
 
         self._async_lock = asyncio.Lock()
-        self._sync_lock = (
-            threading.RLock()
-        )  # For purely synchronous, thread-sensitive internal ops
+        self.metadata_lock = asyncio.Lock()
+        self.faiss_lock = asyncio.Lock()
 
         self._optimization_task_internal: Optional[asyncio.Task] = None
         self._stop_background_tasks_event = (
@@ -413,12 +434,22 @@ class VectorStore:
                 f"Using embedding provider '{self.embedding_provider.model_name}' dim: {self.dimension}."
             )
 
+            await self._initialize_metadata_storage_async()
             loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, self._initialize_metadata_storage_sync)
             await loop.run_in_executor(
                 None, self._initialize_faiss_indexes_sync
             )  # Creates empty shells
             await self._load_all_existing_data_async()  # Loads from disk into shells
+
+            # Recovery: if caches failed to load but index files exist, reload
+            if not self.metadata_mem_cache and (
+                self.document_index_path.exists() or self.entity_index_path.exists()
+            ):
+                vector_store_logger.warning(
+                    "Caches empty after initial load; attempting recovery from disk."
+                )
+                await loop.run_in_executor(None, self._load_metadata_mem_cache_sync)
+                await loop.run_in_executor(None, self._load_id_mapping_cache_sync)
 
             self._start_background_optimization_task()
             self._start_periodic_save_task()
@@ -438,53 +469,49 @@ class VectorStore:
             await self.close()  # Attempt graceful cleanup on failed init
             raise VectorStoreError("VectorStore failed to initialize.", cause=e)
 
-    def _initialize_metadata_storage_sync(self):
-        vs_index_logger.info(
-            "Initializing metadata SQLite storage.",
-            parameters={"db_path": str(self.metadata_db_path)},
-        )
-        try:
-                conn.executescript(
-                    """
-                    CREATE TABLE IF NOT EXISTS vector_metadata (
-                        faiss_id INTEGER,
-                        vector_id TEXT PRIMARY KEY,
-                        document_id TEXT NOT NULL,
-                        content_hash TEXT NOT NULL,
-                        content_preview TEXT,
-                        vector_norm REAL,
-                        dimension INTEGER,
-                        created_at_iso TEXT,
-                        last_accessed_iso TEXT,
-                        access_count INTEGER DEFAULT 0,
-                        source_file TEXT,
-                        document_type TEXT,
-                        tags TEXT,
-                        confidence_score REAL DEFAULT 1.0,
-                        embedding_model TEXT,
-                        custom_metadata TEXT
-                    );
-                    CREATE INDEX IF NOT EXISTS idx_meta_doc_id ON vector_metadata(document_id);
-                    CREATE INDEX IF NOT EXISTS idx_meta_hash ON vector_metadata(content_hash);
-                    CREATE TABLE IF NOT EXISTS faiss_id_map (
-                        vector_id TEXT PRIMARY KEY,
-                        index_target TEXT NOT NULL,
-                        faiss_id INTEGER NOT NULL
-                    );
-                    CREATE UNIQUE INDEX IF NOT EXISTS idx_faiss_id_map
-                        ON faiss_id_map(index_target, faiss_id);
-                    """
-                )
 
+    def _migrate_metadata_to_id_map_sync(self, conn: sqlite3.Connection) -> None:
+        """Populate faiss_id_map table from existing metadata if missing."""
+        try:
+            cursor = conn.execute("SELECT COUNT(*) FROM faiss_id_map")
+            existing = cursor.fetchone()[0]
+            if existing > 0:
+                return
+
+            doc_next = 0
+            ent_next = 0
+            cursor = conn.execute("SELECT vector_id, faiss_id FROM vector_metadata")
+            rows = cursor.fetchall()
+            for vector_id, faiss_id in rows:
+                index_target = "entity" if vector_id.startswith("vec_ent") else "document"
+                if index_target == "document":
+                    if faiss_id is None or faiss_id < 0:
+                        faiss_id = doc_next
+                        doc_next += 1
+                        conn.execute(
+                            "UPDATE vector_metadata SET faiss_id = ? WHERE vector_id = ?",
+                            (faiss_id, vector_id),
+                        )
+                    else:
+                        doc_next = max(doc_next, int(faiss_id) + 1)
+                else:
+                    if faiss_id is None or faiss_id < 0:
+                        faiss_id = ent_next
+                        ent_next += 1
+                        conn.execute(
+                            "UPDATE vector_metadata SET faiss_id = ? WHERE vector_id = ?",
+                            (faiss_id, vector_id),
+                        )
+                    else:
+                        ent_next = max(ent_next, int(faiss_id) + 1)
+
+                conn.execute(
+                    "INSERT OR IGNORE INTO faiss_id_map (vector_id, index_target, faiss_id) VALUES (?,?,?)",
+                    (vector_id, index_target, int(faiss_id)),
+                )
+            conn.commit()
         except sqlite3.Error as e:
-            vs_index_logger.critical(
-                "Failed to initialize metadata SQLite storage.", exception=e
-            )
-            raise DatabaseError(
-                "Failed to initialize vector metadata DB.",
-                database_type="sqlite",
-                cause=e,
-            )
+            vs_index_logger.error("Failed migrating metadata to faiss_id_map", exception=e)
 
     def _initialize_faiss_indexes_sync(self):
         vs_index_logger.info(
@@ -614,12 +641,24 @@ class VectorStore:
                 "FAISS index initialization critical failure.", cause=e
             )
 
+    def _train_pq(self, vectors: np.ndarray) -> None:
+        """Train the product quantizer on provided vectors if not already trained."""
+        if self.pq_trained:
+            return
+        try:
+            self.pq_quantizer.train(vectors)
+            self.pq_trained = True
+            vs_index_logger.info(
+                "Product quantizer trained.",
+                parameters={"samples": len(vectors)},
+            )
+        except Exception as e:
+            vs_index_logger.error("PQ training failed", exception=e)
+
     async def _load_all_existing_data_async(self):
         vector_store_logger.trace("Loading existing data from storage (async).")
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, self._load_faiss_indexes_sync)
-        await loop.run_in_executor(None, self._load_metadata_mem_cache_sync)
-        await loop.run_in_executor(None, self._load_id_mapping_cache_sync)
+        await self._load_metadata_mem_cache_async()
+        await self._load_id_mapping_cache_async()
 
         doc_vectors = self.document_index.ntotal if self.document_index else 0
         ent_vectors = self.entity_index.ntotal if self.entity_index else 0
@@ -710,95 +749,7 @@ class VectorStore:
                     # _initialize_faiss_indexes_sync updates instance attributes in-place
                     self._initialize_faiss_indexes_sync()
 
-    def _load_metadata_mem_cache_sync(self):
-        vs_cache_logger.trace("Loading metadata into memory cache (sync).")
-        max_cache_size = self.config.get("metadata_memory_cache_size", 10000)
-        try:
-            with self._sync_lock, sqlite3.connect(
-                self.metadata_db_path, timeout=5
-            ) as conn:
-                conn.row_factory = sqlite3.Row
-                cursor = conn.execute(
-                    f"SELECT * FROM vector_metadata ORDER BY last_accessed_iso DESC LIMIT {max_cache_size}"
-                )
-
-                new_cache: Dict[str, VectorMetadata] = {}
-                for row_data in map(dict, cursor.fetchall()):
-                    try:
-                        new_cache[row_data["vector_id"]] = VectorMetadata.from_row_dict(
-                            row_data
-                        )
-                    except (KeyError, TypeError, json.JSONDecodeError, ValueError) as e:
-                        vs_cache_logger.warning(
-                            "Skipping malformed metadata record during cache load.",
-                            parameters={
-                                "vector_id": row_data.get("vector_id"),
-                                "error": str(e),
-                            },
-                        )
-                self.metadata_mem_cache = new_cache  # Replace entire cache
-            vs_cache_logger.info(
-                "Metadata memory cache loaded.",
-                parameters={"cached_items": len(self.metadata_mem_cache)},
-            )
-        except sqlite3.Error as e:
-            vs_cache_logger.error("SQLite error loading metadata cache.", exception=e)
-        except Exception as e:
-            vs_cache_logger.error(
-                "Unexpected error loading metadata cache.", exception=e, exc_info=True
-            )
-
-    def _load_id_mapping_cache_sync(self):
-        vs_cache_logger.trace("Loading FAISS ID mappings into memory cache.")
-        try:
-            with self._sync_lock, sqlite3.connect(
-                self.metadata_db_path, timeout=5
-            ) as conn:
-                cursor = conn.execute(
-                    "SELECT vector_id, index_target, faiss_id FROM faiss_id_map"
-                )
-                self.vectorid_to_faissid_doc.clear()
-                self.vectorid_to_faissid_entity.clear()
-                self.faissid_to_vectorid_doc.clear()
-                self.faissid_to_vectorid_entity.clear()
-                for vector_id, index_target, faiss_id in cursor.fetchall():
-                    if index_target == "document":
-                        self.vectorid_to_faissid_doc[vector_id] = faiss_id
-                        self.faissid_to_vectorid_doc[faiss_id] = vector_id
-                    else:
-                        self.vectorid_to_faissid_entity[vector_id] = faiss_id
-                        self.faissid_to_vectorid_entity[faiss_id] = vector_id
-            vs_cache_logger.info(
-                "FAISS ID mapping cache loaded.",
-                parameters={
-                    "doc_mappings": len(self.vectorid_to_faissid_doc),
-                    "entity_mappings": len(self.vectorid_to_faissid_entity),
-                },
-            )
-        except sqlite3.Error as e:
-            vs_cache_logger.error(
-                "SQLite error loading FAISS ID mapping cache.", exception=e
-            )
-        except Exception as e:
-            vs_cache_logger.error(
-                "Unexpected error loading FAISS ID mapping cache.",
-                exception=e,
-                exc_info=True,
-            )
-
-    def _start_background_optimization_task(self):
-        if (
-            self._optimization_task_internal
-            and not self._optimization_task_internal.done()
-        ):
-            vs_index_logger.warning("Optimization task already running.")
-            return
-        vs_index_logger.info("Starting background optimization task manager.")
-        self._stop_background_tasks_event.clear()
-        self._optimization_task_internal = asyncio.create_task(
-            self._optimization_worker_async()
-        )
-
+        
     async def _optimization_worker_async(self):
         vs_index_logger.info("Async optimization worker task started.")
         while not self._stop_background_tasks_event.is_set():
@@ -819,7 +770,7 @@ class VectorStore:
                             compact_storage=task_data.get("compact_storage", True),
                         )
                     elif task_type == "SAVE_INDEXES_NOW":  # Explicit save request
-                        await self._save_faiss_indexes_async_wrapper()
+                        await self._save_faiss_indexes_async()
                     else:
                         vs_index_logger.warning(
                             f"Unknown optimization task type received: {task_type}"
@@ -836,6 +787,17 @@ class VectorStore:
                 )
                 await asyncio.sleep(30)  # Wait before retrying queue get after error
         vs_index_logger.info("Async optimization worker task stopped.")
+
+    def _start_background_optimization_task(self) -> None:
+        """Launch optimization worker if not already running."""
+        if self._optimization_task_internal and not self._optimization_task_internal.done():
+            vs_index_logger.warning("Background optimization task already running.")
+            return
+        vs_index_logger.info("Starting background optimization task manager.")
+        self._stop_background_tasks_event.clear()
+        self._optimization_task_internal = asyncio.create_task(
+            self._optimization_worker_async()
+        )
 
     def _start_periodic_save_task(self):
         if (
@@ -879,9 +841,9 @@ class VectorStore:
                     self._periodic_save_interval_sec // 2
                 )  # Shorter wait after error
 
-    async def _save_faiss_indexes_async_wrapper(self):
-        """Async wrapper for the synchronous FAISS index saving method with lock."""
-        async with self._async_lock:
+    async def _save_faiss_indexes_async(self):
+        """Save FAISS indexes using an asyncio lock for thread safety."""
+        async with self.faiss_lock:
             loop = asyncio.get_event_loop()
             vs_index_logger.debug("Acquired lock for saving FAISS indexes.")
             try:
@@ -889,134 +851,123 @@ class VectorStore:
             finally:
                 vs_index_logger.debug("Released lock after saving FAISS indexes.")
 
-    def _save_faiss_indexes_sync(self):
-        with self._sync_lock:  # Thread lock for FAISS C++ object access
-            doc_idx_path = self.document_index_path
-            tmp_doc_idx_path = doc_idx_path.with_suffix(".tmp")
-            ent_idx_path = self.entity_index_path
-            tmp_ent_idx_path = ent_idx_path.with_suffix(".tmp")
+    async def _initialize_metadata_storage_async(self) -> None:
+        """Ensure metadata storage is ready."""
+        if self.metadata_repo:
+            await self.metadata_repo.initialize()
+            return
 
-            self._update_disk_usage_stats()  # Update before saving
-            if self.document_index and self.document_index.ntotal > 0:
+        self.metadata_db_path.parent.mkdir(parents=True, exist_ok=True)
 
-                try:
-                    faiss.write_index(self.document_index, str(tmp_doc_idx_path))
-                    os.replace(tmp_doc_idx_path, doc_idx_path)
-                    vs_index_logger.info(
-                        "Document FAISS index saved.",
-                        parameters={"path": str(doc_idx_path)},
-                    )
-                except Exception as e:
-                    vs_index_logger.error(
-                        "Failed to save document FAISS index.",
-                        exception=e,
-                        exc_info=True,
-                    )
-                    if tmp_doc_idx_path.exists():
-                        os.remove(tmp_doc_idx_path)
-
-            if self.entity_index and self.entity_index.ntotal > 0:
-
-                try:
-                    faiss.write_index(self.entity_index, str(tmp_ent_idx_path))
-                    os.replace(tmp_ent_idx_path, ent_idx_path)
-                    vs_index_logger.info(
-                        "Entity FAISS index saved.",
-                        parameters={"path": str(ent_idx_path)},
-                    )
-                except Exception as e:
-                    vs_index_logger.error(
-                        "Failed to save entity FAISS index.", exception=e, exc_info=True
-                    )
-                    if tmp_ent_idx_path.exists():
-                        os.remove(tmp_ent_idx_path)
-
-    @detailed_log_function(LogCategory.VECTOR_STORE_DB)
-    async def _store_metadata_sync_via_executor(self, metadata: VectorMetadata):
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, self._store_metadata_sync, metadata)
-
-    def _store_metadata_sync(self, metadata: VectorMetadata):
-        db_path = self.metadata_db_path
-        try:
-            with self._sync_lock, sqlite3.connect(db_path, timeout=5) as conn:
-                conn.execute(
+        def _init_db():
+            with sqlite3.connect(self.metadata_db_path) as conn:
+                conn.executescript(
                     """
-                    INSERT OR REPLACE INTO vector_metadata (
-                        faiss_id, vector_id, document_id, content_hash,
-                        content_preview, vector_norm, dimension,
-                        created_at_iso, last_accessed_iso, access_count,
-                        source_file, document_type, tags,
-                        confidence_score, embedding_model, custom_metadata
-                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                    """,
-                    (
-                        metadata.faiss_id,
-                        metadata.vector_id,
-                        metadata.document_id,
-                        metadata.content_hash,
-                        metadata.content_preview,
-                        metadata.vector_norm,
-                        metadata.dimension,
-                        metadata.created_at_iso,
-                        metadata.last_accessed_iso,
-                        metadata.access_count,
-                        getattr(metadata, "source_file", None),
-                        getattr(metadata, "document_type", None),
-                        json.dumps(getattr(metadata, "tags", [])),
-                        getattr(metadata, "confidence_score", 1.0),
-                        getattr(metadata, "embedding_model", ""),
-                        json.dumps(metadata.custom_metadata or {}),
-                    ),
+                    CREATE TABLE IF NOT EXISTS vector_metadata (
+                        faiss_id INTEGER,
+                        vector_id TEXT PRIMARY KEY,
+                        document_id TEXT NOT NULL,
+                        content_hash TEXT NOT NULL,
+                        content_preview TEXT,
+                        vector_norm REAL,
+                        dimension INTEGER,
+                        created_at_iso TEXT,
+                        last_accessed_iso TEXT,
+                        access_count INTEGER DEFAULT 0,
+                        source_file TEXT,
+                        document_type TEXT,
+                        tags TEXT,
+                        confidence_score REAL DEFAULT 1.0,
+                        embedding_model TEXT,
+                        custom_metadata JSON
+                    );
+                    CREATE TABLE IF NOT EXISTS faiss_id_map (
+                        vector_id TEXT PRIMARY KEY,
+                        index_target TEXT NOT NULL,
+                        faiss_id INTEGER NOT NULL
+                    );
+                    """
                 )
                 conn.commit()
-            self.metadata_mem_cache[metadata.vector_id] = metadata
+
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, _init_db)
+
+    # --- Cache Loading Helpers ---
+    def _load_metadata_mem_cache_sync(self) -> None:
+        """Load metadata records from local SQLite into memory cache."""
+        if not self.metadata_db_path.exists():
+            return
+        try:
+            with sqlite3.connect(self.metadata_db_path, timeout=5) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.execute(
+                    "SELECT * FROM vector_metadata ORDER BY last_accessed_iso DESC"
+                )
+                rows = cursor.fetchall()
+                for row in rows:
+                    meta = VectorMetadata.from_row_dict(dict(row))
+                    self.metadata_mem_cache[meta.vector_id] = meta
+                    idx_target = (
+                        "entity" if meta.vector_id.startswith("vec_ent") or meta.vector_id.startswith("kg_entity") else "document"
+                    )
+                    self._store_id_mapping_sync(meta.vector_id, meta.faiss_id, idx_target)
         except sqlite3.Error as e:
-            vs_index_logger.error(
-                f"SQLite error storing metadata for vector_id {metadata.vector_id}.",
-                exception=e,
-                exc_info=True,
+            vs_cache_logger.error("SQLite error loading metadata cache.", exception=e)
+
+    async def _load_metadata_mem_cache_async(self) -> None:
+        """Load metadata cache from repository if configured."""
+        if not self.metadata_repo:
+            return
+        try:
+            rows = await self.metadata_repo.load_metadata_cache(
+                self.config.get("metadata_memory_cache_size", 10000)
             )
-            raise DatabaseError(
-                f"Failed to store metadata for {metadata.vector_id}",
-                database_type="sqlite",
-                cause=e,
+            for row in rows:
+                meta = VectorMetadata.from_row_dict(row)
+                self.metadata_mem_cache[meta.vector_id] = meta
+                self._store_id_mapping_sync(meta.vector_id, meta.faiss_id, row.get("index_target", "document"))
+            vs_cache_logger.info(
+                "Metadata memory cache loaded.", parameters={"cached_items": len(rows)}
             )
         except Exception as e:
-            vs_index_logger.error(
-                f"Unexpected error storing metadata for {metadata.vector_id}.",
-                exception=e,
-                exc_info=True,
-            )
-            raise VectorStoreError(
-                f"Unexpected error storing metadata for {metadata.vector_id}", cause=e
-            )
+            vs_cache_logger.error("Failed loading metadata cache from repository", exception=e)
 
-    async def _find_by_content_hash_sync_via_executor(
-        self, content_hash: str
-    ) -> Optional[str]:
-        """Checks if a content hash already exists, returns its vector_id if so."""
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            None, self._find_by_content_hash_sync, content_hash
-        )
-
-    def _find_by_content_hash_sync(self, content_hash: str) -> Optional[str]:
+    def _load_id_mapping_cache_sync(self) -> None:
+        """Load FAISS ID mappings from SQLite."""
+        if not self.metadata_db_path.exists():
+            return
         try:
-            with self._sync_lock, sqlite3.connect(
-                self.metadata_db_path, timeout=5
-            ) as conn:
+            with sqlite3.connect(self.metadata_db_path, timeout=5) as conn:
+                conn.row_factory = sqlite3.Row
                 cursor = conn.execute(
-                    "SELECT vector_id FROM vector_metadata WHERE content_hash = ? LIMIT 1",
-                    (content_hash,),
+                    "SELECT vector_id, index_target, faiss_id FROM faiss_id_map"
                 )
-                row = cursor.fetchone()
-                return row[0] if row else None
+                for row in cursor.fetchall():
+                    self._store_id_mapping_sync(row["vector_id"], int(row["faiss_id"]), row["index_target"])
         except sqlite3.Error as e:
-            vs_cache_logger.error(
-                f"SQLite error finding by content hash {content_hash}.", exception=e
+            vs_cache_logger.error("SQLite error loading id mapping cache.", exception=e)
+
+    async def _load_id_mapping_cache_async(self) -> None:
+        """Load FAISS ID mappings from repository if available."""
+        if not self.metadata_repo:
+            return
+        try:
+            rows = await self.metadata_repo.load_id_mapping_cache()
+            for row in rows:
+                self._store_id_mapping_sync(row["vector_id"], int(row["faiss_id"]), row["index_target"])
+            vs_cache_logger.info(
+                "ID mapping cache loaded.", parameters={"mapped": len(rows)}
             )
-            return None  # Treat DB error as not found for this check
+        except Exception as e:
+            vs_cache_logger.error("Failed loading id mapping cache from repository", exception=e)
+
+    def _save_faiss_indexes_sync(self) -> None:
+        """Persist FAISS indexes to disk if paths are configured."""
+        if self.document_index and self.document_index_path:
+            faiss.write_index(self.document_index, str(self.document_index_path))
+        if self.entity_index and self.entity_index_path:
+            faiss.write_index(self.entity_index, str(self.entity_index_path))
 
     # --- FAISS ID Mapping Helpers ---
     def _get_next_faiss_id_sync(self, index_target: str) -> int:
@@ -1040,19 +991,11 @@ class VectorStore:
             if index_target.lower() == "document"
             else self.faissid_to_vectorid_entity
         )
-        with self._sync_lock, sqlite3.connect(self.metadata_db_path, timeout=5) as conn:
-            conn.execute(
-                "INSERT OR REPLACE INTO faiss_id_map (vector_id, index_target, faiss_id) VALUES (?,?,?)",
-                (vector_id, index_target, faiss_id),
-            )
-            conn.commit()
         mapping_v2f[vector_id] = faiss_id
         mapping_f2v[faiss_id] = vector_id
 
     def _delete_id_mapping_sync(self, vector_id: str) -> None:
-        with self._sync_lock, sqlite3.connect(self.metadata_db_path, timeout=5) as conn:
-            conn.execute("DELETE FROM faiss_id_map WHERE vector_id = ?", (vector_id,))
-            conn.commit()
+
         if vector_id in self.vectorid_to_faissid_doc:
             fid = self.vectorid_to_faissid_doc.pop(vector_id)
             self.faissid_to_vectorid_doc.pop(fid, None)
@@ -1068,31 +1011,7 @@ class VectorStore:
             if index_target.lower() == "document"
             else self.vectorid_to_faissid_entity
         )
-        if vector_id in mapping:
-            return mapping[vector_id]
-        try:
-            with self._sync_lock, sqlite3.connect(
-                self.metadata_db_path, timeout=5
-            ) as conn:
-                cursor = conn.execute(
-                    "SELECT faiss_id FROM faiss_id_map WHERE vector_id = ? AND index_target = ?",
-                    (vector_id, index_target),
-                )
-                row = cursor.fetchone()
-                if row:
-                    mapping[vector_id] = int(row[0])
-                    reverse_map = (
-                        self.faissid_to_vectorid_doc
-                        if index_target.lower() == "document"
-                        else self.faissid_to_vectorid_entity
-                    )
-                    reverse_map[int(row[0])] = vector_id
-                    return int(row[0])
-        except sqlite3.Error as e:
-            vs_cache_logger.error(
-                "SQLite error fetching faiss_id for vector_id", exception=e
-            )
-        return None
+        return mapping.get(vector_id)
 
     def _get_vector_id_by_faiss_id_sync(
         self, faiss_id: int, index_target: str
@@ -1104,58 +1023,54 @@ class VectorStore:
         )
         if faiss_id in reverse_map:
             return reverse_map[faiss_id]
-        try:
-            with self._sync_lock, sqlite3.connect(
-                self.metadata_db_path, timeout=5
-            ) as conn:
-                cursor = conn.execute(
-                    "SELECT vector_id FROM faiss_id_map WHERE index_target = ? AND faiss_id = ?",
-                    (index_target, faiss_id),
-                )
-                row = cursor.fetchone()
-                if row:
-                    vector_id = str(row[0])
-                    reverse_map[faiss_id] = vector_id
-                    mapping = (
-                        self.vectorid_to_faissid_doc
-                        if index_target.lower() == "document"
-                        else self.vectorid_to_faissid_entity
-                    )
-                    mapping[vector_id] = faiss_id
-                    return vector_id
-        except sqlite3.Error as e:
-            vs_cache_logger.error(
-                "SQLite error fetching vector_id by faiss_id", exception=e
-            )
         return None
 
-    async def _store_id_mapping_async(
-        self, vector_id: str, faiss_id: int, index_target: str
-    ) -> None:
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(
-            None, self._store_id_mapping_sync, vector_id, faiss_id, index_target
-        )
-
     async def _delete_id_mapping_async(self, vector_id: str) -> None:
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, self._delete_id_mapping_sync, vector_id)
+        self._delete_id_mapping_sync(vector_id)
 
     async def _get_vector_id_by_faiss_id_async(
         self, faiss_id: int, index_target: str
     ) -> Optional[str]:
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            None, self._get_vector_id_by_faiss_id_sync, faiss_id, index_target
-        )
+        vector_id = await self.metadata_repo.get_vector_id_by_faiss_id(faiss_id, index_target)
+        return vector_id
 
     async def _get_faiss_id_for_vector_id_async(
         self, vector_id: str, index_target: str
     ) -> Optional[int]:
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            None, self._get_faiss_id_for_vector_id_sync, vector_id, index_target
+        faiss_id = await self.metadata_repo.get_faiss_id_for_vector_id(vector_id, index_target)
+        return faiss_id
+
+    async def _get_metadata_async_from_db_or_cache(
+        self, vector_id: str
+    ) -> Optional[VectorMetadata]:
+        """Retrieve metadata for a vector_id from cache or SQLite."""
+        if vector_id in self.metadata_mem_cache:
+            self.stats.cache_hits_session += 1
+            meta = self.metadata_mem_cache[vector_id]
+            meta.last_accessed_iso = datetime.now(timezone.utc).isoformat()
+            meta.access_count += 1
+            return meta
+
+        self.stats.cache_misses_session += 1
+        vs_cache_logger.debug(
+            f"Metadata cache miss for vector_id '{vector_id}'. Fetching from DB."
         )
+        row_dict = None
+        if self.metadata_repo:
+            try:
+                row_dict = await self.metadata_repo.get_metadata(vector_id)
+            except Exception as e:
+                vs_cache_logger.error("Failed to fetch metadata from repository", exception=e)
+        if row_dict is None:
+            loop = asyncio.get_event_loop()
+            row_dict = await loop.run_in_executor(
+                None, self._get_metadata_from_db_sync, vector_id
+            )
+        if row_dict:
+            metadata = VectorMetadata.from_row_dict(row_dict)
+            self.metadata_mem_cache[vector_id] = metadata
+            return metadata
+        return None
 
     @detailed_log_function(LogCategory.VECTOR_STORE)
     async def add_vector_async(
@@ -1191,9 +1106,7 @@ class VectorStore:
 
             # Optional: Deduplication based on content hash
             if self.config.get("deduplicate_on_add", False):
-                existing_vector_id = await self._find_by_content_hash_sync_via_executor(
-                    content_hash
-                )
+                existing_vector_id = await self._find_by_content_hash_async(content_hash)
                 if existing_vector_id:
                     vector_store_logger.info(
                         f"Duplicate content hash found. Returning existing vector_id '{existing_vector_id}'.",
@@ -1216,6 +1129,17 @@ class VectorStore:
                 embedding_np = np.array(embeddings_list[0], dtype="float32").reshape(
                     1, -1
                 )  # FAISS expects (1, D)
+                # Train PQ with initial vectors
+                if not self.pq_trained:
+                    self._pq_training_data.append(embedding_np[0])
+                    if len(self._pq_training_data) >= max(16, self.pq_m * 20):
+                        train_np = np.vstack(self._pq_training_data).astype("float32")
+                        self._train_pq(train_np)
+                        self._pq_training_data.clear()
+                pq_code_hex = ""
+                if self.pq_trained:
+                    code = self.pq_quantizer.compute_codes(embedding_np)
+                    pq_code_hex = code.tobytes().hex()
             except Exception as embed_e:  # Catch errors from embedding provider
                 raise VectorStoreError(
                     "Embedding generation failed.",
@@ -1294,6 +1218,8 @@ class VectorStore:
                 metadata_to_store.dimension = self.dimension
                 metadata_to_store.embedding_model = self.embedding_provider.model_name
                 metadata_to_store.faiss_id = faiss_id
+                if pq_code_hex:
+                    metadata_to_store.custom_metadata["pq_code"] = pq_code_hex
             else:
                 metadata_to_store = VectorMetadata(
                     faiss_id=faiss_id,
@@ -1304,8 +1230,9 @@ class VectorStore:
                     vector_norm=vector_norm_val,
                     dimension=self.dimension,
                 )
+                if pq_code_hex:
+                    metadata_to_store.custom_metadata["pq_code"] = pq_code_hex
 
-            await self._store_metadata_sync_via_executor(metadata_to_store)
             await self._store_id_mapping_async(vector_id, faiss_id, index_target)
             self.stats.total_vectors = (
                 self.document_index.ntotal if self.document_index else 0
@@ -1338,6 +1265,17 @@ class VectorStore:
                 duration_add,
                 {"content_len": len(content_to_embed)},
             )
+            if self.metrics:
+                self.metrics.observe_vector_add(duration_add)
+            if self.cache_manager:
+                try:
+                    await self.cache_manager.set(
+                        f"vec_meta:{vector_id}",
+                        metadata_to_store.to_dict(),
+                        ttl_seconds=self.config.get("metadata_cache_ttl", 3600),
+                    )
+                except Exception:
+                    pass
             return vector_id
 
     def _generate_unique_vector_id(self, index_target: str, doc_ref: str) -> str:
@@ -1457,57 +1395,16 @@ class VectorStore:
             # 3. Retrieve metadata and construct SearchResult objects
             results: List[SearchResult] = []
             cache_hits = 0
-            # FAISS returns internal integer IDs. We need a way to map these back to our application vector_ids.
-            # This requires IndexIDMap if we use string IDs with FAISS, or a separate mapping layer.
-            # For simplicity, if we don't use IndexIDMap, we assume our vector_id for metadata somehow relates to
-            # the order of addition or we search metadata by other means (e.g. if we stored vectors with our custom IDs using add_with_ids)
-            # Let's assume we need to fetch metadata for each FAISS index `idx`.
-            # This is where the mapping from FAISS sequential ID to our application's VectorMetadata.vector_id is crucial.
-            # If we add vectors sequentially without `add_with_ids`, `indices_batch[0]` contains the internal FAISS IDs (0 to ntotal-1).
-            # We need a reverse map: faiss_internal_id -> application_vector_id.
-            # This is complex to maintain with additions/deletions if not using FAISS's IDMap.
-            # For now, conceptual: assume we can get our vector_id from FAISS internal id `idx`.
-            # This placeholder needs a robust solution in a production system.
-            # One way: When adding, store mapping: faiss_idx -> our_vector_id.
-            # OR query metadata DB by some other property if possible (less efficient)
-
-            # Placeholder: For now, construct a dummy vector_id for demonstration if direct mapping is not set up.
-            # In a real system with IndexFlatL2/HNSWFlat, indices_batch[0] ARE the 0-based indices.
-            # We need a separate list or DB table `faiss_id_to_app_vector_id_map`.
-
-            # For this example, let's assume our `VectorMetadata.vector_id` was constructed as `f"{index_target}_FAISSINTERNALID_{content_hash_short}"`
-            # OR, better, when we add to FAISS, we use `add_with_ids` if we have our own int64 IDs.
-            # If we don't use `add_with_ids`, then `indices_batch[0]` are the sequential 0-based IDs.
-            # We need to retrieve metadata using these. A common pattern is to store metadata with these sequential FAISS IDs if not using IDMap.
-
-            # Simpler: iterate through FAISS indices and fetch associated metadata.
-            # Let's assume we have a method to get app vector_id from FAISS idx (e.g., a list of all app vector_ids in FAISS order).
-            # This is a major simplification and needs careful design.
-            # A better design: VectorMetadata table has a faiss_internal_id column.
 
             faiss_indices = indices_batch[0]
             faiss_distances = distances_batch[0]
 
-            # Fetch all potentially relevant metadata in one go (if possible and efficient)
-            # For now, fetch one by one.
             for rank_idx, internal_faiss_id in enumerate(faiss_indices):
                 if internal_faiss_id == -1:
-                    continue  # No more results or invalid index
+                    continue  # padding value when fewer than k results
 
-                # This is the CRITICAL part: mapping internal_faiss_id to your application's VectorMetadata.vector_id
-                # Option 1: If you have a direct list map (fragile with deletes unless index is rebuilt):
-                #    app_vector_id = self.faiss_id_to_app_id_list[internal_faiss_id]
-                # Option 2: Query metadata DB for a vector whose `faiss_internal_id` (a new column you'd add) matches.
-                # Option 3 (Simplistic, assumes vector_id contains faiss_id - NOT ROBUST):
-                #    vector_id_to_find = f"{index_target}_SOMEPREFIX_{internal_faiss_id}"
-
-                vector_id_mapped = await self._get_vector_id_by_faiss_id_async(
-                    internal_faiss_id, index_target
-                )
-                metadata_obj = (
-                    await self._get_metadata_async_from_db_or_cache(vector_id_mapped)
-                    if vector_id_mapped
-                    else None
+                metadata_obj = await self._get_metadata_by_faiss_internal_id_async(
+                    int(internal_faiss_id), index_target
                 )
 
                 if metadata_obj:
@@ -1600,40 +1497,23 @@ class VectorStore:
                     "faiss_time_sec": search_duration_faiss,
                 },
             )
+            if self.metrics:
+                self.metrics.observe_vector_search(total_search_pipeline_duration)
             return results
 
     async def _get_metadata_by_faiss_internal_id_async(
         self, faiss_id: int, index_target: str
     ) -> Optional[VectorMetadata]:
-
-        """Retrieves metadata for a given vector_id, checking cache first."""
-        if vector_id in self.metadata_mem_cache:
-            self.stats.cache_hits_session += 1
-            self.metadata_mem_cache[vector_id].last_accessed_iso = datetime.now(
-                timezone.utc
-            ).isoformat()
-            self.metadata_mem_cache[vector_id].access_count += 1
-            return self.metadata_mem_cache[vector_id]
-
-        self.stats.cache_misses_session += 1
-        vs_cache_logger.debug(
-            f"Metadata cache miss for vector_id '{vector_id}'. Fetching from DB."
-        )
-        loop = asyncio.get_event_loop()
-        row_dict = await loop.run_in_executor(
-            None, self._get_metadata_from_db_sync, vector_id
-        )
-
-        if row_dict:
-            metadata = VectorMetadata.from_row_dict(row_dict)
-            self.metadata_mem_cache[vector_id] = metadata  # Add to cache
-            return metadata
-        return None
-
+        """Retrieve metadata using faiss_id mapping via cache and repository."""
+        vector_id = await self._get_vector_id_by_faiss_id_async(faiss_id, index_target)
+        if not vector_id:
+            return None
+        metadata = await self._get_metadata_async_from_db_or_cache(vector_id)
+        return metadata
     def _get_metadata_from_db_sync(self, vector_id: str) -> Optional[Dict[str, Any]]:
         """Synchronously fetches a single metadata record from SQLite."""
         try:
-            with self._sync_lock, sqlite3.connect(
+            with sqlite3.connect(
                 self.metadata_db_path, timeout=5
             ) as conn:
                 conn.row_factory = sqlite3.Row
@@ -1695,32 +1575,6 @@ class VectorStore:
         # Avoid DB write if accessed very recently (e.g., within last minute) unless count changes significantly
         # For simplicity, always update for now.
 
-        async def update_db():
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(
-                None, self._update_access_stats_sync, vector_id, new_last_accessed_iso
-            )
-
-        asyncio.create_task(update_db())  # Fire-and-forget update
-
-    def _update_access_stats_sync(self, vector_id: str, new_last_accessed_iso: str):
-        try:
-            with self._sync_lock, sqlite3.connect(
-                self.metadata_db_path, timeout=5
-            ) as conn:
-                conn.execute(
-                    """
-                    UPDATE vector_metadata 
-                    SET last_accessed_iso = ?, access_count = access_count + 1
-                    WHERE vector_id = ?
-                """,
-                    (new_last_accessed_iso, vector_id),
-                )
-                conn.commit()
-        except sqlite3.Error as e:
-            vs_index_logger.warning(
-                f"Failed to update access stats for vector '{vector_id}'.", exception=e
-            )
 
     @detailed_log_function(LogCategory.VECTOR_STORE_DB)
     async def update_vector_metadata_async(
@@ -1733,7 +1587,7 @@ class VectorStore:
             )
             return
 
-        async with self._async_lock:  # Ensure atomicity with cache and DB
+        async with self.metadata_lock:
             vs_cache_logger.debug(
                 f"Updating metadata for vector_id '{vector_id}'.",
                 parameters=metadata_updates,
@@ -1755,110 +1609,15 @@ class VectorStore:
                 cached_meta.access_count += 1
 
             # Persist to DB
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(
-                None, self._update_metadata_in_db_sync, vector_id, metadata_updates
-            )
+            await self.metadata_repo.update_metadata_fields(vector_id, metadata_updates)
             vector_store_logger.info(f"Metadata updated for vector_id '{vector_id}'.")
 
-    def _update_metadata_in_db_sync(self, vector_id: str, updates: Dict[str, Any]):
-        """Synchronously updates metadata fields in SQLite."""
-        if not updates:
-            return
 
-        set_clauses = []
-        params = []
-        direct_fields = [
-            f.name for f in fields(VectorMetadata)
-        ]  # Get field names from dataclass
-
-        custom_meta_updates = updates.pop(
-            "custom_metadata", {}
-        )  # Handle custom_metadata separately if passed in root
-
-        for key, value in updates.items():
-            if key in direct_fields:  # Is it a direct field of VectorMetadata?
-                # Handle specific types for DB storage
-                if isinstance(value, datetime):
-                    value_to_store = value.isoformat()
-                elif isinstance(value, (list, dict)) and key in [
-                    "tags",
-                    "custom_metadata",
-                ]:
-                    value_to_store = json.dumps(value)
-                else:
-                    value_to_store = value
-                set_clauses.append(f"{key} = ?")
-                params.append(value_to_store)
-
-        # If custom_metadata was part of updates, handle it by merging with existing
-        if custom_meta_updates:
-            # This requires fetching existing custom_metadata, merging, then updating.
-            # For simplicity now, we'll assume custom_metadata is updated as a whole JSON blob if provided.
-            # A more robust merge would fetch, update Python dict, then json.dumps.
-            # Simplified: if 'custom_metadata' is in `updates`, it replaces the whole field.
-            pass  # Covered if 'custom_metadata' is in `updates` and `direct_fields`
-
-        if not set_clauses:
-            if custom_meta_updates:  # Only custom_metadata to update
-                # This needs a specific JSON merge function in SQLite or fetch-modify-write.
-                # Example: json_patch or json_set for custom_metadata if SQLite version supports it.
-                # For now, we'd need to pass the full merged custom_metadata dict.
-                vs_index_logger.warning(
-                    f"Updating only custom_metadata for {vector_id} requires specific JSON handling not fully implemented here."
-                )
-            else:
-                return
-
-        params.append(datetime.now(timezone.utc).isoformat())  # For last_accessed_iso
-        params.append(vector_id)
-
-        query = f"UPDATE vector_metadata SET {', '.join(set_clauses)}, last_accessed_iso = ?, access_count = access_count + 1 WHERE vector_id = ?"
-        try:
-            with self._sync_lock, sqlite3.connect(
-                self.metadata_db_path, timeout=5
-            ) as conn:
-                conn.execute(query, tuple(params))
-                conn.commit()
-        except sqlite3.Error as e:
-            vs_index_logger.error(
-                f"SQLite error updating metadata for '{vector_id}'.", exception=e
-            )
-            raise DatabaseError(
-                f"Failed to update metadata for {vector_id}",
-                database_type="sqlite",
-                cause=e,
-            )
 
     @detailed_log_function(LogCategory.VECTOR_STORE)
     async def delete_vector_async(self, vector_id: str, index_target: str = "document"):
         async with self._async_lock:
-            loop = asyncio.get_event_loop()
-
-
-            # Delete metadata and mapping
-            await loop.run_in_executor(None, self._delete_metadata_sync, vector_id)
             await self._delete_id_mapping_async(vector_id)
-            self.metadata_mem_cache.pop(vector_id, None)
-
-    def _delete_metadata_sync(self, vector_id: str):
-        try:
-            with self._sync_lock, sqlite3.connect(
-                self.metadata_db_path, timeout=5
-            ) as conn:
-                conn.execute(
-                    "DELETE FROM vector_metadata WHERE vector_id = ?", (vector_id,)
-                )
-                conn.commit()
-        except sqlite3.Error as e:
-            vs_index_logger.error(
-                f"SQLite error deleting metadata for '{vector_id}'.", exception=e
-            )
-            raise DatabaseError(
-                f"Failed to delete metadata for {vector_id}",
-                database_type="sqlite",
-                cause=e,
-            )
 
     def _update_disk_usage_stats(self):
         """Updates statistics about disk usage for indexes and metadata DB."""
@@ -1944,7 +1703,7 @@ class VectorStore:
         vector_store_logger.info(
             "Performing final save of FAISS indexes before shutdown."
         )
-        await self._save_faiss_indexes_async_wrapper()
+        await self._save_faiss_indexes_async()
 
         vector_store_logger.info("VectorStore shutdown complete.")
 
@@ -2217,5 +1976,7 @@ def create_vector_store(
         document_index_path=vs_cfg.get("DOCUMENT_INDEX_PATH"),
         entity_index_path=vs_cfg.get("ENTITY_INDEX_PATH"),
         service_config=vs_cfg,
+        cache_manager=getattr(_get_service_sync(service_container, "persistence_manager"), "cache_manager", None),
+        metrics_exporter=_get_service_sync(service_container, "metrics_exporter"),
     )
     return vs_instance

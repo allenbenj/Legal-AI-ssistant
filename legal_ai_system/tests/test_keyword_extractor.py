@@ -13,9 +13,11 @@ def test_extract_keywords_ranks_terms():
     keywords = extract_keywords(text, top_k=3)
     assert len(keywords) == 3
     assert keywords[0][0] == "contract"
+
     assert any(k == "agreement" for k, _ in keywords)
 
 
 @pytest.mark.unit
 def test_extract_keywords_empty_text_returns_empty_list():
     assert extract_keywords("", top_k=5) == []
+

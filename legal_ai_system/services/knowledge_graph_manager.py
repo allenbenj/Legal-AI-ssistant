@@ -9,12 +9,21 @@ specifically designed for legal document processing and analysis.
 
 import json
 from typing import Dict, List, Any, Optional
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from datetime import datetime
+import asyncio
 from pathlib import Path
 from enum import Enum
-import threading
+import asyncio
 import hashlib
+
+from ..core.enhanced_persistence import (
+    ConnectionPool,
+    EnhancedPersistenceManager,
+    EntityRecord,
+    RelationshipRecord,
+    EntityStatus,
+)
 
 # Import detailed logging
 from ..core.detailed_logging import get_detailed_logger, LogCategory, detailed_log_function
@@ -121,16 +130,20 @@ class KnowledgeGraphManager:
     """
     
     @detailed_log_function(LogCategory.KNOWLEDGE_GRAPH)
-    def __init__(self, storage_dir: str = "./storage/knowledge_graph", service_config: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self,
+        storage_dir: str = "./storage/knowledge_graph",
+        service_config: Optional[Dict[str, Any]] = None,
+        connection_pool: ConnectionPool | None = None,
+    ) -> None:
         """Initialize knowledge graph manager."""
         kg_logger.info("=== INITIALIZING KNOWLEDGE GRAPH MANAGER ===")
-        
+
         self.storage_dir = Path(storage_dir)
         self.storage_dir.mkdir(parents=True, exist_ok=True)
-        
+
         self.config = service_config or {}
-        
-        # Storage components
+        self.connection_pool = connection_pool
         self.entities: Dict[str, Entity] = {}
         self.relationships: Dict[str, Relationship] = {}
         self.entity_index: Dict[EntityType, List[str]] = {et: [] for et in EntityType}
@@ -143,15 +156,15 @@ class KnowledgeGraphManager:
         # Performance tracking
         self.query_cache: Dict[str, QueryResult] = {}
         self.cache_ttl = self.config.get('cache_ttl_seconds', 3600)
+        self.cache_manager = cache_manager
+        self.metrics = metrics_exporter
         self.query_history: List[Dict[str, Any]] = []
         
-        # Thread safety
-        self._lock = threading.RLock()
-        
-        # Initialize storage
-        self._init_storage()
         if self.neo4j_enabled:
             self._init_neo4j()
+
+        # Initialize persistence layer using the shared connection pool if provided
+        self._init_persistence()
         
         kg_logger.info("Knowledge graph manager initialization complete", parameters={
             'storage_dir': str(self.storage_dir),
@@ -160,55 +173,30 @@ class KnowledgeGraphManager:
         })
     
     @detailed_log_function(LogCategory.KNOWLEDGE_GRAPH)
-    def _init_storage(self):
-        """Initialize local storage."""
-        # Load existing entities and relationships
-        entities_file = self.storage_dir / "entities.json"
-        relationships_file = self.storage_dir / "relationships.json"
-        
-        if entities_file.exists():
+    def _init_persistence(self):
+        """Initialize database persistence layer."""
+        persistence_cfg = self.config.get("persistence", {})
+        if not self.persistence:
+            if self.connection_pool:
+                self.persistence = EnhancedPersistenceManager(
+                    connection_pool=self.connection_pool,
+                    config=persistence_cfg,
+                )
+            else:
+                self.persistence = EnhancedPersistenceManager(
+                    persistence_cfg.get("database_url"),
+                    persistence_cfg.get("redis_url"),
+                    config=persistence_cfg,
+                )
+        if self.persistence:
             try:
-                with open(entities_file, 'r') as f:
-                    entities_data = json.load(f)
-                    for entity_data in entities_data:
-                        entity = Entity(
-                            id=entity_data['id'],
-                            type=EntityType(entity_data['type']),
-                            name=entity_data['name'],
-                            properties=entity_data.get('properties', {}),
-                            confidence=entity_data.get('confidence', 1.0),
-                            source_document=entity_data.get('source_document'),
-                            created_at=datetime.fromisoformat(entity_data['created_at']),
-                            updated_at=datetime.fromisoformat(entity_data['updated_at'])
-                        )
-                        self.entities[entity.id] = entity
-                        self.entity_index[entity.type].append(entity.id)
-                
-                kg_logger.info(f"Loaded {len(self.entities)} entities from storage")
-            except Exception as e:
-                kg_logger.error("Failed to load entities from storage", exception=e)
-        
-        if relationships_file.exists():
-            try:
-                with open(relationships_file, 'r') as f:
-                    relationships_data = json.load(f)
-                    for rel_data in relationships_data:
-                        relationship = Relationship(
-                            id=rel_data['id'],
-                            source_entity_id=rel_data['source_entity_id'],
-                            target_entity_id=rel_data['target_entity_id'],
-                            type=RelationshipType(rel_data['type']),
-                            properties=rel_data.get('properties', {}),
-                            confidence=rel_data.get('confidence', 1.0),
-                            source_document=rel_data.get('source_document'),
-                            created_at=datetime.fromisoformat(rel_data['created_at'])
-                        )
-                        self.relationships[relationship.id] = relationship
-                        self.relationship_index[relationship.type].append(relationship.id)
-                
-                kg_logger.info(f"Loaded {len(self.relationships)} relationships from storage")
-            except Exception as e:
-                kg_logger.error("Failed to load relationships from storage", exception=e)
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    loop.create_task(self.persistence.initialize())
+                else:
+                    loop.run_until_complete(self.persistence.initialize())
+            except RuntimeError:
+                asyncio.run(self.persistence.initialize())
     
     @detailed_log_function(LogCategory.KNOWLEDGE_GRAPH)
     def _init_neo4j(self):
@@ -250,7 +238,7 @@ class KnowledgeGraphManager:
         """Create a new entity in the knowledge graph."""
         entity_logger.info(f"Creating entity: {name} ({entity_type.value})")
         
-        with self._lock:
+        async with self._lock:
             # Generate unique ID
             entity_id = self._generate_entity_id(entity_type, name)
             
@@ -268,7 +256,12 @@ class KnowledgeGraphManager:
                     existing.updated_at = datetime.now()
                     if source_document:
                         existing.source_document = source_document
-                    await self._save_entities()
+                    if self.persistence:
+                        await self.persistence.entity_repo.update_entity(
+                            existing.id,
+                            {"confidence_score": confidence},
+                            "kg_manager",
+                        )
                 
                 return existing
             
@@ -282,12 +275,22 @@ class KnowledgeGraphManager:
                 source_document=source_document
             )
             
-            # Store entity
+            if self.persistence:
+                record = EntityRecord(
+                    entity_id=entity_id,
+                    entity_type=entity_type.value,
+                    canonical_name=name,
+                    attributes=properties or {},
+                    confidence_score=confidence,
+                    status=EntityStatus.ACTIVE,
+                    created_by="kg_manager",
+                    updated_by="kg_manager",
+                    source_documents=[source_document] if source_document else [],
+                )
+                await self.persistence.entity_repo.create_entity(record)
+
             self.entities[entity_id] = entity
             self.entity_index[entity_type].append(entity_id)
-            
-            # Save to storage
-            await self._save_entities()
             
             # Sync to Neo4j if enabled
             if self.neo4j_enabled:
@@ -304,8 +307,6 @@ class KnowledgeGraphManager:
     @detailed_log_function(LogCategory.KNOWLEDGE_GRAPH)
     async def get_entity(self, entity_id: str) -> Optional[Entity]:
         """Get entity by ID."""
-        with self._lock:
-            return self.entities.get(entity_id)
     
     @detailed_log_function(LogCategory.KNOWLEDGE_GRAPH)
     async def find_entities(self, entity_type: Optional[EntityType] = None,
@@ -318,24 +319,41 @@ class KnowledgeGraphManager:
             'name_pattern': name_pattern,
             'limit': limit
         })
+
+        cache_key = None
+        if self.cache_manager:
+            base = {
+                "type": entity_type.value if entity_type else None,
+                "name": name_pattern,
+                "props": properties_filter,
+                "limit": limit,
+            }
+            cache_key = "kg_query:" + hashlib.sha256(str(base).encode()).hexdigest()
+            cached = await self.cache_manager.get(cache_key)
+            if cached:
+                if self.metrics:
+                    self.metrics.inc_kg_query(cache_hit=True)
+                return [Entity(**c) for c in cached]
+
+        if self.metrics:
+            self.metrics.inc_kg_query()
         
-        with self._lock:
             entities = []
-            
+
             # Filter by type
-            if entity_type:
-                entity_ids = self.entity_index[entity_type]
-            else:
-                entity_ids = list(self.entities.keys())
-            
+            entity_ids = (
+                self.entity_index[entity_type]
+                if entity_type
+                else list(self.entities.keys())
+            )
+
             for entity_id in entity_ids:
                 entity = self.entities[entity_id]
-                
+
                 # Filter by name pattern
                 if name_pattern and name_pattern.lower() not in entity.name.lower():
                     continue
-                
-                # Filter by properties
+
                 if properties_filter:
                     match = True
                     for key, value in properties_filter.items():
@@ -344,13 +362,22 @@ class KnowledgeGraphManager:
                             break
                     if not match:
                         continue
-                
+
                 entities.append(entity)
-                
+
                 if len(entities) >= limit:
                     break
-            
+
             query_logger.info(f"Found {len(entities)} entities")
+            if cache_key and self.cache_manager:
+                try:
+                    await self.cache_manager.set(
+                        cache_key,
+                        [asdict(e) for e in entities],
+                        ttl_seconds=self.cache_ttl,
+                    )
+                except Exception:
+                    pass
             return entities
     
     # ==================== RELATIONSHIP OPERATIONS ====================
@@ -364,7 +391,7 @@ class KnowledgeGraphManager:
         """Create a new relationship in the knowledge graph."""
         relationship_logger.info(f"Creating relationship: {source_entity_id} -{relationship_type.value}-> {target_entity_id}")
         
-        with self._lock:
+        async with self._lock:
             # Validate entities exist
             if source_entity_id not in self.entities:
                 raise ValueError(f"Source entity not found: {source_entity_id}")
@@ -389,7 +416,19 @@ class KnowledgeGraphManager:
                         existing.properties.update(properties)
                     if source_document:
                         existing.source_document = source_document
-                    await self._save_relationships()
+                    if self.persistence:
+                        await self.persistence.relationship_repo.create_relationship(
+                            RelationshipRecord(
+                                relationship_id=rel_id,
+                                source_entity_id=source_entity_id,
+                                target_entity_id=target_entity_id,
+                                relationship_type=relationship_type.value,
+                                attributes=existing.properties,
+                                confidence_score=confidence,
+                                source_document=source_document,
+                                created_by="kg_manager",
+                            )
+                        )
                 
                 return existing
             
@@ -404,12 +443,21 @@ class KnowledgeGraphManager:
                 source_document=source_document
             )
             
-            # Store relationship
+            if self.persistence:
+                record = RelationshipRecord(
+                    relationship_id=rel_id,
+                    source_entity_id=source_entity_id,
+                    target_entity_id=target_entity_id,
+                    relationship_type=relationship_type.value,
+                    attributes=properties or {},
+                    confidence_score=confidence,
+                    source_document=source_document,
+                    created_by="kg_manager",
+                )
+                await self.persistence.relationship_repo.create_relationship(record)
+
             self.relationships[rel_id] = relationship
             self.relationship_index[relationship_type].append(rel_id)
-            
-            # Save to storage
-            await self._save_relationships()
             
             # Sync to Neo4j if enabled
             if self.neo4j_enabled:
@@ -426,52 +474,33 @@ class KnowledgeGraphManager:
     # ==================== GRAPH QUERIES ====================
     
     @detailed_log_function(LogCategory.KNOWLEDGE_GRAPH)
-    async def find_connected_entities(self, entity_id: str, 
+    async def find_connected_entities(self, entity_id: str,
                                      relationship_types: Optional[List[RelationshipType]] = None,
                                      max_depth: int = 2) -> List[Entity]:
         """Find entities connected to the given entity."""
-        query_logger.info(f"Finding connected entities for {entity_id}", parameters={
-            'max_depth': max_depth,
-            'relationship_types': [rt.value for rt in relationship_types] if relationship_types else None
-        })
-        
-        with self._lock:
-            connected_entities = set()
-            to_explore = [(entity_id, 0)]
-            explored = set()
-            
-            while to_explore:
-                current_id, depth = to_explore.pop(0)
-                
-                if current_id in explored or depth >= max_depth:
+        connected_entities: set[str] = set()
+
+        if self.persistence:
+            records = await self.persistence.relationship_repo.get_relationships_by_entity(entity_id)
+            for rec in records:
+                rel_type = RelationshipType(rec.relationship_type)
+                if relationship_types and rel_type not in relationship_types:
                     continue
-                
-                explored.add(current_id)
-                
-                # Find relationships from this entity
+                target_id = rec.target_entity_id if rec.source_entity_id == entity_id else rec.source_entity_id
+                if target_id != entity_id:
+                    connected_entities.add(target_id)
+        else:
+            with self._lock:
                 for rel in self.relationships.values():
                     if relationship_types and rel.type not in relationship_types:
                         continue
-                    
-                    target_id = None
-                    if rel.source_entity_id == current_id:
-                        target_id = rel.target_entity_id
-                    elif rel.target_entity_id == current_id:
-                        target_id = rel.source_entity_id
-                    
-                    if target_id and target_id != entity_id:
+                    target_id = (
+                        rel.target_entity_id if rel.source_entity_id == entity_id else rel.source_entity_id
+                    )
+                    if target_id != entity_id:
                         connected_entities.add(target_id)
-                        if depth + 1 < max_depth:
-                            to_explore.append((target_id, depth + 1))
-            
-            # Convert IDs to entities
-            result_entities = []
-            for entity_id in connected_entities:
-                if entity_id in self.entities:
-                    result_entities.append(self.entities[entity_id])
-            
-            query_logger.info(f"Found {len(result_entities)} connected entities")
-            return result_entities
+
+        return [self.entities[eid] for eid in connected_entities if eid in self.entities]
     
     # ==================== UTILITY METHODS ====================
     
@@ -484,52 +513,20 @@ class KnowledgeGraphManager:
         """Generate unique relationship ID."""
         content = f"{source_id}:{rel_type.value}:{target_id}"
         return hashlib.md5(content.encode()).hexdigest()
+
+    def _entity_from_record(self, record: EntityRecord) -> Entity:
+        return Entity(
+            id=record.entity_id,
+            type=EntityType(record.entity_type),
+            name=record.canonical_name,
+            properties=record.attributes,
+            confidence=record.confidence_score,
+            source_document=record.source_documents[0] if record.source_documents else None,
+            created_at=record.created_at,
+            updated_at=record.updated_at,
+        )
     
-    async def _save_entities(self):
-        """Save entities to storage."""
-        try:
-            entities_data = []
-            for entity in self.entities.values():
-                entities_data.append({
-                    'id': entity.id,
-                    'type': entity.type.value,
-                    'name': entity.name,
-                    'properties': entity.properties,
-                    'confidence': entity.confidence,
-                    'source_document': entity.source_document,
-                    'created_at': entity.created_at.isoformat(),
-                    'updated_at': entity.updated_at.isoformat()
-                })
-            
-            entities_file = self.storage_dir / "entities.json"
-            with open(entities_file, 'w') as f:
-                json.dump(entities_data, f, indent=2)
-                
-        except Exception as e:
-            kg_logger.error("Failed to save entities", exception=e)
-    
-    async def _save_relationships(self):
-        """Save relationships to storage."""
-        try:
-            relationships_data = []
-            for rel in self.relationships.values():
-                relationships_data.append({
-                    'id': rel.id,
-                    'source_entity_id': rel.source_entity_id,
-                    'target_entity_id': rel.target_entity_id,
-                    'type': rel.type.value,
-                    'properties': rel.properties,
-                    'confidence': rel.confidence,
-                    'source_document': rel.source_document,
-                    'created_at': rel.created_at.isoformat()
-                })
-            
-            relationships_file = self.storage_dir / "relationships.json"
-            with open(relationships_file, 'w') as f:
-                json.dump(relationships_data, f, indent=2)
-                
-        except Exception as e:
-            kg_logger.error("Failed to save relationships", exception=e)
+
     
     async def _sync_entity_to_neo4j(self, entity: Entity):
         """Sync entity to Neo4j database."""
@@ -583,9 +580,9 @@ class KnowledgeGraphManager:
             kg_logger.error(f"Failed to sync relationship to Neo4j: {relationship.id}", exception=e)
     
     @detailed_log_function(LogCategory.KNOWLEDGE_GRAPH)
-    def get_statistics(self) -> Dict[str, Any]:
+    async def get_statistics(self) -> Dict[str, Any]:
         """Get knowledge graph statistics."""
-        with self._lock:
+        async with self._lock:
             entity_counts = {et.value: len(ids) for et, ids in self.entity_index.items() if ids}
             relationship_counts = {rt.value: len(ids) for rt, ids in self.relationship_index.items() if ids}
             
@@ -629,6 +626,15 @@ class KnowledgeGraphManager:
         return health
 
 # Service container factory function
-def create_knowledge_graph_manager(config: Optional[Dict[str, Any]] = None) -> KnowledgeGraphManager:
-    """Factory function for service container integration."""
-    return KnowledgeGraphManager(service_config=config or {})
+def create_knowledge_graph_manager(
+    service_container: "ServiceContainer",
+    *,
+    connection_pool: ConnectionPool,
+    config: Optional[Dict[str, Any]] = None,
+) -> KnowledgeGraphManager:
+    """Factory for :class:`ServiceContainer`"""
+    return KnowledgeGraphManager(
+        storage_dir=config.get("STORAGE_DIR", "./storage/knowledge_graph") if config else "./storage/knowledge_graph",
+        service_config=config,
+        connection_pool=connection_pool,
+    )

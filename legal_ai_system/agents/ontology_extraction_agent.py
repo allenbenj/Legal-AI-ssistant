@@ -131,6 +131,11 @@ class OntologyExtractionAgent(BaseAgent, MemoryMixin):
         # Configuration values
         self._load_agent_config()
 
+        # Load spaCy NER and Legal-BERT models if enabled
+        self.nlp_ner: Optional[Language] = None
+        self.legal_bert_pipeline = None
+        self._initialize_ner_models()
+
         # Load spaCy model for coreference resolution
         self.nlp_coref: Optional[Language] = None
         if self.enable_coreference_resolution:
@@ -172,6 +177,22 @@ class OntologyExtractionAgent(BaseAgent, MemoryMixin):
         )
         self.enable_llm_extraction = bool(
             self.config.get("enable_llm_extraction", True)
+        )
+        self.enable_spacy_ner = bool(self.config.get("enable_spacy_ner", False))
+        self.spacy_ner_model = self.config.get("spacy_ner_model", "en_core_web_sm")
+        self.enable_legal_bert = bool(self.config.get("enable_legal_bert", False))
+        self.legal_bert_model_name = self.config.get(
+            "legal_bert_model_name", "nlpaueb/legal-bert-base-uncased"
+        )
+
+        self.regex_confidence_weight = float(
+            self.config.get("regex_confidence_weight", 0.6)
+        )
+        self.spacy_confidence_weight = float(
+            self.config.get("spacy_confidence_weight", 0.8)
+        )
+        self.legal_bert_confidence_weight = float(
+            self.config.get("legal_bert_confidence_weight", 0.9)
         )
 
         # Deduplication config
@@ -218,6 +239,8 @@ class OntologyExtractionAgent(BaseAgent, MemoryMixin):
             "coref_resolution": self.enable_coreference_resolution,
             "advanced_deduplication": self.enable_advanced_deduplication,
             "final_confidence_threshold": self.confidence_threshold_final,
+            "spacy_ner": self.enable_spacy_ner,
+            "legal_bert": self.enable_legal_bert,
         }
 
     def _initialize_coref_model(self):
@@ -258,6 +281,39 @@ class OntologyExtractionAgent(BaseAgent, MemoryMixin):
             )
             self.enable_coreference_resolution = False
             self.nlp_coref = None
+
+    def _initialize_ner_models(self) -> None:
+        """Initialize spaCy NER and Legal-BERT pipelines if enabled."""
+        if self.enable_spacy_ner:
+            try:
+                self.nlp_ner = spacy.load(self.spacy_ner_model)
+                self.logger.info(
+                    f"spaCy NER model '{self.spacy_ner_model}' loaded successfully."
+                )
+            except Exception as e:
+                self.logger.error(
+                    f"Failed to load spaCy NER model '{self.spacy_ner_model}': {e}"
+                )
+                self.enable_spacy_ner = False
+
+        if self.enable_legal_bert:
+            try:
+                from transformers import pipeline
+
+                self.legal_bert_pipeline = pipeline(
+                    "ner",
+                    model=self.legal_bert_model_name,
+                    aggregation_strategy="simple",
+                )
+                self.logger.info(
+                    f"Legal-BERT model '{self.legal_bert_model_name}' loaded for NER."
+                )
+            except Exception as e:
+                self.logger.error(
+                    f"Failed to load Legal-BERT model '{self.legal_bert_model_name}': {e}"
+                )
+                self.enable_legal_bert = False
+                self.legal_bert_pipeline = None
 
     def _load_patterns_from_file(
         self, file_path: Path, pattern_type: str
@@ -548,6 +604,71 @@ class OntologyExtractionAgent(BaseAgent, MemoryMixin):
             f"Coreference resolution for doc {doc_id} identified {num_clusters} clusters, {num_mentions} total mentions."
         )
         return mention_to_canonical_id
+
+    async def _extract_with_ner(self, text: str, doc_id: str) -> List[ExtractedEntity]:
+        """Combine regex, spaCy NER and Legal-BERT outputs."""
+        combined: List[ExtractedEntity] = []
+
+        if self.enable_regex_extraction:
+            regex_entities = self._extract_entities_by_patterns(text, doc_id)
+            for ent in regex_entities:
+                ent.confidence = min(1.0, ent.confidence * self.regex_confidence_weight)
+            combined.extend(regex_entities)
+
+        if self.enable_spacy_ner and self.nlp_ner:
+            try:
+                doc = self.nlp_ner(text)
+                for ent in doc.ents:
+                    confidence = self.spacy_confidence_weight
+                    combined.append(
+                        ExtractedEntity(
+                            entity_id=self._generate_unique_id(f"{ent.label_}_SPACY"),
+                            entity_type=ent.label_,
+                            attributes={"text": ent.text},
+                            confidence=confidence,
+                            source_text_snippet=ent.text[:150],
+                            span=(ent.start_char, ent.end_char),
+                        )
+                    )
+            except Exception as e:
+                self.logger.error(f"spaCy NER failed on doc {doc_id}: {e}")
+
+        if self.enable_legal_bert and self.legal_bert_pipeline:
+            try:
+                results = self.legal_bert_pipeline(text)
+                for r in results:
+                    snippet = text[r["start"] : r["end"]]
+                    confidence = min(
+                        1.0,
+                        float(r.get("score", 0.0)) * self.legal_bert_confidence_weight,
+                    )
+                    combined.append(
+                        ExtractedEntity(
+                            entity_id=self._generate_unique_id(
+                                f"{r['entity_group']}_BERT"
+                            ),
+                            entity_type=r["entity_group"],
+                            attributes={"text": snippet},
+                            confidence=confidence,
+                            source_text_snippet=snippet[:150],
+                            span=(int(r["start"]), int(r["end"])),
+                        )
+                    )
+            except Exception as e:
+                self.logger.error(f"Legal-BERT NER failed on doc {doc_id}: {e}")
+
+        # Deduplicate by span and entity type, keep highest confidence
+        unique_map: Dict[Tuple[int, int, str], ExtractedEntity] = {}
+        for ent in combined:
+            key = (ent.span[0], ent.span[1], ent.entity_type)
+            existing = unique_map.get(key)
+            if not existing or ent.confidence > existing.confidence:
+                unique_map[key] = ent
+        final_entities = list(unique_map.values())
+        self.logger.info(
+            f"NER extraction for doc {doc_id} yielded {len(final_entities)} entities"
+        )
+        return final_entities
 
     # --- LLM Extraction ---
     async def _extract_with_llm(
@@ -886,7 +1007,9 @@ class OntologyExtractionAgent(BaseAgent, MemoryMixin):
             if self.embedding_manager and len(sorted_entities) > 1:
                 texts_to_embed = [e.source_text_snippet for e in sorted_entities]
                 try:
-                    embeddings_list = await self.embedding_manager.embed_texts(texts_to_embed)
+                    embeddings_list = await self.embedding_manager.embed_texts(
+                        texts_to_embed
+                    )
                     if embeddings_list and len(embeddings_list) == len(texts_to_embed):
                         embeddings = np.array(embeddings_list)
                         similarity_matrix = cosine_similarity(embeddings)
@@ -1053,20 +1176,22 @@ class OntologyExtractionAgent(BaseAgent, MemoryMixin):
                     set(mention_to_canonical_id_map.values())
                 )
 
-            # 2. Initial Entity Extraction (Regex + LLM)
+            # 2. Initial Entity Extraction (NER + LLM)
             initial_entities: List[ExtractedEntity] = []
             initial_relationships: List[ExtractedRelationship] = (
                 []
             )  # Primarily from LLM
 
-            if self.enable_regex_extraction:
+            if (
+                self.enable_regex_extraction
+                or self.enable_spacy_ner
+                or self.enable_legal_bert
+            ):
                 output.extraction_metadata["extraction_methods_used"].append(
-                    "regex_entity_extraction"
+                    "ner_extraction"
                 )
-                regex_entities = self._extract_entities_by_patterns(
-                    text_content, document.id
-                )
-                initial_entities.extend(regex_entities)
+                ner_entities = await self._extract_with_ner(text_content, document.id)
+                initial_entities.extend(ner_entities)
 
             if self.enable_llm_extraction and self.llm_manager:
                 output.extraction_metadata["extraction_methods_used"].append(

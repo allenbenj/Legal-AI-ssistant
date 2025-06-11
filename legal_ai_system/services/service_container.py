@@ -7,7 +7,16 @@ core services and agents within the Legal AI System.
 """
 
 import asyncio
-from typing import Dict, Any, Optional, Callable, Awaitable, List, TYPE_CHECKING
+from typing import (
+    Dict,
+    Any,
+    Optional,
+    Callable,
+    Awaitable,
+    List,
+    TYPE_CHECKING,
+    TypeVar,
+)
 from enum import Enum
 from datetime import datetime, timezone
 import os
@@ -100,6 +109,8 @@ service_container_logger: DetailedLogger = get_detailed_logger(
     "ServiceContainer", LogCategory.SYSTEM
 )
 
+T = TypeVar("T")
+
 
 class ServiceLifecycleState(Enum):
     """States of a service within the container."""
@@ -125,10 +136,12 @@ class ServiceContainer:
         self._service_states: Dict[str, ServiceLifecycleState] = {}
         self._initialization_order: List[str] = []  # To manage dependencies during init
         self._shutdown_order: List[str] = []  # Reverse of init order
-        self._async_tasks: List[
-            asyncio.Task
-        ] = []  # For background tasks started by services
-        self._lock = asyncio.Lock()  # For thread-safe registration and retrieval if needed (though primarily async)
+        self._async_tasks: List[asyncio.Task] = (
+            []
+        )  # For background tasks started by services
+        self._lock = (
+            asyncio.Lock()
+        )  # For thread-safe registration and retrieval if needed (though primarily async)
         # Active workflow configuration shared across workflow instances
         self._active_workflow_config: Dict[str, Any] = {}
 
@@ -146,8 +159,8 @@ class ServiceContainer:
     async def register_service(
         self,
         name: str,
-        instance: Optional[Any] = None,
-        factory: Optional[Callable[..., Any]] = None,
+        instance: Optional[T] = None,
+        factory: Optional[Callable[..., Awaitable[T] | T]] = None,
         is_async_factory: bool = False,
         depends_on: Optional[List[str]] = None,
         config_key: Optional[str] = None,  # Key to fetch config for this service
@@ -193,7 +206,7 @@ class ServiceContainer:
                 raise ValueError(msg)
 
     @detailed_log_function(LogCategory.SYSTEM)
-    async def get_service(self, name: str, _chain: Optional[List[str]] = None) -> Any:
+    async def get_service(self, name: str, _chain: Optional[List[str]] = None) -> T:
         """Retrieves a service instance, creating it via factory if necessary."""
         if _chain is None:
             _chain = []
@@ -207,7 +220,7 @@ class ServiceContainer:
 
         async with self._lock:
             if name in self._services:
-                return self._services[name]
+                return self._services[name]  # type: ignore[return-value]
 
             if name not in self._service_factories:
                 service_container_logger.error(
@@ -251,6 +264,12 @@ class ServiceContainer:
 
             async with self._lock:
                 self._services[name] = instance
+            return instance
+        except Exception as e:
+            service_container_logger.error(
+                f"Failed to create service '{name}'.", exception=e
+            )
+            raise
 
     @detailed_log_function(LogCategory.SYSTEM)
     async def initialize_all_services(self) -> None:
@@ -465,6 +484,7 @@ class ServiceContainer:
         """Return a copy of the currently active workflow configuration."""
         return dict(self._active_workflow_config)
 
+
 # Global factory function to create and populate the service container
 # This is where you define how your system's services are created and wired together.
 async def create_service_container(
@@ -491,8 +511,7 @@ async def create_service_container(
     # If app_settings (e.g. LegalAISettings from config.settings) is passed, use it
     await container.register_service(
         "configuration_manager",
-        factory=lambda sc,
-        custom_settings_instance=app_settings: create_configuration_manager(
+        factory=lambda sc, custom_settings_instance=app_settings: create_configuration_manager(
             custom_settings_instance=custom_settings_instance
         ),
     )
@@ -501,11 +520,24 @@ async def create_service_container(
     # Task Queue setup for background processing
     from .task_queue import TaskQueue
 
-    queue_url = config_manager_service.get("REDIS_URL_QUEUE", "redis://localhost:6379/0")
+    queue_url = config_manager_service.get(
+        "REDIS_URL_QUEUE", "redis://localhost:6379/0"
+    )
     await container.register_service(
         "task_queue",
         instance=TaskQueue(redis_url=queue_url),
     )
+
+    # Create shared connection pool for all persistence layers
+    from ..core.enhanced_persistence import ConnectionPool
+
+    db_conf = config_manager_service.get_database_config()
+    pool = ConnectionPool(
+        db_conf.neo4j_uri,
+        config_manager_service.get("REDIS_URL_CACHE"),
+    )
+    await pool.initialize()
+    await container.register_service("connection_pool", instance=pool)
 
     # 2. Core Services (Loggers are implicitly available via get_detailed_logger)
     # ErrorHandler is a global singleton, usually not registered but can be if needed for explicit access.
@@ -518,10 +550,8 @@ async def create_service_container(
     )
 
     db_conf = config_manager_service.get_database_config()
+    connection_pool_service = await container.get_service("connection_pool")
     persistence_cfg_for_factory = {
-        "database_url": db_conf.neo4j_uri,  # Example if EnhancedPersistence uses Neo4j
-        # Or better: db_conf.get_url_for_service("main_relational_db")
-        "redis_url": config_manager_service.get("REDIS_URL_CACHE"),  # Example
         "persistence_config": config_manager_service.get(
             "persistence_layer_details", {}
         ),
@@ -530,6 +560,7 @@ async def create_service_container(
         "persistence_manager",
         factory=create_enhanced_persistence_manager,
         is_async_factory=False,
+        connection_pool=connection_pool_service,
         config=persistence_cfg_for_factory,
     )
 
@@ -560,10 +591,10 @@ async def create_service_container(
     # Register UserRepository
     from ..utils.user_repository import UserRepository
 
-    if persistence_manager_service and persistence_manager_service.connection_pool:
+    if connection_pool_service:
         await container.register_service(
             "user_repository",
-            instance=UserRepository(persistence_manager_service.connection_pool),
+            instance=UserRepository(connection_pool_service),
         )
     else:
         service_container_logger.warning(
@@ -662,7 +693,9 @@ async def create_service_container(
 
     from ..core.embedding_manager import EmbeddingManager
 
-    embed_conf = config_manager_service.get_vector_store_config()  # Embedding model is part of VS config
+    embed_conf = (
+        config_manager_service.get_vector_store_config()
+    )  # Embedding model is part of VS config
     await container.register_service(
         "embedding_manager",
         instance=EmbeddingManager(
@@ -685,7 +718,8 @@ async def create_service_container(
     await container.register_service(
         "knowledge_graph_manager",
         factory=create_knowledge_graph_manager,
-        service_config=kg_conf,
+        connection_pool=connection_pool_service,
+        config=kg_conf,
     )
 
     from ..core.enhanced_vector_store import (
@@ -704,7 +738,10 @@ async def create_service_container(
     # EmbeddingProvider instance can be fetched from EmbeddingManager if VectorStore is designed to take it
     # embedding_provider_instance = await container.get_service("embedding_manager").get_provider_instance() # Conceptual
     await container.register_service(
-        "vector_store", factory=create_enhanced_vector_store, service_config=vs_conf
+        "vector_store",
+        factory=create_enhanced_vector_store,
+        connection_pool=connection_pool_service,
+        config=vs_conf,
     )
 
     from .realtime_graph_manager import create_realtime_graph_manager
@@ -719,14 +756,25 @@ async def create_service_container(
     )
 
     # 5. Memory Layer
-    from ..core.unified_memory_manager import create_unified_memory_manager
+    from ..core.unified_memory_manager import (
+        create_unified_memory_manager,
+        UnifiedMemoryManagerConfig,
+    )
 
-    umm_conf = {"DB_PATH": str(db_conf.memory_db_path)}
+    umm_conf = UnifiedMemoryManagerConfig(db_path=db_conf.memory_db_path)
     await container.register_service(
         "unified_memory_manager",
         factory=create_unified_memory_manager,
         service_config=umm_conf,
     )
+
+    from ..core.ml_optimizer import create_ml_optimizer
+
+    await container.register_service(
+        "ml_optimizer",
+        factory=create_ml_optimizer,
+    )
+    ml_opt_service = await container.get_service("ml_optimizer")
 
     from ..utils.reviewable_memory import create_reviewable_memory
 
@@ -741,6 +789,7 @@ async def create_service_container(
         factory=create_reviewable_memory,
         service_config=revmem_conf,
         unified_memory_manager=umm_service,
+        ml_optimizer=ml_opt_service,
     )
 
     from .violation_review import ViolationReviewDB
@@ -759,7 +808,9 @@ async def create_service_container(
     await container.register_service(
         "realtime_analysis_workflow",
         factory=lambda sc: RealTimeAnalysisWorkflow(
-            sc, workflow_config=WorkflowConfig(**sc.get_active_workflow_config())
+            sc,
+            workflow_config=WorkflowConfig(**sc.get_active_workflow_config()),
+            task_queue=sc._services.get("task_queue"),
         ),
         is_async_factory=False,
     )
@@ -866,7 +917,6 @@ async def create_service_container(
         factory=lambda sc: SummaryNode(),
         is_async_factory=False,
     )
-
 
     # Register LangGraph nodes and builder for the orchestrator
     from ..agents.agent_nodes import AnalysisNode, SummaryNode

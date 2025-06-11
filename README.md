@@ -26,7 +26,6 @@ If you prefer manual installation:
    The requirements file includes database drivers such as **asyncpg** for PostgreSQL and **aioredis** for Redis. If you see errors like `Import "asyncpg" could not be resolved` or `Import "aioredis" could not be resolved`, ensure the dependencies are installed in the active environment.
 3. Install Node packages for the React frontend:
    ```bash
-   npm install
    (cd frontend && npm install)
    ```
 4. Build the frontend for production (optional when serving via FastAPI):
@@ -59,16 +58,59 @@ separately:
 pip install langgraph==0.0.20
 ```
 
-See [advanced_langgraph.md](docs/advanced_langgraph.md) for details on how the
-package integrates with document routing and WebSocket progress updates.
+The [advanced LangGraph guide](docs/advanced_langgraph.md) explains how this
+optional dependency enables document classification routing, specialized
+subgraphs, and real-time progress updates over WebSocket. It also shows a
+`CaseWorkflowState` example for passing state between nodes.
 
-For more detailed instructions see [ENV_SETUP.md](ENV_SETUP.md).
+For more detailed instructions see [ENV_SETUP.md](docs/ENV_SETUP.md).
 
 The older `setup_environment_task.py` script can also be used to create the vir
 tual environment and run the tests:
 ```bash
 python legal_ai_system/scripts/setup_environment_task.py
 ```
+For a faster workflow, you can run the helper script below. It automatically
+creates `.venv` if needed, installs all development dependencies, and invokes
+`pytest`:
+
+```bash
+./scripts/run_tests.sh
+```
+
+## Running Tests
+
+Before invoking `pytest`, install the development dependencies:
+
+```bash
+pip install -e .[dev]
+```
+
+Alternatively, run the installation helper:
+
+```bash
+python legal_ai_system/scripts/install_all_dependencies.py
+```
+
+Missing packages such as `pytest-mock` will cause test failures. After installation execute:
+
+```bash
+pytest
+```
+
+See [docs/test_setup.md](docs/test_setup.md) for more information.
+
+### Extraction Options
+
+The ontology extraction agent supports multiple NER backends. Enable them in
+`config/defaults.yaml`:
+
+- `enable_spacy_ner`: load a spaCy pipeline specified by `spacy_ner_model`.
+- `enable_legal_bert`: use a HuggingFace Legal‑BERT model defined by
+  `legal_bert_model_name`.
+- `enable_regex_extraction`: apply regex patterns from the configuration files.
+
+All enabled methods are combined with confidence weighting during extraction.
 
 
 ### Start Task
@@ -89,4 +131,3 @@ See the documents in the `docs/` folder for architecture details and advanced
 usage. The [Integration Guide](docs/integration_plan.md) summarises the
 five-phase integration plan, WebSocket patterns and deployment tips and
 includes sections on security, testing, success metrics and troubleshooting.
-For LangGraph specific routing examples see [advanced_langgraph.md](docs/advanced_langgraph.md).
