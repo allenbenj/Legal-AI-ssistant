@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from types import SimpleNamespace
 from datetime import datetime
 from collections import defaultdict
@@ -73,18 +73,7 @@ class RealTimeAnalysisResult:
     sync_status: Dict[str, str]
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
-            "document_path": self.document_path,
-            "document_id": self.document_id,
-            "processing_times": self.processing_times,
-            "total_processing_time": self.total_processing_time,
-            "confidence_scores": self.confidence_scores,
-            "validation_results": self.validation_results,
-            "sync_status": self.sync_status,
-            "graph_updates": self.graph_updates,
-            "vector_updates": self.vector_updates,
-            "memory_updates": self.memory_updates,
-        }
+        return asdict(self)
 
 
 class RealTimeAnalysisWorkflow:

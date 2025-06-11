@@ -205,11 +205,7 @@ class DocumentProcessingOutput:
     )
 
     def to_dict(self) -> Dict[str, Any]:
-        data = asdict(self)
-        data["document_content_type"] = (
-            self.document_content_type.value
-        )  # Store enum value
-        return data
+        return asdict(self)
 
 
 class DocumentProcessorAgent(BaseAgent, MemoryMixin):

@@ -106,9 +106,7 @@ class SearchResult:
     rank: int
 
     def to_dict(self) -> Dict[str, Any]:
-        data = asdict(self)
-        data["metadata"] = self.metadata.to_dict()
-        return data
+        return asdict(self)
 
 
 @dataclass

@@ -102,12 +102,7 @@ class OntologyExtractionOutput:
     overall_confidence: float = 0.0
 
     def to_dict(self) -> Dict[str, Any]:
-        # Ensure nested dataclasses are also converted if they have custom to_dict for some reason
-        # asdict usually handles this well for simple dataclasses.
-        data = asdict(self)
-        data["entities"] = [e.to_dict() for e in self.entities]
-        data["relationships"] = [r.to_dict() for r in self.relationships]
-        return data
+        return asdict(self)
 
 
 class OntologyExtractionAgent(BaseAgent, MemoryMixin):

@@ -72,12 +72,7 @@ class ReviewableItem:
     original_content_on_modify: Optional[Dict[str, Any]] = None # Renamed, stores original if modified
     
     def to_dict(self) -> Dict[str, Any]: # For serialization
-        data = asdict(self)
-        data['review_status'] = self.review_status.value
-        data['review_priority'] = self.review_priority.value
-        data['created_at'] = self.created_at.isoformat()
-        data['reviewed_at'] = self.reviewed_at.isoformat() if self.reviewed_at else None
-        return data
+        return asdict(self)
 
 @dataclass
 class ReviewDecision:
@@ -103,10 +98,7 @@ class LegalFindingItem: # Renamed from LegalFinding to avoid confusion with a po
     review_status: ReviewStatus = ReviewStatus.PENDING # Findings also go through review
     
     def to_dict(self) -> Dict[str, Any]:
-        data = asdict(self)
-        data['created_at'] = self.created_at.isoformat()
-        data['review_status'] = self.review_status.value
-        return data
+        return asdict(self)
 
 class ReviewableMemory:
     """Manages the review process for extracted legal information."""
