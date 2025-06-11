@@ -900,21 +900,6 @@ class EnhancedPersistenceManager:
     def __init__(
         self,
         connection_pool: ConnectionPool,
-        config: Optional[Dict[str, Any]] | None = None,
-        metrics_exporter: Optional[Any] = None,
-    ) -> None:
-        """Create a new :class:`EnhancedPersistenceManager`.
-
-        Parameters
-        ----------
-        connection_pool:
-            Initialized :class:`ConnectionPool` used for database access.
-        config:
-            Optional dictionary with persistence specific configuration.
-        metrics_exporter:
-            Optional exporter used to record runtime metrics.
-        """
-
         self.config = config or {}
         cache_ttl = self.config.get("cache_default_ttl_seconds", 3600)
 
