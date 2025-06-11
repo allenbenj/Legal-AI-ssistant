@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from types import SimpleNamespace
 from datetime import datetime
 from collections import defaultdict
@@ -73,18 +73,7 @@ class RealTimeAnalysisResult:
     sync_status: Dict[str, str]
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
-            "document_path": self.document_path,
-            "document_id": self.document_id,
-            "processing_times": self.processing_times,
-            "total_processing_time": self.total_processing_time,
-            "confidence_scores": self.confidence_scores,
-            "validation_results": self.validation_results,
-            "sync_status": self.sync_status,
-            "graph_updates": self.graph_updates,
-            "vector_updates": self.vector_updates,
-            "memory_updates": self.memory_updates,
-        }
+        return asdict(self)
 
 
 class RealTimeAnalysisWorkflow:
@@ -307,7 +296,7 @@ class RealTimeAnalysisWorkflow:
             if self.policy_learner.should_run_step("vector_update", doc_features):
                 t0 = time.time()
                 vector_updates = await self._update_vector_store_realtime(
-                    hybrid_result, text, document_id
+                    hybrid_result, document_result, document_id
                 )
                 duration = time.time() - t0
                 success = True
@@ -449,7 +438,7 @@ class RealTimeAnalysisWorkflow:
         return graph_updates
 
     async def _update_vector_store_realtime(
-        self, hybrid_result, document_text: str, document_id: str
+        self, hybrid_result, document_result, document_id: str
     ) -> Dict[str, Any]:
         """Update vector store with extracted entities in real-time."""
         vector_updates = {"vectors_added": 0, "processing_time": 0.0}
@@ -457,19 +446,31 @@ class RealTimeAnalysisWorkflow:
         try:
             start_time = time.time()
 
-            # Add document-level vector
-            doc_vector_kwargs = {
-                "index_target": "document",
-                "confidence_score": 0.9,
-                "source_file": hybrid_result.document_id,
-                "custom_metadata": {"extraction_timestamp": datetime.now().isoformat()},
-            }
-            await self.vector_store.add_vector_async(
-                content_to_embed=document_text[:1000],  # Limit size
-                document_id_ref=document_id,
-                **doc_vector_kwargs,
-            )
-            vector_updates["vectors_added"] += 1
+            chunks = getattr(document_result, "text_chunks", None)
+            if not chunks and getattr(document_result, "text_content", None):
+                tokens = document_result.text_content.split()
+                chunk_size = 1000
+                chunks = [
+                    " ".join(tokens[i : i + chunk_size])
+                    for i in range(0, len(tokens), chunk_size)
+                ]
+
+            for idx, chunk_text in enumerate(chunks or []):
+                doc_vector_kwargs = {
+                    "index_target": "document",
+                    "confidence_score": 0.9,
+                    "source_file": hybrid_result.document_id,
+                    "custom_metadata": {
+                        "extraction_timestamp": datetime.now().isoformat(),
+                        "chunk_index": idx,
+                    },
+                }
+                await self.vector_store.add_vector_async(
+                    content_to_embed=chunk_text,
+                    document_id_ref=document_id,
+                    **doc_vector_kwargs,
+                )
+                vector_updates["vectors_added"] += 1
 
             # Add entity vectors
             for entity in hybrid_result.validated_entities:
@@ -515,6 +516,8 @@ class RealTimeAnalysisWorkflow:
                             **targeted_vector_kwargs,
                         )
                         vector_updates["vectors_added"] += 1
+
+            await self.vector_store.flush_updates()
 
             vector_updates["processing_time"] = time.time() - start_time
 

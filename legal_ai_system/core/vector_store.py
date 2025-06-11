@@ -1,4 +1,4 @@
-# legal_ai_system/knowledge/vector_store/vector_store.py
+# legal_ai_system/core/vector_store.py
 """
 Vector Store - Consolidated with DETAILED Logging and Full Implementation
 ==========================================================================
@@ -106,9 +106,7 @@ class SearchResult:
     rank: int
 
     def to_dict(self) -> Dict[str, Any]:
-        data = asdict(self)
-        data["metadata"] = self.metadata.to_dict()
-        return data
+        return asdict(self)
 
 
 @dataclass
@@ -300,6 +298,7 @@ class VectorStore:
         self.config = service_config or {}
         self.cache_manager = cache_manager
         self.metrics = metrics_exporter
+        self.metadata_repo = metadata_repo
         self.storage_path = Path(storage_path_str)
         self.document_index_path = (
             Path(document_index_path)
@@ -847,6 +846,16 @@ class VectorStore:
                 await loop.run_in_executor(None, self._save_faiss_indexes_sync)
             finally:
                 vs_index_logger.debug("Released lock after saving FAISS indexes.")
+
+    @detailed_log_function(LogCategory.VECTOR_STORE)
+    async def flush_updates(self) -> None:
+        """Persist any pending updates for real-time synchronization."""
+        await self._save_faiss_indexes_async()
+        if self.metadata_repo and hasattr(self.metadata_repo, "flush"):
+            try:
+                await self.metadata_repo.flush()
+            except Exception as e:  # pragma: no cover - best effort
+                vector_store_logger.error("Metadata repository flush failed", exception=e)
 
     async def _initialize_metadata_storage_async(self) -> None:
         """Ensure metadata storage is ready."""
@@ -1501,44 +1510,40 @@ class VectorStore:
     async def _get_metadata_by_faiss_internal_id_async(
         self, faiss_id: int, index_target: str
     ) -> Optional[VectorMetadata]:
-        """Resolve metadata for a FAISS internal ID."""
-        vs_cache_logger.debug(
-            f"Resolving vector_id for FAISS id '{faiss_id}' in '{index_target}' index."
-        )
-
-        vector_id = await self._get_vector_id_by_faiss_id_async(
-            faiss_id, index_target
-        )
-        if not vector_id:
-            vs_cache_logger.debug(
-                f"No vector_id mapping for FAISS id '{faiss_id}' in '{index_target}' index."
-            )
-            return None
-
-        metadata = await self._get_metadata_async_from_db_or_cache(vector_id)
-        if not metadata:
-            vs_cache_logger.debug(
-                f"Metadata not found for vector_id '{vector_id}' mapped from FAISS id '{faiss_id}'."
-            )
-        return metadata
 
     def _get_metadata_from_db_sync(self, vector_id: str) -> Optional[Dict[str, Any]]:
         """Synchronously fetches a single metadata record from SQLite."""
         try:
-            with sqlite3.connect(
-                self.metadata_db_path, timeout=5
-            ) as conn:
+            with sqlite3.connect(self.metadata_db_path, timeout=5) as conn:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.execute(
-                    "SELECT * FROM vector_metadata WHERE vector_id = ?", (vector_id,)
+                    "SELECT * FROM vector_metadata WHERE vector_id = ?",
+                    (vector_id,),
                 )
                 row = cursor.fetchone()
                 return dict(row) if row else None
         except sqlite3.Error as e:
             vs_cache_logger.error(
-                f"SQLite error fetching metadata for '{vector_id}'.", exception=e
+                f"SQLite error fetching metadata for '{vector_id}'.",
+                exception=e,
             )
             return None
+
+    def _update_metadata_fields_db_sync(self, vector_id: str, updates: Dict[str, Any]) -> None:
+        """Update metadata fields in the local SQLite database."""
+        if not updates:
+            return
+        try:
+            with sqlite3.connect(self.metadata_db_path, timeout=5) as conn:
+                set_clause = ", ".join(f"{k} = ?" for k in updates.keys())
+                values = list(updates.values()) + [vector_id]
+                conn.execute(
+                    f"UPDATE vector_metadata SET {set_clause} WHERE vector_id = ?",
+                    values,
+                )
+                conn.commit()
+        except sqlite3.Error as e:
+            vs_cache_logger.error("SQLite error updating metadata.", exception=e)
 
     def _apply_filters_to_results(
         self, results: List[SearchResult], filters: Dict[str, Any]
@@ -1620,9 +1625,20 @@ class VectorStore:
                 ).isoformat()  # Also treat as access
                 cached_meta.access_count += 1
 
-            # Persist to DB
-            await self.metadata_repo.update_metadata_fields(vector_id, metadata_updates)
-            vector_store_logger.info(f"Metadata updated for vector_id '{vector_id}'.")
+            # Persist to DB or repository if available
+            if self.metadata_repo:
+                await self.metadata_repo.update_metadata_fields(vector_id, metadata_updates)
+            else:
+                loop = asyncio.get_event_loop()
+                await loop.run_in_executor(
+                    None,
+                    self._update_metadata_fields_db_sync,
+                    vector_id,
+                    metadata_updates,
+                )
+            vector_store_logger.info(
+                f"Metadata updated for vector_id '{vector_id}'."
+            )
 
 
 
@@ -1923,7 +1939,10 @@ class VectorStore:
 
 # Factory function at the end of vector_store.py
 def create_vector_store(
-    service_container: Any, service_config_override: Optional[Dict[str, Any]] = None
+    service_container: Any,
+    service_config_override: Optional[Dict[str, Any]] = None,
+    *,
+    metadata_repo: VectorMetadataRepository | None = None,
 ) -> VectorStore:
     """
     Factory function to create a VectorStore instance.
@@ -1937,6 +1956,11 @@ def create_vector_store(
         else service_container
     )
     vs_cfg = cfg_source.get_config("vector_store_config", {})  # Get config slice
+
+    if metadata_repo is None:
+        metadata_repo = _get_service_sync(
+            service_container, "vector_metadata_repository"
+        )
 
     # Resolve EmbeddingProviderVS dependency from service_container
     # This is crucial: embedding_provider must be INITIALIZED before VectorStore uses its dimension.

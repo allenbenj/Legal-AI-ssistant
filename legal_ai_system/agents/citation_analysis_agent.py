@@ -59,9 +59,7 @@ class CitationAnalysisOutput: # Renamed from CitationAnalysisResult for consiste
     analyzed_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     def to_dict(self) -> Dict[str, Any]:
-        data = asdict(self)
-        data['citations_found'] = [c.to_dict() for c in self.citations_found]
-        return data
+        return asdict(self)
 
 
 class CitationAnalysisAgent(BaseAgent, MemoryMixin):

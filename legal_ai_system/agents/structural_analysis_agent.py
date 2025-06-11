@@ -43,22 +43,7 @@ class StructuralAnalysisResult:
     )  # Added
 
     def to_dict(self) -> Dict[str, Any]:
-        data = asdict(self)
-        # Ensure IRAC components are initialized if not present after asdict
-        if "irac_components" not in data or not data["irac_components"]:
-            data["irac_components"] = {
-                "issues": [],
-                "rules": [],
-                "application": [],
-                "conclusion": [],
-            }
-        else:
-            for key in ["issues", "rules", "application", "conclusion"]:
-                if key not in data["irac_components"]:
-                    data["irac_components"][key] = (
-                        [] if key in ["issues", "rules"] else ""
-                    )
-        return data
+        return asdict(self)
 
 
 class StructuralAnalysisAgent(BaseAgent, MemoryMixin):

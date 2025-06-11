@@ -1,6 +1,6 @@
 """Lightweight validation agents for the Violation Review GUI."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from typing import Optional, Dict, Any
 
 from ..services.violation_review import ViolationReviewEntry
@@ -17,13 +17,7 @@ class AgentRecommendation:
     followup_tool: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
-            "agent": self.agent_name,
-            "summary": self.summary,
-            "recommendation": self.recommendation,
-            "confidence": self.confidence,
-            "followup_tool": self.followup_tool,
-        }
+        return asdict(self)
 
 
 class LegalAuditAgent:
