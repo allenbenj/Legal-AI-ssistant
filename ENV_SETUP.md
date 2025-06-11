@@ -74,3 +74,19 @@ export LEGAL_AI_LLM_PROVIDER=openai
 
 This would set `llm_provider` to `openai`. Keys are case-insensitive and list
 values can be provided as comma-separated strings.
+
+## Override Mechanism
+`ConfigurationManager` reads the configuration in two phases. First, all default
+values are loaded from `config/defaults.yaml`. Immediately after loading the
+defaults, any environment variable beginning with `LEGAL_AI_` is applied as an
+override. The portion of the variable name following the prefix is matched (in a
+case-insensitive manner) with the YAML keys.
+
+For example, to change the data directory you can set:
+
+```bash
+export LEGAL_AI_DATA_DIR=/tmp/legalai
+```
+
+Boolean values accept `true`, `false`, `1`, `0`, `yes`, or `no`. List-type
+settings can be supplied as comma-separated strings.
