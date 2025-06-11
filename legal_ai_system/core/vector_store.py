@@ -1,4 +1,4 @@
-# legal_ai_system/knowledge/vector_store/vector_store.py
+# legal_ai_system/core/vector_store.py
 """
 Vector Store - Consolidated with DETAILED Logging and Full Implementation
 ==========================================================================
