@@ -50,6 +50,13 @@ enable these features, install additional libraries:
 pip install ffmpeg-python openai-whisper whisperx pdfplumber pyannote.audio
 ```
 
+When adding new agents, run the dependency check script to verify that all
+optional modules are installed:
+
+```bash
+python legal_ai_system/scripts/check_optional_dependencies.py
+```
+
 To experiment with advanced workflow orchestration using the
 [`langgraph`](https://pypi.org/project/langgraph/) engine install it
 separately:
