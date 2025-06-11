@@ -36,13 +36,14 @@ def run_system():  # Renamed from main for clarity
         # This function should handle its own setup (logging, etc.) and then run Streamlit.
         main_streamlit_entry()
         return 0  # Success
-    except ModuleNotFoundError:
+    except ModuleNotFoundError as e:
+        missing = getattr(e, "name", str(e))
         print(
-            "ERROR: Streamlit GUI module not found at 'legal_ai_system/gui/streamlit_app.py'.",
+            f"ERROR: Missing dependency '{missing}' required for the Streamlit GUI.",
             file=sys.stderr,
         )
         print(
-            "Please ensure the GUI component is present and your PYTHONPATH includes the 'legal_ai_system' package.",
+            "Install required packages with: pip install -r requirements.txt",
             file=sys.stderr,
         )
         return 1
