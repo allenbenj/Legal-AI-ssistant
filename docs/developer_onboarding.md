@@ -28,7 +28,6 @@ Welcome to the Legal AI System project! This guide helps new contributors set up
    If you prefer manual installation run:
    ```bash
    pip install -r requirements.txt
-   npm install
    (cd frontend && npm install)
    ```
 4. **Optional extras**
