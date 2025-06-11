@@ -10,6 +10,8 @@ from ..workflow_engine.merge import (
     DictUpdateMerge,
 )
 
+from .workflow_policy import WorkflowPolicy
+
 __all__ = [
     "AgentWorkflow",
     "LegalWorkflowBuilder",
@@ -17,5 +19,5 @@ __all__ = [
     "MergeStrategy",
     "ConcatMerge",
     "ListMerge",
-
+    "WorkflowPolicy",
 ]
