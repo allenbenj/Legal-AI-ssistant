@@ -125,6 +125,30 @@ class ViolationReviewDB:
                 )
             return result
 
+    def fetch_reviewed_violations(self) -> List[ViolationReviewEntry]:
+        """Return violations that have been reviewed by a human."""
+        query = "SELECT * FROM violations WHERE status != 'pending'"
+        with self._get_conn() as conn:
+            rows = conn.execute(query).fetchall()
+            result: List[ViolationReviewEntry] = []
+            for row in rows:
+                result.append(
+                    ViolationReviewEntry(
+                        id=row["id"],
+                        document_id=row["document_id"],
+                        violation_type=row["violation_type"],
+                        severity=row["severity"],
+                        status=row["status"],
+                        description=row["description"],
+                        confidence=row["confidence"],
+                        detected_time=datetime.fromisoformat(row["detected_time"]),
+                        reviewed_by=row["reviewed_by"],
+                        review_time=datetime.fromisoformat(row["review_time"]) if row["review_time"] else None,
+                        recommended_motion=row["recommended_motion"],
+                    )
+                )
+            return result
+
     def update_violation_status(
         self, violation_id: str, status: str, reviewed_by: Optional[str] = None
     ) -> bool:

@@ -91,6 +91,17 @@ class ViolationDetectorAgent(BaseAgent, MemoryMixin):
         self.max_text_for_llm = int(config.get("max_text_for_llm", 8000))  # Chars
 
         self._init_violation_patterns()
+        self.violation_classifier = self._get_service("violation_classifier")
+        if self.violation_classifier is None:
+            try:
+                from ..services.violation_classifier import ViolationClassifier
+
+                self.violation_classifier = ViolationClassifier()
+            except Exception as e:  # pragma: no cover - classifier optional
+                self.logger.warning(
+                    "ViolationClassifier unavailable", parameters={"error": str(e)}
+                )
+                self.violation_classifier = None
 
         self.logger.info(
             f"{self.name} initialized.",
@@ -251,16 +262,29 @@ class ViolationDetectorAgent(BaseAgent, MemoryMixin):
         violations: List[DetectedViolation] = []
         model_used: Optional[str] = None
 
-        # 1. Pattern-based detection
-        for violation_type_label, regex_patterns in self.all_violation_pattern_groups:
-            pattern_matches = self._find_matches_for_patterns(
-                text, regex_patterns, violation_type_label
+        # 1. ML-based classification
+        if self.violation_classifier:
+            classified = self.violation_classifier.detect_violations(
+                text, threshold=self.min_pattern_confidence
             )
-            violations.extend(pattern_matches)
-
-        self.logger.info(
-            f"Pattern matching found {len(violations)} potential violations for doc '{doc_id}'."
-        )
+            for span in classified:
+                violations.append(
+                    DetectedViolation(
+                        violation_type=span.violation_type,
+                        description=span.text,
+                        context=span.text,
+                        confidence=span.probability,
+                        severity=self._assess_violation_severity(span.violation_type, span.text),
+                        start_pos=span.start,
+                        end_pos=span.end,
+                        detected_by="ml_classifier",
+                    )
+                )
+            self.logger.info(
+                f"Classifier found {len(classified)} potential violations for doc '{doc_id}'."
+            )
+        else:
+            self.logger.warning("ViolationClassifier unavailable - skipping ML detection")
 
         # 2. LLM-based analysis (validation and new detection)
         if self.enable_llm_analysis and self.llm_manager:
