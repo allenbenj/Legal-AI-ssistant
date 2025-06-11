@@ -858,7 +858,6 @@ class VectorStore:
 
     def _save_faiss_indexes_sync(self):
 
-
     # --- FAISS ID Mapping Helpers ---
     def _get_next_faiss_id_sync(self, index_target: str) -> int:
         mapping = (
@@ -881,10 +880,9 @@ class VectorStore:
             if index_target.lower() == "document"
             else self.faissid_to_vectorid_entity
         )
-        mapping_v2f[vector_id] = faiss_id
-        mapping_f2v[faiss_id] = vector_id
 
     def _delete_id_mapping_sync(self, vector_id: str) -> None:
+
         if vector_id in self.vectorid_to_faissid_doc:
             fid = self.vectorid_to_faissid_doc.pop(vector_id)
             self.faissid_to_vectorid_doc.pop(fid, None)
@@ -1493,6 +1491,7 @@ class VectorStore:
             # Persist to DB
             await self.metadata_repo.update_metadata_fields(vector_id, metadata_updates)
             vector_store_logger.info(f"Metadata updated for vector_id '{vector_id}'.")
+
 
 
     @detailed_log_function(LogCategory.VECTOR_STORE)
