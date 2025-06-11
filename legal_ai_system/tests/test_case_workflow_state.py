@@ -1,7 +1,7 @@
 import asyncio
 from dataclasses import dataclass, field
 from types import ModuleType, SimpleNamespace
-from typing import List
+from typing import List, Any
 
 import pytest
 import sys
@@ -22,9 +22,19 @@ for name in [
     "sklearn",
     "sklearn.metrics",
     "sklearn.metrics.pairwise",
+    "aiofiles",
+    "aiofiles.os",
+    "prometheus_client",
 ]:
     if name not in sys.modules:
         sys.modules[name] = ModuleType(name)
+
+if "prometheus_client" in sys.modules:
+    pc = sys.modules["prometheus_client"]
+    pc.Counter = lambda *a, **k: None
+    pc.Histogram = lambda *a, **k: None
+    pc.Gauge = lambda *a, **k: None
+    pc.start_http_server = lambda *a, **k: None
 
 class _RedisError(Exception):
     pass
@@ -114,6 +124,11 @@ orc_mod = pytest.importorskip("legal_ai_system.services.workflow_orchestrator")
 OrchestratorClass = orc_mod.WorkflowOrchestrator
 
 
+class DummyContainer:
+    def __init__(self) -> None:
+        self._services = {}
+
+
 class DummyWorkflow:
     """Minimal workflow returning a generated document id."""
     def __init__(self, *a, **k) -> None:
@@ -129,10 +144,10 @@ class DummyWorkflow:
 
 class DummyGraph:
     def __init__(self) -> None:
-        self.inputs: List[str] = []
+        self.inputs: List[Any] = []
 
-    def run(self, text: str) -> None:
-        self.inputs.append(text)
+    def run(self, state: Any) -> None:
+        self.inputs.append(state)
 
 
 def test_case_workflow_state_basic_operations():
@@ -156,7 +171,7 @@ async def test_workflow_orchestrator_state_persistence(tmp_path, monkeypatch):
     monkeypatch.setattr(orc_mod, "build_graph", lambda topic: graph)
     monkeypatch.setattr(orc_mod, "extract_text", lambda p: p.read_text())
 
-    orch = OrchestratorClass(service_container=None)
+    orch = OrchestratorClass(service_container=DummyContainer())
     state = CaseWorkflowState(case_id="case")
 
     await orch.execute_workflow_instance(str(file1), case_state=state)
@@ -164,4 +179,4 @@ async def test_workflow_orchestrator_state_persistence(tmp_path, monkeypatch):
 
     assert state.documents and len(state.documents) == 2
     assert state.get_case_context() == "one\ntwo"
-    assert graph.inputs == ["one", "one\ntwo"]
+    assert graph.inputs == [state, state]

@@ -149,7 +149,7 @@ class WorkflowOrchestrator:
             text = extract_text(Path(document_path_str))
             if case_state is not None:
                 case_state.process_new_document(result.document_id, text)
-                graph_input = case_state.get_case_context()
+                graph_input = case_state
             else:
                 graph_input = text
 
