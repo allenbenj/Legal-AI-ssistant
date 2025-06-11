@@ -1,0 +1,33 @@
+@startuml
+actor App
+participant Container
+participant Config
+participant Persistence
+participant Security
+participant LLM
+participant Embed
+participant Graph
+participant Vector
+participant RTGraph
+participant Memory
+participant Review
+participant Violations
+participant Workflow
+participant Orchestrator
+
+App -> Container: create_service_container()
+Container -> Config: create
+Container -> Persistence: create
+Container -> Security: create
+Container -> LLM: create
+Container -> Embed: create
+Container -> Graph: create
+Container -> Vector: create
+Container -> RTGraph: create
+Container -> Memory: create
+Container -> Review: create
+Container -> Violations: create
+Container -> Workflow: create
+Container -> Orchestrator: create
+Container --> App: initialized
+@enduml
