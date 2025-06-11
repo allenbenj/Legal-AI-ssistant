@@ -17,6 +17,7 @@ def clear_cache(tmp_path, monkeypatch):
     cache_dir = tmp_path / "cache"
     monkeypatch.setenv("OCR_CACHE_DIR", str(cache_dir))
     from importlib import reload
+
     reload(ocr_cache)
     yield
     if cache_dir.exists():
@@ -31,7 +32,10 @@ def _create_image(path: Path, color=(255, 255, 255)) -> None:
 
 
 @pytest.mark.unit
-@pytest.mark.skipif(Image is None, reason="Pillow not available")
+@pytest.mark.skipif(
+    Image is None or ocr_cache._cache is None,
+    reason="Pillow or diskcache not available",
+)
 def test_ocr_cache_roundtrip(tmp_path):
     img_path = tmp_path / "img.png"
     _create_image(img_path)
@@ -57,5 +61,3 @@ def test_compute_file_hash_changes(tmp_path):
     f.write_text("two")
     h2 = ocr_cache.compute_file_hash(f)
     assert h1 != h2
-
-

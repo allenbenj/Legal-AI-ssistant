@@ -91,6 +91,26 @@ class DocumentChunker:
         return [text[i : i + self.chunk_size] for i in range(0, len(text), step)]
 
 
+class AdaptiveDocumentChunker(DocumentChunker):
+    """Chunker that adjusts chunk size based on document structure."""
+
+    def learn_chunk_size(self, text: str) -> int:
+        """Update ``self.chunk_size`` based on *text* characteristics."""
+        paragraphs = [p.strip() for p in text.splitlines() if p.strip()]
+        if not paragraphs:
+            return self.chunk_size
+        avg_len = sum(len(p) for p in paragraphs) / len(paragraphs)
+        new_size = int(min(max(avg_len * 3, 1000), 6000))
+        self.chunk_size = new_size
+        return new_size
+
+    def chunk_text(self, text: str) -> List[str]:
+        if not text:
+            return []
+        self.learn_chunk_size(text)
+        return super().chunk_text(text)
+
+
 class LegalDocumentClassifier:
     """Very lightweight keyword based classifier for legal documents."""
 
@@ -124,5 +144,6 @@ __all__ = [
     "extract_text",
     "extract_text_async",
     "DocumentChunker",
+    "AdaptiveDocumentChunker",
     "LegalDocumentClassifier",
 ]
