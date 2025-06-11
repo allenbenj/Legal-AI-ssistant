@@ -1501,6 +1501,27 @@ class VectorStore:
     async def _get_metadata_by_faiss_internal_id_async(
         self, faiss_id: int, index_target: str
     ) -> Optional[VectorMetadata]:
+        """Resolve metadata for a FAISS internal ID."""
+        vs_cache_logger.debug(
+            f"Resolving vector_id for FAISS id '{faiss_id}' in '{index_target}' index."
+        )
+
+        vector_id = await self._get_vector_id_by_faiss_id_async(
+            faiss_id, index_target
+        )
+        if not vector_id:
+            vs_cache_logger.debug(
+                f"No vector_id mapping for FAISS id '{faiss_id}' in '{index_target}' index."
+            )
+            return None
+
+        metadata = await self._get_metadata_async_from_db_or_cache(vector_id)
+        if not metadata:
+            vs_cache_logger.debug(
+                f"Metadata not found for vector_id '{vector_id}' mapped from FAISS id '{faiss_id}'."
+            )
+        return metadata
+
     def _get_metadata_from_db_sync(self, vector_id: str) -> Optional[Dict[str, Any]]:
         """Synchronously fetches a single metadata record from SQLite."""
         try:

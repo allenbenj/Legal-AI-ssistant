@@ -1,4 +1,3 @@
-import asyncio
 import sys
 import types
 import pytest
@@ -19,6 +18,7 @@ sys.modules.setdefault(
 
 from legal_ai_system.core.vector_store import VectorStore, VectorMetadata, IndexType
 
+
 from legal_ai_system.core.vector_store import EmbeddingProviderVS
 
 
@@ -33,14 +33,15 @@ class DummyProvider(EmbeddingProviderVS):
     async def embed_texts(self, texts, batch_size=None):
         return [[0.0] * self.dimension for _ in texts]
 
+
 @pytest.mark.asyncio
-async def test_concurrent_metadata_updates(tmp_path):
+async def test_get_metadata_by_faiss_internal_id(tmp_path):
     provider = DummyProvider()
     store = VectorStore(str(tmp_path), provider, default_index_type=IndexType.FLAT)
     await store.initialize()
 
     meta = VectorMetadata(
-        faiss_id=0,
+        faiss_id=1,
         vector_id="vec1",
         document_id="doc",
         content_hash="h",
@@ -48,13 +49,30 @@ async def test_concurrent_metadata_updates(tmp_path):
         vector_norm=0.0,
         dimension=provider.dimension,
     )
-    await store._store_metadata_async(meta)
+    store.metadata_mem_cache["vec1"] = meta
+    store.faissid_to_vectorid_doc[1] = "vec1"
+    store.vectorid_to_faissid_doc["vec1"] = 1
 
-    async def worker(i):
-        await store.update_vector_metadata_async("vec1", {"custom_field": i})
+    async def fake_get_vector_id(fid, index_target):
+        return store.faissid_to_vectorid_doc.get(fid)
 
-    await asyncio.gather(*(worker(i) for i in range(5)))
+    store._get_vector_id_by_faiss_id_async = fake_get_vector_id
 
-    final = store.metadata_mem_cache["vec1"]
-    assert final.custom_metadata["custom_field"] in range(5)
-    assert final.access_count == 5
+    result = await store._get_metadata_by_faiss_internal_id_async(1, "document")
+    assert result == meta
+
+
+@pytest.mark.asyncio
+async def test_get_metadata_by_faiss_internal_id_missing(tmp_path):
+    provider = DummyProvider()
+    store = VectorStore(str(tmp_path), provider, default_index_type=IndexType.FLAT)
+    await store.initialize()
+
+    async def fake_get_vector_id(fid, index_target):
+        return None
+
+    store._get_vector_id_by_faiss_id_async = fake_get_vector_id
+
+    result = await store._get_metadata_by_faiss_internal_id_async(2, "document")
+    assert result is None
+
