@@ -4,17 +4,17 @@
 # Ensures all required system components are properly initialized before use.
 
 
-import sys
-import sqlite3
 import logging  # Using standard logging for basic setup
-from pathlib import Path
-from typing import Dict, Any, List, Callable
+import sqlite3
+import sys
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Callable, Dict, List
 
 from ..core.detailed_logging import (
-    get_detailed_logger,
     LogCategory,
     detailed_log_function,
+    get_detailed_logger,
 )
 
 # Determine project root dynamically - legal_ai_system/
@@ -373,14 +373,7 @@ def _create_ml_optimizer_db_schema(db_path: Path):
         );
         CREATE INDEX IF NOT EXISTS idx_opt_cache_expires ON optimization_cache(expires_at);
 
-        CREATE TABLE IF NOT EXISTS step_performance_records (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            document_path TEXT NOT NULL,
-            step_name TEXT NOT NULL,
-            metrics_json TEXT NOT NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-        CREATE INDEX IF NOT EXISTS idx_step_perf ON step_performance_records(document_path, step_name);
+
     """
     _execute_schema(db_path, schema)
 

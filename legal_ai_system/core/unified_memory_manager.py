@@ -9,32 +9,32 @@ and context window management.
 """
 
 import asyncio
+import hashlib
 import json
 import sqlite3
 import threading
 import uuid
 from collections import defaultdict
-from pathlib import Path
-from typing import Dict, List, Optional, Any
-from datetime import datetime, timezone
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from enum import Enum
-import hashlib
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+# Import constants if needed, e.g., for max_context_tokens default
+from ..core.constants import Constants
 
 # Use detailed_logging
 from ..core.detailed_logging import (
-    get_detailed_logger,
     LogCategory,
     detailed_log_function,
+    get_detailed_logger,
 )
 
 # Import exceptions
 from ..core.unified_exceptions import MemoryManagerError
-
-# Import constants if needed, e.g., for max_context_tokens default
-from ..core.constants import Constants
 from .config_models import UnifiedMemoryManagerConfig
-
+from .ml_optimizer import MLOptimizer
 
 # Initialize loggers for this module and its sub-components
 umm_logger = get_detailed_logger("UnifiedMemoryManager", LogCategory.DATABASE)
@@ -99,12 +99,31 @@ class UnifiedMemoryManager:
 
         self.max_context_tokens = max_context_tokens_config
 
+        self.ml_optimizer: Optional["MLOptimizer"] = None
+
         self._lock = threading.RLock()  # Thread safety for DB operations
         self._initialized = False
 
         # Performance tracking (basic)
         self._operation_counts: Dict[str, int] = defaultdict(int)
         self._last_operation_time: Optional[datetime] = None
+
+    def set_ml_optimizer(self, optimizer: MLOptimizer) -> None:
+        """Attach an :class:`MLOptimizer` for analytics."""
+        self.ml_optimizer = optimizer
+
+    async def adjust_context_limit(self) -> None:
+        """Adjust max_context_tokens based on ML optimizer prediction."""
+        if self.ml_optimizer:
+            new_limit = self.ml_optimizer.predict_optimal_context_tokens(
+                self.max_context_tokens
+            )
+            if new_limit != self.max_context_tokens:
+                self.max_context_tokens = new_limit
+                umm_logger.info(
+                    "Context limit adjusted",
+                    parameters={"max_context_tokens": self.max_context_tokens},
+                )
 
     @detailed_log_function(LogCategory.DATABASE)
     async def initialize(self):
@@ -357,8 +376,7 @@ class UnifiedMemoryManager:
         def _retrieve_sync():
             with self._lock, self._get_db_connection() as conn:
                 conn.row_factory = sqlite3.Row
-                cursor = conn.execute(
-                )
+                cursor = conn.execute()
                 row = cursor.fetchone()
                 if row:
                     return MemoryEntry(
@@ -814,7 +832,11 @@ class UnifiedMemoryManager:
                             key=row_dict["entry_type"],
                             value=json.loads(row_dict["content"]),
                             session_id=row_dict["session_id"],
-                            metadata=json.loads(row_dict["metadata"]) if row_dict["metadata"] else {},
+                            metadata=(
+                                json.loads(row_dict["metadata"])
+                                if row_dict["metadata"]
+                                else {}
+                            ),
                             created_at=datetime.fromisoformat(row_dict["created_at"]),
                             updated_at=datetime.fromisoformat(row_dict["created_at"]),
                             importance_score=row_dict["importance_score"],
@@ -823,17 +845,21 @@ class UnifiedMemoryManager:
                         current_tokens += entry_tokens
                     else:
                         break
-            return entries
+            return entries, current_tokens
 
         try:
-            retrieved_entries = await asyncio.get_event_loop().run_in_executor(
-                None, _get_sync
+            result_entries, token_total = (
+                await asyncio.get_event_loop().run_in_executor(None, _get_sync)
             )
-            retrieved_entries.sort(key=lambda x: x.created_at)
+            result_entries.sort(key=lambda x: x.created_at)
             context_mem_logger.debug(
-                f"Retrieved {len(retrieved_entries)} entries for context window."
+                f"Retrieved {len(result_entries)} entries for context window.",
+                parameters={"tokens": token_total},
             )
-            return retrieved_entries
+            if self.ml_optimizer:
+                self.ml_optimizer.record_token_usage(session_id, token_total)
+                await self.adjust_context_limit()
+            return result_entries
         except Exception as e:
             context_mem_logger.error("Failed to get context window.", exception=e)
             raise MemoryManagerError("Failed to get context window.", cause=e)
@@ -905,12 +931,42 @@ class UnifiedMemoryManager:
                         "No pruning needed for context window.",
                         parameters={"session": session_id},
                     )
+            return current_token_sum
 
         try:
-            await asyncio.get_event_loop().run_in_executor(None, _prune_sync)
+            token_sum = await asyncio.get_event_loop().run_in_executor(
+                None, _prune_sync
+            )
+            if self.ml_optimizer:
+                self.ml_optimizer.record_token_usage(session_id, token_sum)
+                await self.adjust_context_limit()
         except Exception as e:
             context_mem_logger.error("Failed to prune context window.", exception=e)
             raise MemoryManagerError("Failed to prune context window.", cause=e)
+
+    async def record_memory_feedback(self, entry_id: str, helpful: bool) -> None:
+        """Update importance score based on feedback."""
+        multiplier = 1.1 if helpful else 0.9
+
+        def _update_sync():
+            with self._lock, self._get_db_connection() as conn:
+                cursor = conn.execute(
+                    "SELECT importance_score FROM context_window_entries WHERE entry_id = ?",
+                    (entry_id,),
+                )
+                row = cursor.fetchone()
+                if row:
+                    new_score = max(0.0, min(1.0, row[0] * multiplier))
+                    conn.execute(
+                        "UPDATE context_window_entries SET importance_score = ?, updated_at = ? WHERE entry_id = ?",
+                        (new_score, datetime.now(timezone.utc).isoformat(), entry_id),
+                    )
+                    conn.commit()
+
+        try:
+            await asyncio.get_event_loop().run_in_executor(None, _update_sync)
+        except Exception as e:
+            context_mem_logger.error("Failed to record memory feedback", exception=e)
 
     # --- Agent Decisions Log ---
     @detailed_log_function(LogCategory.DATABASE)
@@ -1314,11 +1370,15 @@ class UnifiedMemoryManager:
 # Factory for service container
 def create_unified_memory_manager(
     service_config: Optional[UnifiedMemoryManagerConfig] = None,
+    ml_optimizer: Optional[MLOptimizer] = None,
 ) -> UnifiedMemoryManager:
     cfg = service_config or UnifiedMemoryManagerConfig()
 
-    return UnifiedMemoryManager(
+    umm = UnifiedMemoryManager(
         db_path_str=str(cfg.db_path),
         max_context_tokens_config=int(cfg.max_context_tokens),
         service_config=cfg,
     )
+    if ml_optimizer:
+        umm.set_ml_optimizer(ml_optimizer)
+    return umm

@@ -48,18 +48,20 @@ except ImportError:
 
     np = FakeNumPy()
     HAS_NUMPY = False
-from typing import Dict, List, Any, Optional, Tuple
-from dataclasses import dataclass, asdict
-from datetime import datetime, timedelta
-from collections import deque, defaultdict
-from enum import Enum
+import hashlib
 import sqlite3
 import threading
-import hashlib
+from collections import defaultdict, deque
+from dataclasses import asdict, dataclass
+from datetime import datetime, timedelta
+from enum import Enum
+from typing import Any, Dict, List, Optional, Tuple
+
+from .config_models import MLOptimizerConfig
+from .constants import Constants
 
 # Import detailed logging
-from .detailed_logging import get_detailed_logger, LogCategory, detailed_log_function
-from .config_models import MLOptimizerConfig
+from .detailed_logging import LogCategory, detailed_log_function, get_detailed_logger
 
 # Initialize loggers
 ml_logger = get_detailed_logger("ML_Optimizer", LogCategory.SYSTEM)
@@ -190,14 +192,6 @@ class OptimizationResult:
 
 
 @dataclass
-class ThresholdModel:
-    """Model-derived confidence thresholds."""
-
-    auto_approve_threshold: float
-    review_threshold: float
-    reject_threshold: float
-    updated_at: str
-
 
 class MLOptimizer:
     """
@@ -233,9 +227,6 @@ class MLOptimizer:
         self.performance_history: deque = deque(maxlen=10000)
         self.document_features_cache: Dict[str, DocumentFeatures] = {}
         self.optimization_cache: Dict[str, OptimizationResult] = {}
-        self.feedback_history: deque = deque(maxlen=10000)
-        self.threshold_model: Optional[ThresholdModel] = None
-
         # Analysis settings
         self.min_samples_for_optimization = self.config.min_samples
         self.similarity_threshold = self.config.similarity_threshold
@@ -243,7 +234,6 @@ class MLOptimizer:
 
         # Load recent performance data
         self._load_recent_performance()
-        self._load_recent_feedback()
 
         # Threading
         self._lock = threading.RLock()
@@ -255,6 +245,7 @@ class MLOptimizer:
                 "min_samples": self.min_samples_for_optimization,
                 "similarity_threshold": self.similarity_threshold,
                 "performance_history_size": len(self.performance_history),
+                "token_usage_records": len(self.token_usage_history),
             },
         )
 
@@ -293,7 +284,7 @@ class MLOptimizer:
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     expires_at DATETIME NOT NULL
                 );
-                
+
                 CREATE INDEX IF NOT EXISTS idx_cache_key ON optimization_cache(cache_key);
                 CREATE INDEX IF NOT EXISTS idx_cache_expires ON optimization_cache(expires_at);
 
@@ -339,39 +330,16 @@ class MLOptimizer:
             ml_logger.error("Failed to load recent performance data", exception=e)
 
     @detailed_log_function(LogCategory.SYSTEM)
-    def _load_recent_feedback(self):
-        """Load recent review feedback for threshold optimization."""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.execute(
                     """
-                    SELECT item_id, item_type, original_confidence, review_decision,
-                           confidence_adjustment, notes, user_id, created_at
-                    FROM feedback_records
-                    WHERE created_at > datetime('now', '-30 days')
                     ORDER BY created_at DESC
                     LIMIT 5000
                 """
                 )
 
                 for row in cursor.fetchall():
-                    record = {
-                        "item_id": row[0],
-                        "item_type": row[1],
-                        "original_confidence": row[2],
-                        "review_decision": row[3],
-                        "confidence_adjustment": row[4],
-                        "notes": row[5],
-                        "user_id": row[6],
-                        "timestamp": datetime.fromisoformat(row[7]),
-                    }
-                    self.feedback_history.append(record)
-
-            ml_logger.info(
-                f"Loaded {len(self.feedback_history)} recent feedback records"
-            )
-        except Exception as e:
-            ml_logger.error("Failed to load recent feedback data", exception=e)
 
     @detailed_log_function(LogCategory.PERFORMANCE)
     def record_performance(
@@ -522,6 +490,28 @@ class MLOptimizer:
             self.feedback_history.append(record)
         except Exception as e:
             ml_logger.error("Failed to record review feedback", exception=e)
+
+    @detailed_log_function(LogCategory.SYSTEM)
+    def record_token_usage(self, session_id: str, tokens_used: int) -> None:
+        """Record token usage for a session."""
+        try:
+            with self._lock, sqlite3.connect(self.db_path) as conn:
+                conn.execute(
+                    "INSERT INTO session_token_usage (session_id, tokens_used) VALUES (?, ?)",
+                    (session_id, tokens_used),
+                )
+                conn.commit()
+
+            self.token_usage_history.append(
+                TokenUsageRecord(
+                    session_id=session_id,
+                    tokens_used=tokens_used,
+                    timestamp=datetime.now(),
+                )
+            )
+
+        except Exception as e:
+            ml_logger.error("Failed to record token usage", exception=e)
 
     @detailed_log_function(LogCategory.SYSTEM)
     async def get_optimal_parameters(
@@ -835,6 +825,24 @@ class MLOptimizer:
             optimization_reason="Default parameters - insufficient training data",
             based_on_samples=0,
         )
+
+    @detailed_log_function(LogCategory.SYSTEM)
+    def predict_optimal_context_tokens(
+        self, default: int = Constants.Size.MAX_CONTEXT_TOKENS
+    ) -> int:
+        """Predict an optimal max_context_tokens value based on usage history."""
+        try:
+            tokens = [record.tokens_used for record in self.token_usage_history]
+            if not tokens:
+                return default
+
+            tokens.sort()
+            index = max(0, int(0.9 * len(tokens)) - 1)
+            predicted = int(tokens[index] * 1.1)
+            return min(predicted, Constants.Size.MAX_CONTEXT_TOKENS)
+        except Exception as e:
+            ml_logger.error("Failed to predict context tokens", exception=e)
+            return default
 
     @detailed_log_function(LogCategory.SYSTEM)
     def get_optimization_statistics(self) -> Dict[str, Any]:
