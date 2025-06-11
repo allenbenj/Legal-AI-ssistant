@@ -374,6 +374,9 @@ class VectorStore:
         self.metadata_mem_cache: LRUCache[str, VectorMetadata] = LRUCache(
             maxsize=cache_size
         )
+        self.metadata_repo: Optional[VectorMetadataRepository] = self.config.get(
+            "metadata_repository"
+        )
 
         self.vectorid_to_faissid_doc: Dict[str, int] = {}
         self.vectorid_to_faissid_entity: Dict[str, int] = {}
@@ -747,26 +750,7 @@ class VectorStore:
                     # _initialize_faiss_indexes_sync updates instance attributes in-place
                     self._initialize_faiss_indexes_sync()
 
-            vs_cache_logger.error("SQLite error loading metadata cache.", exception=e)
-        except Exception as e:
-            vs_cache_logger.error(
-                "Unexpected error loading metadata cache.", exception=e, exc_info=True
-            )
-
-                )
-        self.metadata_mem_cache = new_cache
-        vs_cache_logger.info(
-            "Metadata memory cache loaded.",
-            parameters={"cached_items": len(self.metadata_mem_cache)},
-        )
-
-            return
-        vs_index_logger.info("Starting background optimization task manager.")
-        self._stop_background_tasks_event.clear()
-        self._optimization_task_internal = asyncio.create_task(
-            self._optimization_worker_async()
-        )
-
+        
     async def _optimization_worker_async(self):
         vs_index_logger.info("Async optimization worker task started.")
         while not self._stop_background_tasks_event.is_set():
@@ -804,6 +788,17 @@ class VectorStore:
                 )
                 await asyncio.sleep(30)  # Wait before retrying queue get after error
         vs_index_logger.info("Async optimization worker task stopped.")
+
+    def _start_background_optimization_task(self) -> None:
+        """Launch optimization worker if not already running."""
+        if self._optimization_task_internal and not self._optimization_task_internal.done():
+            vs_index_logger.warning("Background optimization task already running.")
+            return
+        vs_index_logger.info("Starting background optimization task manager.")
+        self._stop_background_tasks_event.clear()
+        self._optimization_task_internal = asyncio.create_task(
+            self._optimization_worker_async()
+        )
 
     def _start_periodic_save_task(self):
         if (
@@ -856,6 +851,117 @@ class VectorStore:
                 await loop.run_in_executor(None, self._save_faiss_indexes_sync)
             finally:
                 vs_index_logger.debug("Released lock after saving FAISS indexes.")
+
+    async def _initialize_metadata_storage_async(self) -> None:
+        """Ensure metadata storage is ready."""
+        if self.metadata_repo:
+            await self.metadata_repo.initialize()
+            return
+
+        self.metadata_db_path.parent.mkdir(parents=True, exist_ok=True)
+
+        def _init_db():
+            with sqlite3.connect(self.metadata_db_path) as conn:
+                conn.executescript(
+                    """
+                    CREATE TABLE IF NOT EXISTS vector_metadata (
+                        faiss_id INTEGER,
+                        vector_id TEXT PRIMARY KEY,
+                        document_id TEXT NOT NULL,
+                        content_hash TEXT NOT NULL,
+                        content_preview TEXT,
+                        vector_norm REAL,
+                        dimension INTEGER,
+                        created_at_iso TEXT,
+                        last_accessed_iso TEXT,
+                        access_count INTEGER DEFAULT 0,
+                        source_file TEXT,
+                        document_type TEXT,
+                        tags TEXT,
+                        confidence_score REAL DEFAULT 1.0,
+                        embedding_model TEXT,
+                        custom_metadata JSON
+                    );
+                    CREATE TABLE IF NOT EXISTS faiss_id_map (
+                        vector_id TEXT PRIMARY KEY,
+                        index_target TEXT NOT NULL,
+                        faiss_id INTEGER NOT NULL
+                    );
+                    """
+                )
+                conn.commit()
+
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, _init_db)
+
+    # --- Cache Loading Helpers ---
+    def _load_metadata_mem_cache_sync(self) -> None:
+        """Load metadata records from local SQLite into memory cache."""
+        if not self.metadata_db_path.exists():
+            return
+        try:
+            with sqlite3.connect(self.metadata_db_path, timeout=5) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.execute(
+                    "SELECT * FROM vector_metadata ORDER BY last_accessed_iso DESC"
+                )
+                rows = cursor.fetchall()
+                for row in rows:
+                    meta = VectorMetadata.from_row_dict(dict(row))
+                    self.metadata_mem_cache[meta.vector_id] = meta
+                    idx_target = (
+                        "entity" if meta.vector_id.startswith("vec_ent") or meta.vector_id.startswith("kg_entity") else "document"
+                    )
+                    self._store_id_mapping_sync(meta.vector_id, meta.faiss_id, idx_target)
+        except sqlite3.Error as e:
+            vs_cache_logger.error("SQLite error loading metadata cache.", exception=e)
+
+    async def _load_metadata_mem_cache_async(self) -> None:
+        """Load metadata cache from repository if configured."""
+        if not self.metadata_repo:
+            return
+        try:
+            rows = await self.metadata_repo.load_metadata_cache(
+                self.config.get("metadata_memory_cache_size", 10000)
+            )
+            for row in rows:
+                meta = VectorMetadata.from_row_dict(row)
+                self.metadata_mem_cache[meta.vector_id] = meta
+                self._store_id_mapping_sync(meta.vector_id, meta.faiss_id, row.get("index_target", "document"))
+            vs_cache_logger.info(
+                "Metadata memory cache loaded.", parameters={"cached_items": len(rows)}
+            )
+        except Exception as e:
+            vs_cache_logger.error("Failed loading metadata cache from repository", exception=e)
+
+    def _load_id_mapping_cache_sync(self) -> None:
+        """Load FAISS ID mappings from SQLite."""
+        if not self.metadata_db_path.exists():
+            return
+        try:
+            with sqlite3.connect(self.metadata_db_path, timeout=5) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.execute(
+                    "SELECT vector_id, index_target, faiss_id FROM faiss_id_map"
+                )
+                for row in cursor.fetchall():
+                    self._store_id_mapping_sync(row["vector_id"], int(row["faiss_id"]), row["index_target"])
+        except sqlite3.Error as e:
+            vs_cache_logger.error("SQLite error loading id mapping cache.", exception=e)
+
+    async def _load_id_mapping_cache_async(self) -> None:
+        """Load FAISS ID mappings from repository if available."""
+        if not self.metadata_repo:
+            return
+        try:
+            rows = await self.metadata_repo.load_id_mapping_cache()
+            for row in rows:
+                self._store_id_mapping_sync(row["vector_id"], int(row["faiss_id"]), row["index_target"])
+            vs_cache_logger.info(
+                "ID mapping cache loaded.", parameters={"mapped": len(rows)}
+            )
+        except Exception as e:
+            vs_cache_logger.error("Failed loading id mapping cache from repository", exception=e)
 
     def _save_faiss_indexes_sync(self):
         doc_idx_path = self.document_index_path
@@ -939,12 +1045,7 @@ class VectorStore:
             if index_target.lower() == "document"
             else self.vectorid_to_faissid_entity
         )
-        if vector_id in mapping:
-            return mapping[vector_id]
-            )
-            reverse_map[faiss_id] = vector_id
-            return faiss_id
-        return None
+        return mapping.get(vector_id)
 
     def _get_vector_id_by_faiss_id_sync(
         self, faiss_id: int, index_target: str
@@ -956,7 +1057,7 @@ class VectorStore:
         )
         if faiss_id in reverse_map:
             return reverse_map[faiss_id]
-        try:
+        return None
 
     async def _delete_id_mapping_async(self, vector_id: str) -> None:
         self._delete_id_mapping_sync(vector_id)
@@ -988,10 +1089,17 @@ class VectorStore:
         vs_cache_logger.debug(
             f"Metadata cache miss for vector_id '{vector_id}'. Fetching from DB."
         )
-        loop = asyncio.get_event_loop()
-        row_dict = await loop.run_in_executor(
-            None, self._get_metadata_from_db_sync, vector_id
-        )
+        row_dict = None
+        if self.metadata_repo:
+            try:
+                row_dict = await self.metadata_repo.get_metadata(vector_id)
+            except Exception as e:
+                vs_cache_logger.error("Failed to fetch metadata from repository", exception=e)
+        if row_dict is None:
+            loop = asyncio.get_event_loop()
+            row_dict = await loop.run_in_executor(
+                None, self._get_metadata_from_db_sync, vector_id
+            )
         if row_dict:
             metadata = VectorMetadata.from_row_dict(row_dict)
             self.metadata_mem_cache[vector_id] = metadata
@@ -1430,7 +1538,12 @@ class VectorStore:
     async def _get_metadata_by_faiss_internal_id_async(
         self, faiss_id: int, index_target: str
     ) -> Optional[VectorMetadata]:
-
+        """Retrieve metadata using faiss_id mapping via cache and repository."""
+        vector_id = await self._get_vector_id_by_faiss_id_async(faiss_id, index_target)
+        if not vector_id:
+            return None
+        metadata = await self._get_metadata_async_from_db_or_cache(vector_id)
+        return metadata
     def _get_metadata_from_db_sync(self, vector_id: str) -> Optional[Dict[str, Any]]:
         """Synchronously fetches a single metadata record from SQLite."""
         try:
@@ -1537,7 +1650,18 @@ class VectorStore:
     @detailed_log_function(LogCategory.VECTOR_STORE)
     async def delete_vector_async(self, vector_id: str, index_target: str = "document"):
         async with self._async_lock:
-
+            faiss_id = await self._get_faiss_id_for_vector_id_async(vector_id, index_target)
+            if faiss_id is not None:
+                target_index = (
+                    self.document_index if index_target.lower() == "document" else self.entity_index
+                )
+                if target_index and faiss_id < target_index.ntotal:
+                    try:
+                        target_index.remove_ids(np.array([faiss_id], dtype="int64"))
+                    except Exception as e:
+                        vs_index_logger.error("Failed removing vector from index", exception=e)
+                await self._delete_id_mapping_async(vector_id)
+            await self._delete_metadata_async(vector_id)
 
     async def _delete_metadata_async(self, vector_id: str) -> None:
         async with self.metadata_lock:

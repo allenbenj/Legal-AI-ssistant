@@ -113,6 +113,17 @@ class VectorMetadataRepository:
             )
             return [dict(r) for r in rows]
 
+    async def get_metadata(self, vector_id: str) -> Optional[Dict[str, Any]]:
+        """Fetch a single metadata record by vector_id."""
+        if not self.pool:
+            return None
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM vector_metadata WHERE vector_id=$1",
+                vector_id,
+            )
+            return dict(row) if row else None
+
     async def find_by_content_hash(self, content_hash: str) -> Optional[str]:
         if not self.pool:
             return None
