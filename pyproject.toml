@@ -32,6 +32,7 @@ transformers = "^4.30.0"
 torch = "^2.0.0"
 spacy = "^3.6.0"
 flair = "^0.15.1"
+scikit-learn = "^1.4.0"
 
 # Vector Stores and Databases
 faiss-cpu = "^1.7.0"
