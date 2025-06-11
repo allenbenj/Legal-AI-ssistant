@@ -297,18 +297,6 @@ class MLOptimizer:
                 CREATE INDEX IF NOT EXISTS idx_cache_key ON optimization_cache(cache_key);
                 CREATE INDEX IF NOT EXISTS idx_cache_expires ON optimization_cache(expires_at);
 
-                CREATE TABLE IF NOT EXISTS feedback_records (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    item_id TEXT NOT NULL,
-                    item_type TEXT NOT NULL,
-                    original_confidence REAL,
-                    review_decision TEXT NOT NULL,
-                    confidence_adjustment REAL,
-                    notes TEXT,
-                    user_id TEXT,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                );
-                CREATE INDEX IF NOT EXISTS idx_feedback_created ON feedback_records(created_at);
             """
             )
 
@@ -466,6 +454,28 @@ class MLOptimizer:
             performance_logger.error(
                 f"Failed to record performance for {document_path}", exception=e
             )
+
+    @detailed_log_function(LogCategory.PERFORMANCE)
+    def record_step_metrics(
+        self, document_path: str, step_name: str, metrics: PerformanceMetrics
+    ) -> None:
+        """Record metrics for individual workflow steps."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute(
+                    """
+                    INSERT INTO step_performance_records
+                    (document_path, step_name, metrics_json)
+                    VALUES (?, ?, ?)
+                """,
+                    (
+                        document_path,
+                        step_name,
+                        json.dumps(asdict(metrics)),
+                    ),
+                )
+        except Exception as exc:  # pragma: no cover - best effort
+            performance_logger.error("Failed to record step metrics", exception=exc)
 
     @detailed_log_function(LogCategory.SYSTEM)
     def record_review_feedback(

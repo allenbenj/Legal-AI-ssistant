@@ -71,3 +71,4 @@ PyYAML>=6.0
 # time
 # typing
 # uuid
+scikit-learn>=1.4.0
