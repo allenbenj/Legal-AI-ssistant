@@ -1,3 +1,9 @@
+# Legacy Violation Review Agent
+
+The following Python module was archived from the project to simplify the database interface.
+It originally lived at `legal_ai_system/agents/violation_review.py`.
+
+```python
 # legal_ai_system/agents/violation_review.py
 """SQLite-based Violation Review management.
 
@@ -184,3 +190,4 @@ class ViolationReviewManager:
             )
             conn.commit()
             return cur.rowcount > 0
+```
