@@ -26,7 +26,6 @@ If you prefer manual installation:
    The requirements file includes database drivers such as **asyncpg** for PostgreSQL and **aioredis** for Redis. If you see errors like `Import "asyncpg" could not be resolved` or `Import "aioredis" could not be resolved`, ensure the dependencies are installed in the active environment.
 3. Install Node packages for the React frontend:
    ```bash
-   npm install
    (cd frontend && npm install)
    ```
 4. Build the frontend for production (optional when serving via FastAPI):
