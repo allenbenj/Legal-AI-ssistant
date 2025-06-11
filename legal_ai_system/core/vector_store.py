@@ -467,7 +467,6 @@ class VectorStore:
             raise VectorStoreError("VectorStore failed to initialize.", cause=e)
 
 
-
     def _migrate_metadata_to_id_map_sync(self, conn: sqlite3.Connection) -> None:
         """Populate faiss_id_map table from existing metadata if missing."""
         try:
@@ -858,45 +857,7 @@ class VectorStore:
                 vs_index_logger.debug("Released lock after saving FAISS indexes.")
 
     def _save_faiss_indexes_sync(self):
-        doc_idx_path = self.document_index_path
-        tmp_doc_idx_path = doc_idx_path.with_suffix(".tmp")
-        ent_idx_path = self.entity_index_path
-        tmp_ent_idx_path = ent_idx_path.with_suffix(".tmp")
 
-        self._update_disk_usage_stats()  # Update before saving
-        if self.document_index and self.document_index.ntotal > 0:
-            try:
-                faiss.write_index(self.document_index, str(tmp_doc_idx_path))
-                os.replace(tmp_doc_idx_path, doc_idx_path)
-                vs_index_logger.info(
-                    "Document FAISS index saved.",
-                    parameters={"path": str(doc_idx_path)},
-                )
-            except Exception as e:
-                vs_index_logger.error(
-                    "Failed to save document FAISS index.",
-                    exception=e,
-                    exc_info=True,
-                )
-                if tmp_doc_idx_path.exists():
-                    os.remove(tmp_doc_idx_path)
-
-        if self.entity_index and self.entity_index.ntotal > 0:
-            try:
-                faiss.write_index(self.entity_index, str(tmp_ent_idx_path))
-                os.replace(tmp_ent_idx_path, ent_idx_path)
-                vs_index_logger.info(
-                    "Entity FAISS index saved.",
-                    parameters={"path": str(ent_idx_path)},
-                )
-            except Exception as e:
-                vs_index_logger.error(
-                    "Failed to save entity FAISS index.", exception=e, exc_info=True
-                )
-                if tmp_ent_idx_path.exists():
-                    os.remove(tmp_ent_idx_path)
-
-    @detailed_log_function(LogCategory.VECTOR_STORE_DB)
 
     # --- FAISS ID Mapping Helpers ---
     def _get_next_faiss_id_sync(self, index_target: str) -> int:
@@ -1537,13 +1498,6 @@ class VectorStore:
     @detailed_log_function(LogCategory.VECTOR_STORE)
     async def delete_vector_async(self, vector_id: str, index_target: str = "document"):
         async with self._async_lock:
-
-
-    async def _delete_metadata_async(self, vector_id: str) -> None:
-        async with self.metadata_lock:
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, self._delete_metadata_sync, vector_id)
-
     def _update_disk_usage_stats(self):
         """Updates statistics about disk usage for indexes and metadata DB."""
         try:
