@@ -48,6 +48,9 @@ context_mem_logger = get_detailed_logger(
     "UnifiedMemoryManager.ContextWindowMemory", LogCategory.DATABASE
 )
 
+# Reserved name used for shared session knowledge entries
+SHARED_AGENT_NAME = "__shared__"
+
 
 class MemoryType(Enum):
     """Types of memory storage managed by UMM."""
@@ -143,9 +146,10 @@ class UnifiedMemoryManager:
                     """
                     -- Agent-specific memory
                     CREATE TABLE IF NOT EXISTS agent_memory (
-                        id TEXT PRIMARY KEY, -- Composite: session_id_agent_name_key_hash or UUID
+                        id TEXT PRIMARY KEY, -- Composite: session_id_agent_name_memory_type_key_hash
                         session_id TEXT, -- Can be doc_id or actual session
                         agent_name TEXT NOT NULL,
+                        memory_type TEXT NOT NULL DEFAULT 'agent_specific',
                         memory_key TEXT NOT NULL,
                         memory_value TEXT, -- JSON serialized
                         metadata TEXT, -- JSON serialized
@@ -156,6 +160,7 @@ class UnifiedMemoryManager:
                     );
                     CREATE INDEX IF NOT EXISTS idx_agent_memory_session_agent ON agent_memory(session_id, agent_name);
                     CREATE INDEX IF NOT EXISTS idx_agent_memory_key ON agent_memory(memory_key);
+                    CREATE INDEX IF NOT EXISTS idx_agent_memory_type ON agent_memory(memory_type);
 
                     -- Session-scoped Knowledge (inspired by ClaudeMemoryStore)
                     CREATE TABLE IF NOT EXISTS session_entities (
@@ -283,42 +288,26 @@ class UnifiedMemoryManager:
         metadata: Optional[Dict[str, Any]] = None,
         importance: float = 0.5,
         memory_type: MemoryType = MemoryType.AGENT_SPECIFIC,
-    ) -> MemoryEntry:
         agent_mem_logger.info(
             "Storing agent memory.",
             parameters={"session": session_id, "agent": agent_name, "key": key},
         )
         self._record_op("store_agent_memory")
 
-        entry_id = hashlib.md5(f"{session_id}:{agent_name}:{key}".encode()).hexdigest()
-        entry = MemoryEntry(
-            id=entry_id,
-            memory_type=memory_type,
-            key=key,
-            value=value,
-            session_id=session_id,
-            metadata=metadata or {},
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
-            importance_score=importance,
-        )
-        value_json = json.dumps(entry.value, default=str)
-        metadata_json = json.dumps(entry.metadata, default=str)
-        now_iso = entry.created_at.isoformat()
-
+      
+      
         def _store_sync():
             with self._lock, self._get_db_connection() as conn:
                 conn.execute(
                     """
                     INSERT OR REPLACE INTO agent_memory
-                        (id, session_id, agent_name, memory_key, memory_value, metadata, memory_type, created_at, updated_at, importance_score)
+
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                     (
                         entry.id,
                         entry.session_id,
                         agent_name,
-                        entry.key,
                         value_json,
                         metadata_json,
                         entry.memory_type.value,
@@ -346,7 +335,6 @@ class UnifiedMemoryManager:
         agent_name: str,
         key: str,
         memory_type: MemoryType = MemoryType.AGENT_SPECIFIC,
-    ) -> Optional[MemoryEntry]:
         agent_mem_logger.debug(
             "Retrieving agent memory.",
             parameters={"session": session_id, "agent": agent_name, "key": key},
@@ -357,8 +345,6 @@ class UnifiedMemoryManager:
             with self._lock, self._get_db_connection() as conn:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.execute(
-                    "SELECT * FROM agent_memory WHERE session_id=? AND agent_name=? AND memory_key=? AND memory_type=?",
-                    (session_id, agent_name, key, memory_type.value),
                 )
                 row = cursor.fetchone()
                 if row:
@@ -389,6 +375,52 @@ class UnifiedMemoryManager:
         except Exception as e:
             agent_mem_logger.error("Failed to retrieve agent memory.", exception=e)
             raise MemoryManagerError("Failed to retrieve agent memory.", cause=e)
+
+    @detailed_log_function(LogCategory.DATABASE)
+    async def store_shared_memory(
+        self,
+        session_id: str,
+        key: str,
+        value: Any,
+        metadata: Optional[Dict[str, Any]] = None,
+        importance: float = 0.5,
+    ) -> str:
+        """Store session knowledge shared across agents."""
+        return await self.store_agent_memory(
+            session_id=session_id,
+            agent_name=SHARED_AGENT_NAME,
+            key=key,
+            value=value,
+            metadata=metadata,
+            importance=importance,
+            memory_type=MemoryType.SESSION_KNOWLEDGE,
+        )
+
+    @detailed_log_function(LogCategory.DATABASE)
+    async def retrieve_shared_memory(
+        self,
+        session_id: str,
+        key: str,
+    ) -> Optional[Any]:
+        """Retrieve shared session knowledge without agent restriction."""
+
+        def _retrieve_sync():
+            with self._lock, self._get_db_connection() as conn:
+                cursor = conn.execute(
+                    "SELECT memory_value FROM agent_memory WHERE session_id=? AND memory_type=? AND memory_key=?",
+                    (session_id, MemoryType.SESSION_KNOWLEDGE.value, key),
+                )
+                row = cursor.fetchone()
+                if row:
+                    return json.loads(row[0])
+                return None
+
+        try:
+            value = await asyncio.get_event_loop().run_in_executor(None, _retrieve_sync)
+            return value
+        except Exception as e:
+            agent_mem_logger.error("Failed to retrieve shared memory.", exception=e)
+            raise MemoryManagerError("Failed to retrieve shared memory.", cause=e)
 
     # --- Session Knowledge (Claude-like Memory) ---
     @detailed_log_function(LogCategory.DATABASE)
