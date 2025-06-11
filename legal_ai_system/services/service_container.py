@@ -800,6 +800,15 @@ async def create_service_container(
         instance=ViolationReviewDB(db_path=violation_db_path),
     )
 
+    from .violation_classifier import ViolationClassifier
+
+    vr_db_service = await container.get_service("violation_review_db")
+    classifier = ViolationClassifier()
+    classifier.train_from_review_db(vr_db_service)
+    await container.register_service(
+        "violation_classifier", instance=classifier
+    )
+
     from .workflow_config import WorkflowConfig
     from .realtime_analysis_workflow import RealTimeAnalysisWorkflow
 

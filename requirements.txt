@@ -27,10 +27,6 @@ openai>=1.0.0
 sentence-transformers>=2.2.0
 anthropic>=0.25.0
 transformers>=4.30.0
-torch>=2.0.0
-spacy>=3.6.0
-flair>=0.12.0
-scikit-learn>=1.4.0
 
 # Document Processing
 pymupdf>=1.23.0 # PyMuPDF (fitz)
