@@ -192,6 +192,25 @@ class OptimizationResult:
 
 
 @dataclass
+class TokenUsageRecord:
+    """Record of token usage for a session."""
+
+    session_id: str
+    tokens_used: int
+    timestamp: datetime
+
+
+@dataclass
+class ThresholdModel:
+    """Model-derived confidence thresholds."""
+
+    auto_approve_threshold: float
+    review_threshold: float
+    reject_threshold: float
+    updated_at: str
+
+
+@dataclass
 
 class MLOptimizer:
     """
@@ -227,6 +246,9 @@ class MLOptimizer:
         self.performance_history: deque = deque(maxlen=10000)
         self.document_features_cache: Dict[str, DocumentFeatures] = {}
         self.optimization_cache: Dict[str, OptimizationResult] = {}
+        self.token_usage_history: deque = deque(maxlen=10000)
+        self.feedback_history: deque = deque(maxlen=10000)
+        self.threshold_model: Optional[ThresholdModel] = None
         # Analysis settings
         self.min_samples_for_optimization = self.config.min_samples
         self.similarity_threshold = self.config.similarity_threshold
@@ -234,6 +256,8 @@ class MLOptimizer:
 
         # Load recent performance data
         self._load_recent_performance()
+        self._load_recent_token_usage()
+        self._load_recent_feedback()
 
         # Threading
         self._lock = threading.RLock()
@@ -330,16 +354,69 @@ class MLOptimizer:
             ml_logger.error("Failed to load recent performance data", exception=e)
 
     @detailed_log_function(LogCategory.SYSTEM)
+    def _load_recent_token_usage(self):
+        """Load recent token usage data into memory cache."""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.execute(
                     """
+                    SELECT session_id, tokens_used, created_at
+                    FROM session_token_usage
+                    WHERE created_at > datetime('now', '-7 days')
                     ORDER BY created_at DESC
                     LIMIT 5000
                 """
                 )
 
                 for row in cursor.fetchall():
+                    record = TokenUsageRecord(
+                        session_id=row[0],
+                        tokens_used=row[1],
+                        timestamp=datetime.fromisoformat(row[2]),
+                    )
+                    self.token_usage_history.append(record)
+
+            ml_logger.info(
+                f"Loaded {len(self.token_usage_history)} recent token usage records"
+            )
+
+        except Exception as e:
+            ml_logger.error("Failed to load recent token usage", exception=e)
+
+    @detailed_log_function(LogCategory.SYSTEM)
+    def _load_recent_feedback(self):
+        """Load recent review feedback for threshold optimization."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute(
+                    """
+                    SELECT item_id, item_type, original_confidence, review_decision,
+                           confidence_adjustment, notes, user_id, created_at
+                    FROM feedback_records
+                    WHERE created_at > datetime('now', '-30 days')
+                    ORDER BY created_at DESC
+                    LIMIT 5000
+                """
+                )
+
+                for row in cursor.fetchall():
+                    record = {
+                        "item_id": row[0],
+                        "item_type": row[1],
+                        "original_confidence": row[2],
+                        "review_decision": row[3],
+                        "confidence_adjustment": row[4],
+                        "notes": row[5],
+                        "user_id": row[6],
+                        "timestamp": datetime.fromisoformat(row[7]),
+                    }
+                    self.feedback_history.append(record)
+
+            ml_logger.info(
+                f"Loaded {len(self.feedback_history)} recent feedback records"
+            )
+        except Exception as e:
+            ml_logger.error("Failed to load recent feedback data", exception=e)
 
     @detailed_log_function(LogCategory.PERFORMANCE)
     def record_performance(

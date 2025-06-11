@@ -11,6 +11,7 @@ This will typically launch the user interface located at
 import sys
 import os
 from pathlib import Path
+import argparse
 
 # Ensure the package root is in sys.path if running with `python legal_ai_system/__main__.py`
 # This is usually not needed if running with `python -m legal_ai_system` from one level up.
@@ -22,20 +23,16 @@ if str(PACKAGE_ROOT) not in sys.path:
     )  # Add the directory containing 'legal_ai_system'
 
 
-def run_system():  # Renamed from main for clarity
-    """Main entry point when the 'legal_ai_system' package is run as a module."""
-    # Attempt to import the primary GUI entry point
+def run_streamlit_gui() -> int:
+    """Launch the Streamlit dashboard."""
     try:
-        # Assuming streamlit_app.py contains the main function to launch the GUI
         from legal_ai_system.gui.streamlit_app import main_streamlit_entry
 
         print(
             "INFO: Launching Legal AI System GUI via: legal_ai_system.gui.streamlit_app.main_streamlit_entry()"
         )
-        # Call the main function from streamlit_app.py
-        # This function should handle its own setup (logging, etc.) and then run Streamlit.
         main_streamlit_entry()
-        return 0  # Success
+        return 0
     except ModuleNotFoundError as e:
         missing = getattr(e, "name", str(e))
         print(
@@ -47,17 +44,9 @@ def run_system():  # Renamed from main for clarity
             file=sys.stderr,
         )
         return 1
-    except ImportError as e:
-        print(f"ERROR: Failed to import the GUI entry point: {e}", file=sys.stderr)
+    except Exception as e:  # noqa: PIE786 - show any unexpected exception
         print(
-            "Please ensure all components are correctly installed and the project structure is intact.",
-            file=sys.stderr,
-        )
-        print("Try running: pip install -r requirements.txt", file=sys.stderr)
-        return 1
-    except Exception as e:
-        print(
-            f"ERROR: An unexpected error occurred while trying to launch the Legal AI System: {e}",
+            f"ERROR: Failed to launch Streamlit GUI: {e}",
             file=sys.stderr,
         )
         import traceback
@@ -66,23 +55,63 @@ def run_system():  # Renamed from main for clarity
         return 1
 
 
-if __name__ == "__main__":
-    # This block is executed when the script is run directly, e.g. `python legal_ai_system/__main__.py`
-    # It's also the entry point for `python -m legal_ai_system`
+def run_pyqt_gui() -> int:
+    """Launch the optional PyQt demonstration window."""
+    try:
+        from legal_ai_system.gui.main_gui import main as qt_main
 
-    # Optionally, handle command-line arguments here if you want to launch different parts,
-    # e.g., `python -m legal_ai_system api` or `python -m legal_ai_system gui`
-    # For now, it defaults to launching the GUI.
-
-    # Example: Check for an argument to run API instead of GUI
-    if len(sys.argv) > 1 and sys.argv[1] == "api":
+        print("INFO: Launching PyQt GUI via: legal_ai_system.gui.main_gui.main()")
+        qt_main()
+        return 0
+    except Exception as e:  # noqa: PIE786
         print(
-            "INFO: (Not implemented in __main__.py) Request to launch API. Run legal_ai_system/main.py directly for API."
+            f"ERROR: Failed to launch PyQt GUI: {e}",
+            file=sys.stderr,
         )
-        # To launch API:
-        # from legal_ai_system.main import app as fastapi_app # Assuming main.py has `app`
-        # import uvicorn
-        # uvicorn.run(fastapi_app, host="0.0.0.0", port=8000)
-        sys.exit(0)  # Or implement API launch
-    else:
-        sys.exit(run_system())
+        import traceback
+
+        traceback.print_exc()
+        return 1
+
+
+def run_api_server() -> int:
+    """Start the FastAPI backend using uvicorn."""
+    try:
+        import uvicorn
+        from legal_ai_system.scripts.main import app
+
+        host = os.getenv("LEGAL_AI_API_HOST", "0.0.0.0")
+        port = int(os.getenv("LEGAL_AI_API_PORT", "8000"))
+        print(f"INFO: Starting FastAPI server on {host}:{port}")
+        uvicorn.run(app, host=host, port=port, reload=True)
+        return 0
+    except Exception as e:  # noqa: PIE786
+        print(f"ERROR: Failed to start FastAPI server: {e}", file=sys.stderr)
+        import traceback
+
+        traceback.print_exc()
+        return 1
+
+
+def main() -> int:
+    """Parse command line arguments and launch the requested mode."""
+    parser = argparse.ArgumentParser(description="Launch the Legal AI System")
+    parser.add_argument(
+        "--mode",
+        choices=["streamlit", "qt", "api"],
+        default="streamlit",
+        help="Interface to start: streamlit (default), qt, or api",
+    )
+
+    args = parser.parse_args()
+
+    if args.mode == "qt":
+        return run_pyqt_gui()
+    if args.mode == "api":
+        return run_api_server()
+    return run_streamlit_gui()
+
+
+if __name__ == "__main__":
+    # This block is executed when the package is run directly.
+    sys.exit(main())
