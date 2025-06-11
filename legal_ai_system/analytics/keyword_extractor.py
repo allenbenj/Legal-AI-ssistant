@@ -8,13 +8,13 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 
 
 def extract_keywords(text: str, top_k: int = 5) -> List[Tuple[str, float]]:
-
+    """Extract top-ranked keywords from text using TF-IDF.
 
     Parameters
     ----------
-    text: str
+    text : str
         Input document text.
-    top_k: int
+    top_k : int
         Number of keywords to return.
 
     Returns
@@ -22,8 +22,6 @@ def extract_keywords(text: str, top_k: int = 5) -> List[Tuple[str, float]]:
     List[Tuple[str, float]]
         Keyword-score pairs sorted in descending order.
     """
-
-        return []
 
     vectorizer = TfidfVectorizer(stop_words="english")
     tfidf_matrix = vectorizer.fit_transform([text])
