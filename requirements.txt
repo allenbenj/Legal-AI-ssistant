@@ -42,7 +42,6 @@ markdown>=3.4.0
 beautifulsoup4>=4.12.0
 striprtf>=0.0.21
 
-
 # Knowledge Graph (If Neo4j is used)
 neo4j>=5.10.0 # Assuming Neo4j is used as hinted by KnowledgeGraphManager
 
