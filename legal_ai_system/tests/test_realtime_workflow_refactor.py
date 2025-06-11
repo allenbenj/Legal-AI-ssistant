@@ -103,11 +103,17 @@ class DummyWorkflow(RealTimeAnalysisWorkflow):
             get_review_stats_async=AsyncMock(return_value={}),
             submit_review_decision_async=AsyncMock(return_value=True),
         )
+        self.policy_learner = SimpleNamespace(
+            should_run_step=lambda *a, **k: True,
+            update_agent_stats=lambda *a, **k: None,
+            record_step=lambda *a, **k: None,
+            predict_concurrency=lambda *a, **k: 1,
+        )
 
         # Patch internal helpers
         self._notify_progress = AsyncMock()
         self._notify_update = AsyncMock()
-        self._process_entities_realtime = AsyncMock(return_value={})
+        self._update_knowledge_graph_realtime = AsyncMock(return_value={})
         self._update_vector_store_realtime = AsyncMock(return_value={})
         self._integrate_with_memory = AsyncMock(return_value={})
         self._validate_extraction_quality = AsyncMock(return_value={})
@@ -164,7 +170,7 @@ async def test_process_document_realtime_updates_graph_and_vectors() -> None:
     wf = DummyWorkflow()
     await wf.process_document_realtime("sample.txt")
 
-    wf._process_entities_realtime.assert_awaited()
+    wf._update_knowledge_graph_realtime.assert_awaited()
     wf._update_vector_store_realtime.assert_awaited()
 
 
