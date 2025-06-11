@@ -1140,8 +1140,39 @@ class EnhancedPersistenceManager:
     async def get_service_status(self) -> Dict[str, Any]:
         return await self.health_check()
 
+
 # Factory function for service container
 def create_enhanced_persistence_manager(
+    connection_pool: Optional[ConnectionPool] = None,
+    config: Optional[Dict[str, Any]] = None,
+    metrics_exporter: Optional[Any] = None,
+) -> EnhancedPersistenceManager:
+    """Return an :class:`EnhancedPersistenceManager` instance.
+
+    Parameters
+    ----------
+    connection_pool:
+        Existing :class:`ConnectionPool` to use. If ``None``, a new pool is
+        created using ``database_url`` and ``redis_url`` from ``config``.
+    config:
+        Optional configuration mapping. Persistence-specific values should be
+        under ``"persistence_config"``.
+    metrics_exporter:
+        Optional metrics exporter passed through to the manager.
+    """
+
+    cfg = config or {}
+    if connection_pool is None:
+        connection_pool = ConnectionPool(
+            cfg.get("database_url"),
+            cfg.get("redis_url"),
+        )
+
+    return EnhancedPersistenceManager(
+        connection_pool,
+        cfg.get("persistence_config", {}),
+        metrics_exporter,
+    )
 
     return EnhancedPersistenceManager(
         connection_pool,
