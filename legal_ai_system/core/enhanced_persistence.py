@@ -903,12 +903,6 @@ class EnhancedPersistenceManager:
         cache_ttl = self.config.get("cache_default_ttl_seconds", 3600)
 
         if connection_pool is None:
-            connection_pool = ConnectionPool(
-                database_url,
-                redis_url,
-                min_pg_connections=self.config.get("min_pg_connections", 5),
-                max_pg_connections=self.config.get("max_pg_connections", 20),
-                max_redis_connections=self.config.get("max_redis_connections", 10),
             )
 
         self.connection_pool = connection_pool
@@ -1143,39 +1137,7 @@ class EnhancedPersistenceManager:
 
 # Factory function for service container
 def create_enhanced_persistence_manager(
-    connection_pool: Optional[ConnectionPool] = None,
-    config: Optional[Dict[str, Any]] = None,
-    metrics_exporter: Optional[Any] = None,
-) -> EnhancedPersistenceManager:
-    """Return an :class:`EnhancedPersistenceManager` instance.
-
-    Parameters
-    ----------
-    connection_pool:
-        Existing :class:`ConnectionPool` to use. If ``None``, a new pool is
-        created using ``database_url`` and ``redis_url`` from ``config``.
-    config:
-        Optional configuration mapping. Persistence-specific values should be
-        under ``"persistence_config"``.
-    metrics_exporter:
-        Optional metrics exporter passed through to the manager.
-    """
-
-    cfg = config or {}
     if connection_pool is None:
         connection_pool = ConnectionPool(
             cfg.get("database_url"),
             cfg.get("redis_url"),
-        )
-
-    return EnhancedPersistenceManager(
-        connection_pool,
-        cfg.get("persistence_config", {}),
-        metrics_exporter,
-    )
-
-    return EnhancedPersistenceManager(
-        connection_pool,
-        config.get("persistence_config", {}),
-        metrics_exporter,
-    )
