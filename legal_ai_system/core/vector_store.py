@@ -374,9 +374,6 @@ class VectorStore:
         self.metadata_mem_cache: LRUCache[str, VectorMetadata] = LRUCache(
             maxsize=cache_size
         )
-        self.metadata_repo: Optional[VectorMetadataRepository] = self.config.get(
-            "metadata_repository"
-        )
 
         self.vectorid_to_faissid_doc: Dict[str, int] = {}
         self.vectorid_to_faissid_entity: Dict[str, int] = {}
@@ -749,7 +746,7 @@ class VectorStore:
                     # _initialize_faiss_indexes_sync updates instance attributes in-place
                     self._initialize_faiss_indexes_sync()
 
-        
+
     async def _optimization_worker_async(self):
         vs_index_logger.info("Async optimization worker task started.")
         while not self._stop_background_tasks_event.is_set():
