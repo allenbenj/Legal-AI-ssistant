@@ -6,9 +6,9 @@ import asyncio
 from typing import TYPE_CHECKING
 
 try:  # pragma: no cover - optional dependency
-    from langgraph.graph import BaseNode
+    from langgraph.graph import BaseNode as LangGraphBaseNode
 except Exception:  # ImportError or other issues if langgraph not installed
-    class BaseNode:
+    class LangGraphBaseNode:
         """Minimal stand-in for :class:`langgraph.graph.BaseNode`."""
 
         pass
@@ -66,3 +66,4 @@ class SummaryNode(BaseNode):
 
 
 __all__ = ["AnalysisNode", "SummaryNode"]
+BaseNode = LangGraphBaseNode
