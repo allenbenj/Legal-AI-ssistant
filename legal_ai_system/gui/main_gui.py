@@ -12,6 +12,8 @@ from typing import Any, Dict, List, Optional
 import requests
 from PyQt6 import QtCore, QtGui, QtWidgets
 
+from .memory_brain_widget import MemoryBrainWidget
+
 from ..core.settings import settings
 from ..log_setup import init_logging
 
@@ -393,6 +395,7 @@ class MainWindow(QtWidgets.QMainWindow):
         tabs.addTab(ReviewTab(self.api), "Review Queue")
         tabs.addTab(WorkflowTab(self.api), "Workflow Designer")
         tabs.addTab(MonitoringTab(self.api), "Process Monitoring")
+        tabs.addTab(MemoryBrainWidget(), "Memory Brain")
         tabs.addTab(StatusTab(self.api), "System Status")
         settings_tab = SettingsTab(self.api)
         settings_tab.settings_changed.connect(self.reload_settings)
