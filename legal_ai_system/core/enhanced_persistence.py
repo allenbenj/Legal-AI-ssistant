@@ -897,13 +897,27 @@ class CacheManager:
 class EnhancedPersistenceManager:
     """Central persistence manager coordinating all data operations."""
 
+    def __init__(
+        self,
+        config: Optional[Dict[str, Any]] = None,
+        connection_pool: Optional[ConnectionPool] = None,
+        metrics_exporter: Optional[Any] = None,
+    ) -> None:
+        """Create a new :class:`EnhancedPersistenceManager` instance."""
+
         self.config = config or {}
         cache_ttl = self.config.get("cache_default_ttl_seconds", 3600)
+
+        if connection_pool is None:
+            raise ConfigurationError(
+                "ConnectionPool instance is required for EnhancedPersistenceManager."
+            )
 
         self.connection_pool = connection_pool
         self.entity_repo = EntityRepository(self.connection_pool)
         self.relationship_repo = RelationshipRepository(self.connection_pool)
         self.workflow_repo = WorkflowRepository(self.connection_pool)
+        self.cache_manager = CacheManager(self.connection_pool, cache_ttl)
         self.metrics = metrics_exporter
         self.initialized = False
         self.logger = persistence_logger.getChild("Manager")
@@ -1130,4 +1144,39 @@ class EnhancedPersistenceManager:
 
 # Factory function for service container
 def create_enhanced_persistence_manager(
+    service_container: Optional[Any] = None,
+    *,
+    config: Optional[Dict[str, Any]] = None,
+    connection_pool: Optional[ConnectionPool] = None,
+) -> EnhancedPersistenceManager:
+    """Create an :class:`EnhancedPersistenceManager` instance.
 
+    The factory can be used directly or via :class:`ServiceContainer`.  When
+    invoked by the container, ``service_container`` will be the first positional
+    argument.  When used stand-alone, simply omit it and provide ``config`` and
+    optionally a ``ConnectionPool``.
+    """
+
+    cfg = config or {}
+
+    # Resolve metrics exporter from the container when available
+    metrics_exporter = None
+    if service_container is not None and hasattr(service_container, "get_service"):
+        metrics_exporter = _get_service_sync(service_container, "metrics_exporter")
+
+    if connection_pool is None:
+        connection_pool = ConnectionPool(
+            cfg.get("database_url"),
+            cfg.get("redis_url"),
+            min_pg_connections=cfg.get("min_pg_connections", 5),
+            max_pg_connections=cfg.get("max_pg_connections", 20),
+            max_redis_connections=cfg.get("max_redis_connections", 10),
+        )
+
+    manager = EnhancedPersistenceManager(
+        config=cfg,
+        connection_pool=connection_pool,
+        metrics_exporter=metrics_exporter,
+    )
+
+    return manager
