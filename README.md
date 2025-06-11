@@ -116,6 +116,23 @@ pytest
 
 See [docs/test_setup.md](docs/test_setup.md) for more information.
 
+## Using the GUIs
+
+The repository provides three optional interfaces. Install the dependencies and
+choose the one that suits your workflow:
+
+1. **Streamlit Dashboard** – run `python -m legal_ai_system` after installing
+   `requirements.txt`. This launches a browser-based dashboard connected to the
+   backend.
+2. **PyQt6 Demo** – install `PyQt6` and run `python -m legal_ai_system --mode qt`
+   to open a small desktop window for quick tests.
+3. **FastAPI Server** – start the API with `python -m legal_ai_system --mode api`.
+4. **React Frontend** – inside `frontend/` run `npm install` and `npm run dev` for
+   development. Use `npm run build` to generate `frontend/dist`, which FastAPI
+   serves automatically when present.
+
+Detailed instructions are available in [docs/gui_setup.md](docs/gui_setup.md).
+
 ### Extraction Options
 
 The ontology extraction agent supports multiple NER backends. Enable them in
