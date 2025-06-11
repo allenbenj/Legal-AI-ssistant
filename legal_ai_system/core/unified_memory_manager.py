@@ -288,14 +288,26 @@ class UnifiedMemoryManager:
         metadata: Optional[Dict[str, Any]] = None,
         importance: float = 0.5,
         memory_type: MemoryType = MemoryType.AGENT_SPECIFIC,
+    ) -> MemoryEntry:
         agent_mem_logger.info(
             "Storing agent memory.",
             parameters={"session": session_id, "agent": agent_name, "key": key},
         )
         self._record_op("store_agent_memory")
 
-      
-      
+        entry = MemoryEntry(
+            id=str(uuid.uuid4()),
+            memory_type=memory_type,
+            key=key,
+            value=value,
+            session_id=session_id,
+            metadata=metadata or {},
+            importance_score=importance,
+        )
+        value_json = json.dumps(entry.value)
+        metadata_json = json.dumps(entry.metadata)
+        now_iso = datetime.now(timezone.utc).isoformat()
+
         def _store_sync():
             with self._lock, self._get_db_connection() as conn:
                 conn.execute(
@@ -335,6 +347,7 @@ class UnifiedMemoryManager:
         agent_name: str,
         key: str,
         memory_type: MemoryType = MemoryType.AGENT_SPECIFIC,
+    ) -> Optional[MemoryEntry]:
         agent_mem_logger.debug(
             "Retrieving agent memory.",
             parameters={"session": session_id, "agent": agent_name, "key": key},

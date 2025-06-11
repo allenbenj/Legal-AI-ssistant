@@ -215,19 +215,20 @@ async def lifespan(app: FastAPI):
 
     if SERVICES_AVAILABLE and ServiceContainer is not None:
         try:
-            # Factory function to build the service container
             from legal_ai_system.services.service_container import (
                 create_service_container,
             )
-
+            service_container_instance = create_service_container()
+        except Exception as e:
             main_api_logger.error(
                 "Failed to initialize service container.", exception=e
             )
-            service_container_instance = None  # Ensure it's None if init fails
+            service_container_instance = None
     else:
         main_api_logger.warning(
             "⚠️ ServiceContainer not available. API might run in a limited mode."
         )
+        service_container_instance = None
 
     if SERVICES_AVAILABLE and SecurityManager is not None:
         try:
@@ -922,8 +923,6 @@ async def process_document_rest(  # Renamed
     # user_id_for_task = current_user.user_id
     user_id_for_task = "mock_user_for_processing"  # Placeholder if auth is off
 
-
-        )
     background_tasks.add_task(
         process_document_background_task,
         document_id,

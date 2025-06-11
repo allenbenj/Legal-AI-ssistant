@@ -962,7 +962,12 @@ class VectorStore:
         except Exception as e:
             vs_cache_logger.error("Failed loading id mapping cache from repository", exception=e)
 
-    def _save_faiss_indexes_sync(self):
+    def _save_faiss_indexes_sync(self) -> None:
+        """Persist FAISS indexes to disk if paths are configured."""
+        if self.document_index and self.document_index_path:
+            faiss.write_index(self.document_index, str(self.document_index_path))
+        if self.entity_index and self.entity_index_path:
+            faiss.write_index(self.entity_index, str(self.entity_index_path))
 
     # --- FAISS ID Mapping Helpers ---
     def _get_next_faiss_id_sync(self, index_target: str) -> int:
@@ -986,6 +991,8 @@ class VectorStore:
             if index_target.lower() == "document"
             else self.faissid_to_vectorid_entity
         )
+        mapping_v2f[vector_id] = faiss_id
+        mapping_f2v[faiss_id] = vector_id
 
     def _delete_id_mapping_sync(self, vector_id: str) -> None:
 
@@ -1610,6 +1617,8 @@ class VectorStore:
     @detailed_log_function(LogCategory.VECTOR_STORE)
     async def delete_vector_async(self, vector_id: str, index_target: str = "document"):
         async with self._async_lock:
+            await self._delete_id_mapping_async(vector_id)
+
     def _update_disk_usage_stats(self):
         """Updates statistics about disk usage for indexes and metadata DB."""
         try:
