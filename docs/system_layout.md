@@ -47,6 +47,7 @@ The project defines several specialized agents under `legal_ai_system/agents`:
 - Persists resolved entities and relationships to the `KnowledgeGraphManager` using a circuit breaker for reliability.
 - **KnowledgeGraphReasoningAgent** – infers new relationships by traversing the knowledge graph.  See `knowledge_graph_reasoning_agent.py` lines 1‑8.
 - Provides multi-hop reasoning over entities and can answer cross-document legal queries.
+- **PrecedentMatchingAgent** – finds relevant precedents using Legal‑BERT embeddings and vector search.  See `precedent_matching_agent.py` for details.
 - **LegalAnalysisAgent** – performs IRAC analysis with contradiction detection.  See `legal_analysis_agent.py` lines 1‑9.
 - Runs deep reasoning and validates legal logic using LLM-based checks.
 - **NoteTakingAgent** – generates notes with legal context awareness.  See `note_taking_agent.py` lines 1‑5.
