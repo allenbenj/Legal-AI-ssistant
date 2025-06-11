@@ -153,6 +153,7 @@ class UnifiedMemoryManager:
                         memory_key TEXT NOT NULL,
                         memory_value TEXT, -- JSON serialized
                         metadata TEXT, -- JSON serialized
+                        memory_type TEXT NOT NULL,
                         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                         importance_score REAL DEFAULT 0.5
@@ -169,6 +170,7 @@ class UnifiedMemoryManager:
                         entity_type TEXT NOT NULL,
                         attributes TEXT, -- JSON
                         confidence_score REAL,
+                        memory_type TEXT NOT NULL,
                         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                         source_description TEXT -- e.g., "LLM extraction", "User input"
@@ -181,6 +183,7 @@ class UnifiedMemoryManager:
                         session_id TEXT NOT NULL,
                         content TEXT NOT NULL,
                         importance_score REAL DEFAULT 0.5,
+                        memory_type TEXT NOT NULL,
                         source TEXT,
                         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                         FOREIGN KEY (session_entity_id) REFERENCES session_entities (entity_id) ON DELETE CASCADE
@@ -195,6 +198,7 @@ class UnifiedMemoryManager:
                         relationship_type TEXT NOT NULL,
                         properties TEXT, -- JSON
                         confidence_score REAL,
+                        memory_type TEXT NOT NULL,
                         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                         FOREIGN KEY (source_session_entity_id) REFERENCES session_entities (entity_id) ON DELETE CASCADE,
                         FOREIGN KEY (target_session_entity_id) REFERENCES session_entities (entity_id) ON DELETE CASCADE
@@ -209,6 +213,7 @@ class UnifiedMemoryManager:
                         content TEXT NOT NULL,    -- Can be JSON
                         token_count INTEGER,  -- Estimated token count
                         importance_score REAL DEFAULT 0.5,
+                        memory_type TEXT NOT NULL,
                         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                         metadata TEXT -- JSON
                     );
@@ -283,39 +288,32 @@ class UnifiedMemoryManager:
         metadata: Optional[Dict[str, Any]] = None,
         importance: float = 0.5,
         memory_type: MemoryType = MemoryType.AGENT_SPECIFIC,
-    ) -> str:
         agent_mem_logger.info(
             "Storing agent memory.",
             parameters={"session": session_id, "agent": agent_name, "key": key},
         )
         self._record_op("store_agent_memory")
 
-        entry_id = hashlib.md5(
-            f"{session_id}:{agent_name}:{memory_type.value}:{key}".encode()
-        ).hexdigest()
-        value_json = json.dumps(value, default=str)
-        metadata_json = json.dumps(metadata, default=str) if metadata else "{}"
-        now_iso = datetime.now(timezone.utc).isoformat()
-
+      
+      
         def _store_sync():
             with self._lock, self._get_db_connection() as conn:
                 conn.execute(
                     """
                     INSERT OR REPLACE INTO agent_memory
-                        (id, session_id, agent_name, memory_type, memory_key, memory_value, metadata, created_at, updated_at, importance_score)
+
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                     (
-                        entry_id,
-                        session_id,
+                        entry.id,
+                        entry.session_id,
                         agent_name,
-                        memory_type.value,
-                        key,
                         value_json,
                         metadata_json,
+                        entry.memory_type.value,
                         now_iso,
                         now_iso,
-                        importance,
+                        entry.importance_score,
                     ),
                 )
                 conn.commit()
@@ -323,9 +321,9 @@ class UnifiedMemoryManager:
         try:
             await asyncio.get_event_loop().run_in_executor(None, _store_sync)
             agent_mem_logger.debug(
-                "Agent memory stored successfully.", parameters={"id": entry_id}
+                "Agent memory stored successfully.", parameters={"id": entry.id}
             )
-            return entry_id
+            return entry
         except Exception as e:
             agent_mem_logger.error("Failed to store agent memory.", exception=e)
             raise MemoryManagerError("Failed to store agent memory.", cause=e)
@@ -337,7 +335,6 @@ class UnifiedMemoryManager:
         agent_name: str,
         key: str,
         memory_type: MemoryType = MemoryType.AGENT_SPECIFIC,
-    ) -> Optional[Any]:
         agent_mem_logger.debug(
             "Retrieving agent memory.",
             parameters={"session": session_id, "agent": agent_name, "key": key},
@@ -346,13 +343,22 @@ class UnifiedMemoryManager:
 
         def _retrieve_sync():
             with self._lock, self._get_db_connection() as conn:
+                conn.row_factory = sqlite3.Row
                 cursor = conn.execute(
-                    "SELECT memory_value FROM agent_memory WHERE session_id=? AND agent_name=? AND memory_type=? AND memory_key=?",
-                    (session_id, agent_name, memory_type.value, key),
                 )
                 row = cursor.fetchone()
                 if row:
-                    return json.loads(row[0])
+                    return MemoryEntry(
+                        id=row["id"],
+                        memory_type=MemoryType(row["memory_type"]),
+                        key=row["memory_key"],
+                        value=json.loads(row["memory_value"]),
+                        session_id=row["session_id"],
+                        metadata=json.loads(row["metadata"]) if row["metadata"] else {},
+                        created_at=datetime.fromisoformat(row["created_at"]),
+                        updated_at=datetime.fromisoformat(row["updated_at"]),
+                        importance_score=row["importance_score"],
+                    )
                 return None
 
         try:
@@ -426,6 +432,7 @@ class UnifiedMemoryManager:
         attributes: Optional[Dict[str, Any]] = None,
         confidence: float = 1.0,
         source: str = "system",
+        memory_type: MemoryType = MemoryType.SESSION_KNOWLEDGE,
     ) -> str:
         session_mem_logger.info(
             "Storing session entity.",
@@ -443,9 +450,9 @@ class UnifiedMemoryManager:
             with self._lock, self._get_db_connection() as conn:
                 conn.execute(
                     """
-                    INSERT OR REPLACE INTO session_entities 
-                        (entity_id, session_id, canonical_name, entity_type, attributes, confidence_score, created_at, updated_at, source_description)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT OR REPLACE INTO session_entities
+                        (entity_id, session_id, canonical_name, entity_type, attributes, confidence_score, memory_type, created_at, updated_at, source_description)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                     (
                         entity_id,
@@ -454,6 +461,7 @@ class UnifiedMemoryManager:
                         entity_type,
                         attr_json,
                         confidence,
+                        memory_type.value,
                         now_iso,
                         now_iso,
                         source,
@@ -479,6 +487,7 @@ class UnifiedMemoryManager:
         content: str,
         importance: float = 0.5,
         source: str = "system",
+        memory_type: MemoryType = MemoryType.SESSION_KNOWLEDGE,
     ) -> str:
         session_mem_logger.info(
             "Adding session observation.",
@@ -493,9 +502,9 @@ class UnifiedMemoryManager:
             with self._lock, self._get_db_connection() as conn:
                 conn.execute(
                     """
-                    INSERT INTO session_observations 
-                        (observation_id, session_entity_id, session_id, content, importance_score, source, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO session_observations
+                        (observation_id, session_entity_id, session_id, content, importance_score, memory_type, source, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                     (
                         observation_id,
@@ -503,6 +512,7 @@ class UnifiedMemoryManager:
                         session_id,
                         content,
                         importance,
+                        memory_type.value,
                         source,
                         now_iso,
                     ),
@@ -528,6 +538,7 @@ class UnifiedMemoryManager:
         relationship_type: str,
         properties: Optional[Dict[str, Any]] = None,
         confidence: float = 1.0,
+        memory_type: MemoryType = MemoryType.SESSION_KNOWLEDGE,
     ) -> str:
         session_mem_logger.info(
             "Creating session relationship.",
@@ -543,10 +554,10 @@ class UnifiedMemoryManager:
             with self._lock, self._get_db_connection() as conn:
                 conn.execute(
                     """
-                    INSERT INTO session_relationships 
-                        (relationship_id, session_id, source_session_entity_id, target_session_entity_id, 
-                         relationship_type, properties, confidence_score, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO session_relationships
+                        (relationship_id, session_id, source_session_entity_id, target_session_entity_id,
+                         relationship_type, properties, confidence_score, memory_type, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                     (
                         relationship_id,
@@ -556,6 +567,7 @@ class UnifiedMemoryManager:
                         relationship_type,
                         props_json,
                         confidence,
+                        memory_type.value,
                         now_iso,
                     ),
                 )
@@ -680,7 +692,8 @@ class UnifiedMemoryManager:
         token_count: Optional[int] = None,
         importance: float = 0.5,
         metadata: Optional[Dict[str, Any]] = None,
-    ) -> str:
+        memory_type: MemoryType = MemoryType.CONTEXT_WINDOW,
+    ) -> MemoryEntry:
         context_mem_logger.info(
             "Adding context window entry.",
             parameters={"session": session_id, "type": entry_type},
@@ -688,9 +701,20 @@ class UnifiedMemoryManager:
         self._record_op("add_context_window_entry")
 
         entry_id = str(uuid.uuid4())
-        content_json = json.dumps(content, default=str)
-        metadata_json = json.dumps(metadata, default=str) if metadata else "{}"
-        created_at_iso = datetime.now(timezone.utc).isoformat()
+        entry = MemoryEntry(
+            id=entry_id,
+            memory_type=memory_type,
+            key=entry_type,
+            value=content,
+            session_id=session_id,
+            metadata=metadata or {},
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+            importance_score=importance,
+        )
+        content_json = json.dumps(entry.value, default=str)
+        metadata_json = json.dumps(entry.metadata, default=str)
+        created_at_iso = entry.created_at.isoformat()
 
         # Estimate token_count if not provided (very rough estimate)
         if token_count is None:
@@ -701,16 +725,17 @@ class UnifiedMemoryManager:
                 conn.execute(
                     """
                     INSERT INTO context_window_entries
-                        (entry_id, session_id, entry_type, content, token_count, importance_score, created_at, metadata)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        (entry_id, session_id, entry_type, content, token_count, importance_score, memory_type, created_at, metadata)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                     (
-                        entry_id,
-                        session_id,
+                        entry.id,
+                        entry.session_id,
                         entry_type,
                         content_json,
                         token_count,
-                        importance,
+                        entry.importance_score,
+                        entry.memory_type.value,
                         created_at_iso,
                         metadata_json,
                     ),
@@ -720,11 +745,11 @@ class UnifiedMemoryManager:
         try:
             await asyncio.get_event_loop().run_in_executor(None, _add_sync)
             context_mem_logger.debug(
-                "Context window entry added.", parameters={"id": entry_id}
+                "Context window entry added.", parameters={"id": entry.id}
             )
             # After adding, check if pruning is needed
             asyncio.create_task(self.prune_context_window(session_id))
-            return entry_id
+            return entry
         except Exception as e:
             context_mem_logger.error("Failed to add context window entry.", exception=e)
             raise MemoryManagerError("Failed to add context window entry.", cause=e)
@@ -732,7 +757,7 @@ class UnifiedMemoryManager:
     @detailed_log_function(LogCategory.DATABASE)
     async def get_context_window(
         self, session_id: str, max_tokens: Optional[int] = None
-    ) -> List[Dict[str, Any]]:
+    ) -> List[MemoryEntry]:
         context_mem_logger.debug(
             "Retrieving context window.",
             parameters={"session": session_id, "max_tokens": max_tokens},
@@ -741,7 +766,7 @@ class UnifiedMemoryManager:
         target_tokens = max_tokens or self.max_context_tokens
 
         def _get_sync():
-            entries: List[Dict[str, Any]] = []
+            entries: List[MemoryEntry] = []
             current_tokens = 0
             with self._lock, self._get_db_connection() as conn:
                 conn.row_factory = sqlite3.Row
@@ -764,18 +789,24 @@ class UnifiedMemoryManager:
                     reverse=True,
                 )
 
-                for row_dict in map(dict, sorted_rows):
+                for row in sorted_rows:
+                    row_dict = dict(row)
                     entry_tokens = row_dict.get(
                         "token_count", len(row_dict["content"].split()) // 2
                     )
                     if current_tokens + entry_tokens <= target_tokens:
-                        row_dict["content"] = json.loads(row_dict["content"])
-                        row_dict["metadata"] = (
-                            json.loads(row_dict["metadata"])
-                            if row_dict["metadata"]
-                            else {}
+                        entry = MemoryEntry(
+                            id=row_dict["entry_id"],
+                            memory_type=MemoryType(row_dict["memory_type"]),
+                            key=row_dict["entry_type"],
+                            value=json.loads(row_dict["content"]),
+                            session_id=row_dict["session_id"],
+                            metadata=json.loads(row_dict["metadata"]) if row_dict["metadata"] else {},
+                            created_at=datetime.fromisoformat(row_dict["created_at"]),
+                            updated_at=datetime.fromisoformat(row_dict["created_at"]),
+                            importance_score=row_dict["importance_score"],
                         )
-                        entries.append(row_dict)
+                        entries.append(entry)
                         current_tokens += entry_tokens
                     else:
                         break
@@ -785,8 +816,7 @@ class UnifiedMemoryManager:
             retrieved_entries = await asyncio.get_event_loop().run_in_executor(
                 None, _get_sync
             )
-            # Return in chronological order for typical display / prompt building
-            retrieved_entries.sort(key=lambda x: x["created_at"])
+            retrieved_entries.sort(key=lambda x: x.created_at)
             context_mem_logger.debug(
                 f"Retrieved {len(retrieved_entries)} entries for context window."
             )
