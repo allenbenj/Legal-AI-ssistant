@@ -15,6 +15,7 @@ import threading
 import asyncio
 import asyncpg
 import hashlib
+import shutil
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
@@ -323,7 +324,7 @@ class EnhancedVectorStore:
         index_params: Optional[Dict[str, Any]] = None,
         document_index_path: str | None = None,
         entity_index_path: str | None = None,
-        connection_pool: Optional[ConnectionPool] = None,
+
     ):
         """Initialize enhanced vector store with comprehensive configuration"""
         vector_logger.info("=== INITIALIZING ENHANCED VECTOR STORE ===")
@@ -399,8 +400,7 @@ class EnhancedVectorStore:
         self.state = VectorStoreState.INITIALIZING
         await self._initialize_storage()
         self._initialize_indexes()
-        await self._load_existing_data()
-        self._start_background_optimization()
+
         self.state = VectorStoreState.READY
         vector_logger.info("Enhanced vector store initialization complete")
 
@@ -823,13 +823,7 @@ class EnhancedVectorStore:
             time.sleep(0.1)
             self.optimization_queue.task_done()
 
-    async def _store_metadata(self, metadata: VectorMetadata) -> None:
-        """Persist metadata to the PostgreSQL database."""
-        if not self.transaction_manager:
-            raise RuntimeError("TransactionManager not configured for VectorStore")
 
-        async with self.transaction_manager.transaction() as conn:
-            await conn.execute(
                 """
                 INSERT INTO vector_metadata (
                     vector_id, document_id, content_hash, content_preview,
@@ -981,7 +975,7 @@ def create_enhanced_vector_store(
         enable_gpu=cfg.get("ENABLE_GPU_FAISS", False),
         document_index_path=cfg.get("DOCUMENT_INDEX_PATH"),
         entity_index_path=cfg.get("ENTITY_INDEX_PATH"),
-        index_params=cfg.get("INDEX_PARAMS"),
+
     )
 
     # ------------------------------------------------------------------

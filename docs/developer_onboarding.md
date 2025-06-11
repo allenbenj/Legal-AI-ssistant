@@ -28,7 +28,6 @@ Welcome to the Legal AI System project! This guide helps new contributors set up
    If you prefer manual installation run:
    ```bash
    pip install -r requirements.txt
-   npm install
    (cd frontend && npm install)
    ```
 4. **Optional extras**
@@ -57,5 +56,11 @@ See [docs/test_setup.md](test_setup.md) for details.
 - [System Layout](system_layout.md) – overview of services and agents
 - [API Endpoints](api_endpoints.md) – REST API documentation
 - [Integration Guide](integration_plan.md) – deployment and WebSocket usage
+
+## Understanding the Architecture
+Sequence diagrams illustrating how services initialize and how workflows
+execute can be found under [docs/diagrams](diagrams/). Reviewing these diagrams
+along with [system_layout.md](system_layout.md) provides a good overview of the
+project structure.
 
 Happy coding!

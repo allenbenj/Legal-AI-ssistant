@@ -3,10 +3,11 @@
 This document summarizes the major agents and services within the **Legal AI System** and how they interact.  The architecture centers on a dependency injection container that wires together agents, managers, and workflows.  Each component registers itself with the container so that initialization order, configuration, and shutdown are handled consistently.
 
 Visual overviews of the initialization and workflow steps are available in the
-[ServiceContainer initialization diagram](diagrams/service_container_initialization.md)
-and the [RealTimeAnalysisWorkflow sequence diagram](diagrams/realtime_analysis_workflow_sequence.md).
+[ServiceContainer initialization diagram](diagrams/service_container_initialization.svg)
+and the [RealTimeAnalysisWorkflow sequence diagram](diagrams/realtime_analysis_workflow_sequence.svg).
 For details on REST endpoints, see the [API reference](api_endpoints.md) and the
-[Integration Guide](integration_plan.md).
+[Integration Guide](integration_plan.md). Additional endpoint descriptions are
+documented in [docs/api_endpoints.md](api_endpoints.md).
 
 ## Core Architecture
 
@@ -88,7 +89,9 @@ During processing:
 
 LangGraph based workflows use `AnalysisNode` and `SummaryNode` (see `agents/agent_nodes.py`) which internally retrieve the integration service via the service container to run analysis or summarization.  This allows complex graphs of tasks to be executed with consistent resource management.
 
-For a deep dive into classification routing and specialized subgraphs see [advanced_langgraph.md](advanced_langgraph.md).
+For a deep dive into the enhanced LangGraph workflow, including classification
+routing, specialized subgraphs, and the `CaseWorkflowState` model, see
+[advanced_langgraph.md](advanced_langgraph.md).
 
 ### Typed Workflow Engine
 
