@@ -1,6 +1,6 @@
 # Testing Setup
 
-This project uses **pytest** for running automated tests. To run the tests, first install the required dependencies and then execute `pytest` from the repository root.
+This project uses **pytest** for running automated tests. Before running `pytest`, install the development dependencies with `pip install -e .[dev]` or `python legal_ai_system/scripts/install_all_dependencies.py`. Missing packages such as **pytest-mock** will cause test failures.
 
 ## Required Python Packages
 
@@ -30,6 +30,7 @@ pip install -e .[dev]
 pytest
 ```
 
+Missing packages such as `pytest-mock` will cause failures if the development dependencies are not installed.
 The commands above create a virtual environment, install all development
 dependencies, and execute the test suite. To automate these steps, you can run
 the helper script:

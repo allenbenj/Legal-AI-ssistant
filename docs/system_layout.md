@@ -3,10 +3,11 @@
 This document summarizes the major agents and services within the **Legal AI System** and how they interact.  The architecture centers on a dependency injection container that wires together agents, managers, and workflows.  Each component registers itself with the container so that initialization order, configuration, and shutdown are handled consistently.
 
 Visual overviews of the initialization and workflow steps are available in the
-[ServiceContainer initialization diagram](diagrams/service_container_initialization.md)
-and the [RealTimeAnalysisWorkflow sequence diagram](diagrams/realtime_analysis_workflow_sequence.md).
+[ServiceContainer initialization diagram](diagrams/service_container_initialization.svg)
+and the [RealTimeAnalysisWorkflow sequence diagram](diagrams/realtime_analysis_workflow_sequence.svg).
 For details on REST endpoints, see the [API reference](api_endpoints.md) and the
-[Integration Guide](integration_plan.md).
+[Integration Guide](integration_plan.md). Additional endpoint descriptions are
+documented in [docs/api_endpoints.md](api_endpoints.md).
 
 ## Core Architecture
 
@@ -25,8 +26,10 @@ The project defines several specialized agents under `legal_ai_system/agents`:
 - Supports `process_video_depositions`, `process_legal_forms`, and `process_contract_redlines` for specialized legal content.
 - **DocumentRewriterAgent** – performs lightweight spelling correction on extracted text.  See `document_rewriter_agent.py` lines 1‑7.
 - Uses `pyspellchecker` to clean common OCR mistakes before analysis.
-- **OntologyExtractionAgent** – extracts legal entities and relationships using ontology‑driven patterns.  See `ontology_extraction_agent.py` lines 1‑7.
-- Integrates with the knowledge graph to ensure entities are linked consistently.
+- **OntologyExtractionAgent** – extracts legal entities and relationships using ontology‑driven patterns.
+  It can optionally load a spaCy NER pipeline and a HuggingFace Legal‑BERT model
+  to supplement the regex patterns. All NER outputs are merged with confidence
+  weighting. See `ontology_extraction_agent.py` for details.
 - **EntityExtractionAgent** – streamlined entity extraction for legal documents.  See `entity_extraction_agent.py` lines 1‑7.
 - Focused on speed and identifies names of parties, statutes, and case citations.
 - **SemanticAnalysisAgent** – summarization and legal topic identification.  See `semantic_analysis_agent.py` lines 1‑8.
@@ -44,6 +47,7 @@ The project defines several specialized agents under `legal_ai_system/agents`:
 - Persists resolved entities and relationships to the `KnowledgeGraphManager` using a circuit breaker for reliability.
 - **KnowledgeGraphReasoningAgent** – infers new relationships by traversing the knowledge graph.  See `knowledge_graph_reasoning_agent.py` lines 1‑8.
 - Provides multi-hop reasoning over entities and can answer cross-document legal queries.
+- **PrecedentMatchingAgent** – finds relevant precedents using Legal‑BERT embeddings and vector search.  See `precedent_matching_agent.py` for details.
 - **LegalAnalysisAgent** – performs IRAC analysis with contradiction detection.  See `legal_analysis_agent.py` lines 1‑9.
 - Runs deep reasoning and validates legal logic using LLM-based checks.
 - **NoteTakingAgent** – generates notes with legal context awareness.  See `note_taking_agent.py` lines 1‑5.
@@ -86,7 +90,9 @@ During processing:
 
 LangGraph based workflows use `AnalysisNode` and `SummaryNode` (see `agents/agent_nodes.py`) which internally retrieve the integration service via the service container to run analysis or summarization.  This allows complex graphs of tasks to be executed with consistent resource management.
 
-For a deep dive into classification routing and specialized subgraphs see [advanced_langgraph.md](advanced_langgraph.md).
+For a deep dive into the enhanced LangGraph workflow, including classification
+routing, specialized subgraphs, and the `CaseWorkflowState` model, see
+[advanced_langgraph.md](advanced_langgraph.md).
 
 ### Typed Workflow Engine
 

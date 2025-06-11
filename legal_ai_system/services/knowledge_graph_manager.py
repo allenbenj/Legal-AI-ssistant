@@ -14,10 +14,11 @@ from datetime import datetime
 import asyncio
 from pathlib import Path
 from enum import Enum
-import threading
+import asyncio
 import hashlib
 
 from ..core.enhanced_persistence import (
+    ConnectionPool,
     EnhancedPersistenceManager,
     EntityRecord,
     RelationshipRecord,
@@ -132,7 +133,8 @@ class KnowledgeGraphManager:
         self,
         storage_dir: str = "./storage/knowledge_graph",
         service_config: Optional[Dict[str, Any]] = None,
-    ):
+        connection_pool: ConnectionPool | None = None,
+    ) -> None:
         """Initialize knowledge graph manager."""
         kg_logger.info("=== INITIALIZING KNOWLEDGE GRAPH MANAGER ===")
 
@@ -140,6 +142,7 @@ class KnowledgeGraphManager:
         self.storage_dir.mkdir(parents=True, exist_ok=True)
 
         self.config = service_config or {}
+        self.connection_pool = connection_pool
         self.entities: Dict[str, Entity] = {}
         self.relationships: Dict[str, Relationship] = {}
         self.entity_index: Dict[EntityType, List[str]] = {et: [] for et in EntityType}
@@ -156,13 +159,11 @@ class KnowledgeGraphManager:
         self.metrics = metrics_exporter
         self.query_history: List[Dict[str, Any]] = []
         
-        # Thread safety
-        self._lock = threading.RLock()
-
-        # Initialize persistence storage
-        self._init_persistence()
         if self.neo4j_enabled:
             self._init_neo4j()
+
+        # Initialize persistence layer using the shared connection pool if provided
+        self._init_persistence()
         
         kg_logger.info("Knowledge graph manager initialization complete", parameters={
             'storage_dir': str(self.storage_dir),
@@ -175,11 +176,17 @@ class KnowledgeGraphManager:
         """Initialize database persistence layer."""
         persistence_cfg = self.config.get("persistence", {})
         if not self.persistence:
-            self.persistence = EnhancedPersistenceManager(
-                persistence_cfg.get("database_url"),
-                persistence_cfg.get("redis_url"),
-                config=persistence_cfg,
-            )
+            if self.connection_pool:
+                self.persistence = EnhancedPersistenceManager(
+                    connection_pool=self.connection_pool,
+                    config=persistence_cfg,
+                )
+            else:
+                self.persistence = EnhancedPersistenceManager(
+                    persistence_cfg.get("database_url"),
+                    persistence_cfg.get("redis_url"),
+                    config=persistence_cfg,
+                )
         if self.persistence:
             try:
                 loop = asyncio.get_event_loop()
@@ -230,7 +237,7 @@ class KnowledgeGraphManager:
         """Create a new entity in the knowledge graph."""
         entity_logger.info(f"Creating entity: {name} ({entity_type.value})")
         
-        with self._lock:
+        async with self._lock:
             # Generate unique ID
             entity_id = self._generate_entity_id(entity_type, name)
             
@@ -299,20 +306,6 @@ class KnowledgeGraphManager:
     @detailed_log_function(LogCategory.KNOWLEDGE_GRAPH)
     async def get_entity(self, entity_id: str) -> Optional[Entity]:
         """Get entity by ID."""
-        with self._lock:
-            if entity_id in self.entities:
-                return self.entities[entity_id]
-
-        if self.persistence:
-            record = await self.persistence.entity_repo.get_entity(entity_id)
-            if record:
-                entity = self._entity_from_record(record)
-                with self._lock:
-                    self.entities[entity_id] = entity
-                    if entity_id not in self.entity_index[entity.type]:
-                        self.entity_index[entity.type].append(entity_id)
-                return entity
-        return None
     
     @detailed_log_function(LogCategory.KNOWLEDGE_GRAPH)
     async def find_entities(self, entity_type: Optional[EntityType] = None,
@@ -344,16 +337,6 @@ class KnowledgeGraphManager:
         if self.metrics:
             self.metrics.inc_kg_query()
         
-        if self.persistence and name_pattern:
-            records = await self.persistence.entity_repo.find_similar_entities(
-                entity_type.value if entity_type else "",
-                name_pattern,
-                limit=limit,
-            )
-            entities = [self._entity_from_record(r) for r in records]
-            return entities
-
-        with self._lock:
             entities = []
 
             # Filter by type
@@ -407,7 +390,7 @@ class KnowledgeGraphManager:
         """Create a new relationship in the knowledge graph."""
         relationship_logger.info(f"Creating relationship: {source_entity_id} -{relationship_type.value}-> {target_entity_id}")
         
-        with self._lock:
+        async with self._lock:
             # Validate entities exist
             if source_entity_id not in self.entities:
                 raise ValueError(f"Source entity not found: {source_entity_id}")
@@ -494,32 +477,9 @@ class KnowledgeGraphManager:
                                      relationship_types: Optional[List[RelationshipType]] = None,
                                      max_depth: int = 2) -> List[Entity]:
         """Find entities connected to the given entity."""
-        query_logger.info(f"Finding connected entities for {entity_id}", parameters={
-            'max_depth': max_depth,
-            'relationship_types': [rt.value for rt in relationship_types] if relationship_types else None
-        })
-
-        cache_key = None
-        if self.cache_manager:
-            base = {
-                "entity": entity_id,
-                "rel_types": [rt.value for rt in relationship_types] if relationship_types else None,
-                "depth": max_depth,
-            }
-            cache_key = "kg_connected:" + hashlib.sha256(str(base).encode()).hexdigest()
-            cached = await self.cache_manager.get(cache_key)
-            if cached:
-                if self.metrics:
-                    self.metrics.inc_kg_query(cache_hit=True)
-                return [Entity(**c) for c in cached]
-
-        if self.metrics:
-            self.metrics.inc_kg_query()
-        
-        connected_entities = set()
 
         if self.persistence:
-            records = await self.persistence.relationship_repo.get_relationships_for_entity(entity_id)
+            records = await self.persistence.relationship_repo.get_relationships_by_entity(entity_id)
             for rec in records:
                 rel_type = RelationshipType(rec.relationship_type)
                 if relationship_types and rel_type not in relationship_types:
@@ -532,12 +492,10 @@ class KnowledgeGraphManager:
                 for rel in self.relationships.values():
                     if relationship_types and rel.type not in relationship_types:
                         continue
-                    target_id = None
-                    if rel.source_entity_id == entity_id:
-                        target_id = rel.target_entity_id
-                    elif rel.target_entity_id == entity_id:
-                        target_id = rel.source_entity_id
-                    if target_id:
+                    target_id = (
+                        rel.target_entity_id if rel.source_entity_id == entity_id else rel.source_entity_id
+                    )
+                    if target_id != entity_id:
                         connected_entities.add(target_id)
 
     
@@ -619,9 +577,9 @@ class KnowledgeGraphManager:
             kg_logger.error(f"Failed to sync relationship to Neo4j: {relationship.id}", exception=e)
     
     @detailed_log_function(LogCategory.KNOWLEDGE_GRAPH)
-    def get_statistics(self) -> Dict[str, Any]:
+    async def get_statistics(self) -> Dict[str, Any]:
         """Get knowledge graph statistics."""
-        with self._lock:
+        async with self._lock:
             entity_counts = {et.value: len(ids) for et, ids in self.entity_index.items() if ids}
             relationship_counts = {rt.value: len(ids) for rt, ids in self.relationship_index.items() if ids}
             
@@ -666,5 +624,3 @@ class KnowledgeGraphManager:
 
 # Service container factory function
 def create_knowledge_graph_manager(
-
-    )

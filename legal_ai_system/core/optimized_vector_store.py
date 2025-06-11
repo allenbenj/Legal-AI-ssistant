@@ -2,7 +2,9 @@ from __future__ import annotations
 
 """Compatibility wrapper around :class:`EnhancedVectorStore`."""
 
-from typing import Any, Dict, Optional
+from typing import Any, Optional
+
+from .config_models import OptimizedVectorStoreConfig
 
 from .enhanced_vector_store import EnhancedVectorStore, IndexType
 
@@ -15,15 +17,16 @@ class OptimizedVectorStore(EnhancedVectorStore):
 
 
 def create_optimized_vector_store(
-    service_container: Any, service_config: Optional[Dict[str, Any]] | None = None
+    service_container: Any,
+    service_config: Optional[OptimizedVectorStoreConfig] | None = None,
 ) -> OptimizedVectorStore:
     """Factory returning an :class:`OptimizedVectorStore` instance."""
 
-    cfg = service_config or {}
+    cfg = service_config or OptimizedVectorStoreConfig()
     return OptimizedVectorStore(
-        storage_path=cfg.get("STORAGE_PATH", "./storage/vectors"),
-        embedding_model=cfg.get("embedding_model_name", "sentence-transformers/all-MiniLM-L6-v2"),
-        index_type=IndexType(cfg.get("DEFAULT_INDEX_TYPE", "HNSW")),
-        enable_gpu=cfg.get("ENABLE_GPU_FAISS", False),
+        storage_path=str(cfg.storage_path),
+        embedding_model=cfg.embedding_model_name,
+        index_type=IndexType(cfg.default_index_type),
+        enable_gpu=cfg.enable_gpu_faiss,
+        index_params=cfg.index_params,
     )
-

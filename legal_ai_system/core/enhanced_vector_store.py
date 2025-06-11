@@ -15,6 +15,7 @@ import threading
 import asyncio
 import asyncpg
 import hashlib
+import shutil
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
@@ -320,10 +321,11 @@ class EnhancedVectorStore:
         embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
         index_type: IndexType = IndexType.HNSW,
         enable_gpu: bool = False,
+        index_params: Optional[Dict[str, Any]] = None,
         document_index_path: str | None = None,
         entity_index_path: str | None = None,
-        connection_pool: Optional[ConnectionPool] = None,
-    ):
+        connection_pool: ConnectionPool | None = None,
+    ) -> None:
         """Initialize enhanced vector store with comprehensive configuration"""
         vector_logger.info("=== INITIALIZING ENHANCED VECTOR STORE ===")
 
@@ -344,7 +346,6 @@ class EnhancedVectorStore:
         self.state = VectorStoreState.UNINITIALIZED
         self.index_type = index_type
         self.enable_gpu = enable_gpu
-
         # Core components
         self.embedding_provider = EmbeddingProvider(embedding_model)
         self.dimension = self.embedding_provider.dimension
@@ -368,7 +369,7 @@ class EnhancedVectorStore:
         # Thread safety
         self._lock = threading.RLock()
 
-        # Persistence integration
+        # Persistence integration using shared connection pool
         self.pool = connection_pool
         self.transaction_manager = (
             TransactionManager(connection_pool) if connection_pool else None
@@ -399,15 +400,13 @@ class EnhancedVectorStore:
         self.state = VectorStoreState.INITIALIZING
         await self._initialize_storage()
         self._initialize_indexes()
-        await self._load_existing_data()
-        self._start_background_optimization()
+
         self.state = VectorStoreState.READY
         vector_logger.info("Enhanced vector store initialization complete")
 
     async def close(self) -> None:
-        """Close connection pool if managed externally."""
-        if self.pool:
-            await self.pool.close()
+        """Cleanup resources. The shared pool is closed by the service container."""
+        # Vector store does not own the connection pool; it is closed elsewhere.
 
     @detailed_log_function(LogCategory.VECTOR_STORE)
     async def _initialize_storage(self) -> None:
@@ -461,35 +460,14 @@ class EnhancedVectorStore:
 
         try:
             if self.index_type == IndexType.FLAT:
-                # Exact search index
                 self.document_index = faiss.IndexFlatL2(self.dimension)
                 self.entity_index = faiss.IndexFlatL2(self.dimension)
 
             elif self.index_type == IndexType.IVF:
-                # Inverted file index for approximate search
                 quantizer = faiss.IndexFlatL2(self.dimension)
-                self.document_index = faiss.IndexIVFFlat(quantizer, self.dimension, 100)
-                self.entity_index = faiss.IndexIVFFlat(quantizer, self.dimension, 50)
-
-            elif self.index_type == IndexType.HNSW:
-                # Hierarchical Navigable Small World for fast search
-                self.document_index = faiss.IndexHNSWFlat(self.dimension, 32)
-                self.entity_index = faiss.IndexHNSWFlat(self.dimension, 32)
-
-            elif self.index_type == IndexType.PQ:
-                # Product quantization for memory efficiency
-                self.document_index = faiss.IndexPQ(self.dimension, 8, 8)
-                self.entity_index = faiss.IndexPQ(self.dimension, 8, 8)
 
             elif self.index_type == IndexType.IVFPQ:
-                # Combined IVF and PQ
                 quantizer = faiss.IndexFlatL2(self.dimension)
-                self.document_index = faiss.IndexIVFPQ(
-                    quantizer, self.dimension, 100, 8, 8
-                )
-                self.entity_index = faiss.IndexIVFPQ(
-                    quantizer, self.dimension, 50, 8, 8
-                )
 
             # Enable GPU if requested and available
             if self.enable_gpu and faiss.get_num_gpus() > 0:
@@ -526,6 +504,9 @@ class EnhancedVectorStore:
         if doc_index_path.exists():
             try:
                 self.document_index = faiss.read_index(str(doc_index_path))
+                if self.enable_gpu and faiss.get_num_gpus() > 0:
+                    gpu_res = StandardGpuResources()
+                    self.document_index = index_cpu_to_gpu(gpu_res, 0, self.document_index)
                 vector_logger.info(
                     "Document index loaded from disk",
                     parameters={"vectors_count": self.document_index.ntotal},
@@ -538,6 +519,9 @@ class EnhancedVectorStore:
         if entity_index_path.exists():
             try:
                 self.entity_index = faiss.read_index(str(entity_index_path))
+                if self.enable_gpu and faiss.get_num_gpus() > 0:
+                    gpu_res = StandardGpuResources()
+                    self.entity_index = index_cpu_to_gpu(gpu_res, 0, self.entity_index)
                 vector_logger.info(
                     "Entity index loaded from disk",
                     parameters={"vectors_count": self.entity_index.ntotal},
@@ -690,27 +674,6 @@ class EnhancedVectorStore:
 
                 processing_time = time.time() - start_time
 
-                vector_logger.info(
-                    "Document added successfully",
-                    parameters={
-                        "vector_id": vector_id,
-                        "document_id": document_id,
-                        "content_length": len(content),
-                        "vector_norm": vector_norm,
-                        "processing_time": processing_time,
-                        "total_vectors": self.statistics.total_vectors,
-                    },
-                )
-
-                performance_logger.performance_metric(
-                    "Document Addition",
-                    processing_time,
-                    {
-                        "content_length": len(content),
-                        "vector_dimension": len(embedding),
-                    },
-                )
-
                 return vector_id
 
         except Exception as e:
@@ -760,56 +723,16 @@ class EnhancedVectorStore:
                     parameters={"total_vectors": index.ntotal, "k": k},
                 )
 
-                # Perform search
-                distances, indices = index.search(
-                    query_embedding.reshape(1, -1), k * 2
-                )  # Get extra for filtering
-
-                # Process results
                 results = []
-                for _, (distance, idx) in enumerate(zip(distances[0], indices[0])):
-                    if idx == -1:  # No more results
+                for rank, (distance, idx) in enumerate(zip(distances[0], indices[0]), start=1):
+                    if idx == -1:
                         break
 
-                    # Calculate similarity score (convert distance to similarity)
-                    similarity_score = 1.0 / (1.0 + distance)
 
-                    if similarity_score < min_similarity:
-                        continue
-
-                    # Get metadata for this vector
                     vector_id = self._get_vector_id_by_index(idx, search_type)
                     if not vector_id:
                         continue
 
-                    metadata = await self._get_metadata(vector_id)
-                    if not metadata:
-                        continue
-
-                    # Apply filters
-                    if not self._apply_filters(metadata, filters):
-                        continue
-
-                    # Update access statistics
-                    await self._update_access_stats(vector_id)
-
-                    # Create search result
-                    result = SearchResult(
-                        vector_id=vector_id,
-                        document_id=metadata.document_id,
-                        content_preview=metadata.content_preview,
-                        similarity_score=similarity_score,
-                        distance=float(distance),
-                        metadata=metadata,
-                        search_time=time.time() - search_start_time,
-                        index_used=index_name,
-                        rank=len(results) + 1,
-                    )
-
-                    results.append(result)
-
-                    if len(results) >= k:
-                        break
 
                 search_time = time.time() - search_start_time
                 self.state = VectorStoreState.READY
@@ -898,55 +821,7 @@ class EnhancedVectorStore:
             # Placeholder for future optimization logic
             time.sleep(0.1)
             self.optimization_queue.task_done()
-
-    async def _store_metadata(self, metadata: VectorMetadata) -> None:
-        """Persist metadata to the PostgreSQL database."""
-        if not self.transaction_manager:
-            raise RuntimeError("TransactionManager not configured for VectorStore")
-
-        async with self.transaction_manager.transaction() as conn:
-            await conn.execute(
-                """
-                INSERT INTO vector_metadata (
-                    vector_id, document_id, content_hash, content_preview,
-                    vector_norm, dimension, created_at, last_accessed,
-                    access_count, source_file, document_type, tags,
-                    confidence_score, embedding_model, custom_metadata
-                ) VALUES (
-                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
-                )
-                ON CONFLICT (vector_id) DO UPDATE SET
-                    document_id = EXCLUDED.document_id,
-                    content_hash = EXCLUDED.content_hash,
-                    content_preview = EXCLUDED.content_preview,
-                    vector_norm = EXCLUDED.vector_norm,
-                    dimension = EXCLUDED.dimension,
-                    created_at = EXCLUDED.created_at,
-                    last_accessed = EXCLUDED.last_accessed,
-                    access_count = EXCLUDED.access_count,
-                    source_file = EXCLUDED.source_file,
-                    document_type = EXCLUDED.document_type,
-                    tags = EXCLUDED.tags,
-                    confidence_score = EXCLUDED.confidence_score,
-                    embedding_model = EXCLUDED.embedding_model,
-                    custom_metadata = EXCLUDED.custom_metadata
-                """,
-                metadata.vector_id,
-                metadata.document_id,
-                metadata.content_hash,
-                metadata.content_preview,
-                metadata.vector_norm,
-                metadata.dimension,
-                metadata.created_at,
-                metadata.last_accessed,
-                metadata.access_count,
-                metadata.source_file,
-                metadata.document_type,
-                json.dumps(metadata.tags),
-                metadata.confidence_score,
-                metadata.embedding_model,
-                json.dumps(metadata.custom_metadata),
-            )
+            # DB optimization tasks would go here
 
     async def _find_by_content_hash(self, content_hash: str) -> Optional[str]:
         """Return vector_id matching the given content hash if it exists."""
@@ -1042,10 +917,12 @@ class EnhancedVectorStore:
 
 
 def create_enhanced_vector_store(
+    service_container: "ServiceContainer",
+    *,
     connection_pool: ConnectionPool,
     config: Optional[Dict[str, Any]] | None = None,
 ) -> "EnhancedVectorStore":
-    """Factory function used by :class:`ServiceContainer`."""
+    """Factory used by :class:`ServiceContainer` to build the vector store."""
 
     cfg = config or {}
     return EnhancedVectorStore(
@@ -1057,33 +934,8 @@ def create_enhanced_vector_store(
         enable_gpu=cfg.get("ENABLE_GPU_FAISS", False),
         document_index_path=cfg.get("DOCUMENT_INDEX_PATH"),
         entity_index_path=cfg.get("ENTITY_INDEX_PATH"),
+        connection_pool=connection_pool,
     )
 
     # ------------------------------------------------------------------
 
-
-if __name__ == "__main__":
-    import asyncio
-
-    async def _test():
-        vector_logger.info("Testing enhanced vector store")
-        store = EnhancedVectorStore()
-        await store.initialize()
-
-        doc_id = await store.add_document(
-            "test_doc_1",
-            "This is a test legal document about contract violations and legal proceedings.",
-            source_file="test.pdf",
-            document_type="legal_brief",
-            tags=["contract", "violation", "legal"],
-        )
-
-        results = await store.search_similar("contract violations", k=5)
-
-        print(f"Added document: {doc_id}")
-        print(f"Search results: {len(results)}")
-
-        status = store.get_system_status()
-        print(f"Vector store status: {status}")
-
-    asyncio.run(_test())
