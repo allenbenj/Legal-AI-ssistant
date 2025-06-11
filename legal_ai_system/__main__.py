@@ -12,6 +12,7 @@ import sys
 import os
 from pathlib import Path
 import argparse
+import logging
 
 # Ensure the package root is in sys.path if running with `python legal_ai_system/__main__.py`
 # This is usually not needed if running with `python -m legal_ai_system` from one level up.
@@ -22,36 +23,36 @@ if str(PACKAGE_ROOT) not in sys.path:
         0, str(PACKAGE_ROOT.parent)
     )  # Add the directory containing 'legal_ai_system'
 
+# Configure basic logging so informational messages surface when running
+# ``python -m legal_ai_system``. This keeps output consistent across
+# interfaces while allowing more advanced logging setups to override if
+# needed.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(levelname)s: %(message)s",
+)
+
 
 def run_streamlit_gui() -> int:
     """Launch the Streamlit dashboard."""
     try:
         from legal_ai_system.gui.streamlit_app import main_streamlit_entry
 
-        print(
-            "INFO: Launching Legal AI System GUI via: legal_ai_system.gui.streamlit_app.main_streamlit_entry()"
+        logging.info(
+            "Launching Legal AI System GUI via: legal_ai_system.gui.streamlit_app.main_streamlit_entry()"
         )
         main_streamlit_entry()
         return 0
     except ModuleNotFoundError as e:
         missing = getattr(e, "name", str(e))
-        print(
-            f"ERROR: Missing dependency '{missing}' required for the Streamlit GUI.",
-            file=sys.stderr,
+        logging.error(
+            "Missing dependency '%s' required for the Streamlit GUI.",
+            missing,
         )
-        print(
-            "Install required packages with: pip install -r requirements.txt",
-            file=sys.stderr,
-        )
+        logging.error("Install required packages with: pip install -r requirements.txt")
         return 1
     except Exception as e:  # noqa: PIE786 - show any unexpected exception
-        print(
-            f"ERROR: Failed to launch Streamlit GUI: {e}",
-            file=sys.stderr,
-        )
-        import traceback
-
-        traceback.print_exc()
+        logging.exception("Failed to launch Streamlit GUI: %s", e)
         return 1
 
 
@@ -60,17 +61,11 @@ def run_pyqt_gui() -> int:
     try:
         from legal_ai_system.gui.main_gui import main as qt_main
 
-        print("INFO: Launching PyQt GUI via: legal_ai_system.gui.main_gui.main()")
+        logging.info("Launching PyQt GUI via: legal_ai_system.gui.main_gui.main()")
         qt_main()
         return 0
     except Exception as e:  # noqa: PIE786
-        print(
-            f"ERROR: Failed to launch PyQt GUI: {e}",
-            file=sys.stderr,
-        )
-        import traceback
-
-        traceback.print_exc()
+        logging.exception("Failed to launch PyQt GUI: %s", e)
         return 1
 
 
@@ -82,14 +77,11 @@ def run_api_server() -> int:
 
         host = os.getenv("LEGAL_AI_API_HOST", "0.0.0.0")
         port = int(os.getenv("LEGAL_AI_API_PORT", "8000"))
-        print(f"INFO: Starting FastAPI server on {host}:{port}")
+        logging.info("Starting FastAPI server on %s:%s", host, port)
         uvicorn.run(app, host=host, port=port, reload=True)
         return 0
     except Exception as e:  # noqa: PIE786
-        print(f"ERROR: Failed to start FastAPI server: {e}", file=sys.stderr)
-        import traceback
-
-        traceback.print_exc()
+        logging.exception("Failed to start FastAPI server: %s", e)
         return 1
 
 
