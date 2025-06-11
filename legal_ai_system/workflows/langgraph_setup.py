@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 try:  # pragma: no cover - optional dependency
-    from langgraph.graph import StateGraph, END, BaseNode
+    from langgraph.graph import StateGraph, END, BaseNode as LangGraphBaseNode
 except Exception:  # pragma: no cover - during tests
     class StateGraph:  # pragma: no cover - simple placeholder
         def __init__(self) -> None:
@@ -25,8 +25,10 @@ except Exception:  # pragma: no cover - during tests
 
     END = "END"
 
-    class BaseNode:
+    class LangGraphBaseNode:
         pass
+    BaseNode = LangGraphBaseNode
+
 
 if TYPE_CHECKING:  # pragma: no cover
     from langgraph.graph import StateGraph as _RealStateGraph
