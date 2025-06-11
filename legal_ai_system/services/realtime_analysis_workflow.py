@@ -14,7 +14,7 @@ import uuid
 from dataclasses import dataclass
 from types import SimpleNamespace
 from datetime import datetime
-import uuid
+from collections import defaultdict
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
@@ -24,7 +24,10 @@ from ..core.detailed_logging import (
     LogCategory,
     detailed_log_function,
 )
+from ..analytics.quality_classifier import PreprocessingErrorPredictor
+from ..core.model_switcher import TaskComplexity
 from .metrics_exporter import MetricsExporter, metrics_exporter
+from ..core.ml_optimizer import PerformanceMetrics
 
 
 try:  # Avoid heavy imports during tests
@@ -96,9 +99,7 @@ class RealTimeAnalysisWorkflow:
         """Initialize workflow settings and state."""
         self.service_container = service_container
         self.task_queue = task_queue
-        self.logger = get_detailed_logger(
-            "RealTimeWorkflow", LogCategory.SYSTEM
-        )
+        self.logger = get_detailed_logger("RealTimeWorkflow", LogCategory.SYSTEM)
 
         cfg = workflow_config or SimpleNamespace(
             enable_real_time_sync=True,
@@ -123,6 +124,7 @@ class RealTimeAnalysisWorkflow:
         # User feedback integration
         self.feedback_callback: Optional[Callable] = None
         self.pending_feedback: Dict[str, Any] = {}
+        self.preproc_predictor = PreprocessingErrorPredictor()
 
         # Synchronization primitives
         self.processing_lock = asyncio.Semaphore(self.max_concurrent_documents)
@@ -136,6 +138,23 @@ class RealTimeAnalysisWorkflow:
         self.graph_manager = None
         self.vector_store = None
         self.reviewable_memory = None
+
+        # ML optimizer and policy learner for dynamic routing
+        try:
+            from ..core.ml_optimizer import MLOptimizer
+            from ..workflows.workflow_policy import WorkflowPolicy
+        except Exception:  # pragma: no cover
+            MLOptimizer = object  # type: ignore
+            WorkflowPolicy = object  # type: ignore
+
+        self.ml_optimizer = (
+            getattr(service_container, "ml_optimizer", None) or MLOptimizer()
+        )
+        self.policy_learner = WorkflowPolicy()
+        self.workflow_history: List[Dict[str, Any]] = []
+        self.agent_stats: Dict[str, Dict[str, int]] = defaultdict(
+            lambda: {"success": 0, "failure": 0}
+        )
 
     async def initialize(self):
         """Initialize the real-time analysis workflow."""
@@ -158,12 +177,13 @@ class RealTimeAnalysisWorkflow:
 
         task_queue = getattr(self, "task_queue", None)
         if task_queue:
-            job = task_queue.enqueue(self._run_realtime_pipeline, document_path, **kwargs)
+            job = task_queue.enqueue(
+                self._run_realtime_pipeline, document_path, **kwargs
+            )
             await self._notify_progress("queued", 0.0)
             return job
 
         return await self._run_realtime_pipeline(document_path, **kwargs)
-
 
     async def _run_realtime_pipeline(self, document_path: str, **kwargs):
         """Run the end-to-end real-time processing pipeline."""
@@ -171,43 +191,168 @@ class RealTimeAnalysisWorkflow:
 
         start_time = time.time()
         processing_times: Dict[str, float] = {}
+        doc_features = self._extract_document_features("", document_path)
+        new_concurrency = self.policy_learner.predict_concurrency(doc_features)
+        if new_concurrency != self.max_concurrent_documents:
+            self.max_concurrent_documents = new_concurrency
+            self.processing_lock = asyncio.Semaphore(self.max_concurrent_documents)
 
         async with self.processing_lock:
             await self._notify_progress("document_processing", 0.05)
             t0 = time.time()
             document_result = await self.document_processor.process(document_path)
-            processing_times["document_processing"] = time.time() - t0
-
+            duration = time.time() - t0
+            processing_times["document_processing"] = duration
+            success = self._is_processing_successful(document_result)
+            self.policy_learner.update_agent_stats("document_processor", success)
             text = self._extract_text_from_result(document_result)
+            doc_features = self._extract_document_features(text, document_path)
+            self.policy_learner.record_step(
+                "document_processing", doc_features, success, duration
+            )
+            self.ml_optimizer.record_step_metrics(
+                document_path,
+                "document_processing",
+                PerformanceMetrics(processing_time=duration, success=success),
+            )
+
+            risk = self.preproc_predictor.predict_risk(
+                {
+                    "content_preview": text[:1000] if text else "",
+                    "size": Path(document_path).stat().st_size,
+                }
+            )
+            if risk > 0.5:
+                if hasattr(self.hybrid_extractor, "model_switcher"):
+                    await self.hybrid_extractor.model_switcher.switch_for_task(
+                        "hybrid_extraction", TaskComplexity.COMPLEX
+                    )
+                if hasattr(self.ontology_extractor, "model_switcher"):
+                    await self.ontology_extractor.model_switcher.switch_for_task(
+                        "ontology_extraction", TaskComplexity.COMPLEX
+                    )
 
             await self._notify_progress("ontology_extraction", 0.15)
-            legal_doc = self._create_legal_document(document_result, document_path, document_id, text_override=text)
-            t0 = time.time()
-            ontology_result = await self.ontology_extractor.process(legal_doc)
-            processing_times["ontology_extraction"] = time.time() - t0
+            legal_doc = self._create_legal_document(
+                document_result, document_path, document_id, text_override=text
+            )
+            if self.policy_learner.should_run_step("ontology_extraction", doc_features):
+                t0 = time.time()
+                ontology_result = await self.ontology_extractor.process(legal_doc)
+                duration = time.time() - t0
+                success = self._is_processing_successful(ontology_result)
+            else:
+                ontology_result = SimpleNamespace()
+                duration = 0.0
+                success = True
+            processing_times["ontology_extraction"] = duration
+            self.policy_learner.update_agent_stats("ontology_extractor", success)
+            self.policy_learner.record_step(
+                "ontology_extraction", doc_features, success, duration
+            )
+            self.ml_optimizer.record_step_metrics(
+                document_path,
+                "ontology_extraction",
+                PerformanceMetrics(processing_time=duration, success=success),
+            )
 
             await self._notify_progress("hybrid_extraction", 0.35)
-            t0 = time.time()
-            hybrid_result = await self.hybrid_extractor.extract_from_document(document_path, document_id=document_id)
-            processing_times["hybrid_extraction"] = time.time() - t0
+            if self.policy_learner.should_run_step("hybrid_extraction", doc_features):
+                t0 = time.time()
+                hybrid_result = await self.hybrid_extractor.extract_from_document(
+                    document_path, document_id=document_id
+                )
+                duration = time.time() - t0
+                success = self._is_processing_successful(hybrid_result)
+            else:
+                hybrid_result = SimpleNamespace(
+                    validated_entities=[], targeted_extractions={}
+                )
+                duration = 0.0
+                success = True
+            processing_times["hybrid_extraction"] = duration
+            self.policy_learner.update_agent_stats("hybrid_extractor", success)
+            self.policy_learner.record_step(
+                "hybrid_extraction", doc_features, success, duration
+            )
+            self.ml_optimizer.record_step_metrics(
+                document_path,
+                "hybrid_extraction",
+                PerformanceMetrics(processing_time=duration, success=success),
+            )
 
             await self._notify_progress("graph_update", 0.55)
-            t0 = time.time()
-            graph_updates = await self._process_entities_realtime(hybrid_result, ontology_result, document_id)
-            processing_times["graph_updates"] = time.time() - t0
+            if self.policy_learner.should_run_step("graph_update", doc_features):
+                t0 = time.time()
+                graph_updates = await self._process_entities_realtime(
+                    hybrid_result, ontology_result, document_id
+                )
+                duration = time.time() - t0
+                success = True
+            else:
+                graph_updates = {}
+                duration = 0.0
+                success = True
+            processing_times["graph_updates"] = duration
+            self.policy_learner.record_step(
+                "graph_update", doc_features, success, duration
+            )
+            self.ml_optimizer.record_step_metrics(
+                document_path,
+                "graph_update",
+                PerformanceMetrics(processing_time=duration, success=success),
+            )
 
             await self._notify_progress("vector_update", 0.7)
-            t0 = time.time()
-            vector_updates = await self._update_vector_store_realtime(hybrid_result, text, document_id)
-            processing_times["vector_updates"] = time.time() - t0
+            if self.policy_learner.should_run_step("vector_update", doc_features):
+                t0 = time.time()
+                vector_updates = await self._update_vector_store_realtime(
+                    hybrid_result, text, document_id
+                )
+                duration = time.time() - t0
+                success = True
+            else:
+                vector_updates = {}
+                duration = 0.0
+                success = True
+            processing_times["vector_updates"] = duration
+            self.policy_learner.record_step(
+                "vector_update", doc_features, success, duration
+            )
+            self.ml_optimizer.record_step_metrics(
+                document_path,
+                "vector_update",
+                PerformanceMetrics(processing_time=duration, success=success),
+            )
 
             await self._notify_progress("memory_integration", 0.85)
-            t0 = time.time()
-            memory_updates = await self._integrate_with_memory(hybrid_result, ontology_result, document_path)
-            processing_times["memory_updates"] = time.time() - t0
+            if self.policy_learner.should_run_step("memory_integration", doc_features):
+                t0 = time.time()
+                memory_updates = await self._integrate_with_memory(
+                    hybrid_result, ontology_result, document_path
+                )
+                duration = time.time() - t0
+                success = True
+            else:
+                memory_updates = {}
+                duration = 0.0
+                success = True
+            processing_times["memory_updates"] = duration
+            self.policy_learner.record_step(
+                "memory_integration", doc_features, success, duration
+            )
+            self.ml_optimizer.record_step_metrics(
+                document_path,
+                "memory_integration",
+                PerformanceMetrics(processing_time=duration, success=success),
+            )
 
-            validation = await self._validate_extraction_quality(hybrid_result, ontology_result, graph_updates)
-            confidence_scores = self._calculate_confidence_scores(hybrid_result, ontology_result, validation)
+            validation = await self._validate_extraction_quality(
+                hybrid_result, ontology_result, graph_updates
+            )
+            confidence_scores = self._calculate_confidence_scores(
+                hybrid_result, ontology_result, validation
+            )
             sync_status = await self._get_sync_status()
 
         total_processing_time = time.time() - start_time
@@ -229,13 +374,21 @@ class RealTimeAnalysisWorkflow:
         )
 
         await self._update_performance_stats(result)
-        if self.auto_optimization_threshold and self.documents_processed % self.auto_optimization_threshold == 0:
+        if (
+            self.auto_optimization_threshold
+            and self.documents_processed % self.auto_optimization_threshold == 0
+        ):
             await self._auto_optimize_system()
 
         await self._notify_progress("completed", 1.0)
+        self.workflow_history.append(
+            {
+                "document_id": document_id,
+                "processing_times": processing_times,
+                "timestamp": datetime.now().isoformat(),
+            }
+        )
         return result
-
-
 
     async def _process_entities_realtime(
         self, hybrid_result, ontology_result, document_id: str
@@ -607,6 +760,21 @@ class RealTimeAnalysisWorkflow:
             source_text_snippet=validation_result.entity_text,
             span=(0, len(validation_result.entity_text)),
         )
+
+    def _extract_document_features(
+        self, text: str, file_path: str
+    ) -> "DocumentFeatures":
+        """Generate basic document features for policy decisions."""
+        from ..core.ml_optimizer import DocumentFeatures
+
+        try:
+            file_size_mb = Path(file_path).stat().st_size / (1024 * 1024)
+        except OSError:
+            file_size_mb = 0.0
+
+        word_count = len(text.split()) if text else 0
+
+        return DocumentFeatures(file_size_mb=file_size_mb, word_count=word_count)
 
     # Callback management
     def register_progress_callback(self, callback: Callable):

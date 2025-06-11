@@ -192,13 +192,6 @@ class OptimizationResult:
 
 
 @dataclass
-class TokenUsageRecord:
-    """Record of token usage for a session."""
-
-    session_id: str
-    tokens_used: int
-    timestamp: datetime
-
 
 class MLOptimizer:
     """
@@ -234,8 +227,6 @@ class MLOptimizer:
         self.performance_history: deque = deque(maxlen=10000)
         self.document_features_cache: Dict[str, DocumentFeatures] = {}
         self.optimization_cache: Dict[str, OptimizationResult] = {}
-        self.token_usage_history: deque = deque(maxlen=10000)
-
         # Analysis settings
         self.min_samples_for_optimization = self.config.min_samples
         self.similarity_threshold = self.config.similarity_threshold
@@ -243,7 +234,6 @@ class MLOptimizer:
 
         # Load recent performance data
         self._load_recent_performance()
-        self._load_recent_token_usage()
 
         # Threading
         self._lock = threading.RLock()
@@ -298,15 +288,6 @@ class MLOptimizer:
                 CREATE INDEX IF NOT EXISTS idx_cache_key ON optimization_cache(cache_key);
                 CREATE INDEX IF NOT EXISTS idx_cache_expires ON optimization_cache(expires_at);
 
-                CREATE TABLE IF NOT EXISTS session_token_usage (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    session_id TEXT NOT NULL,
-                    tokens_used INTEGER NOT NULL,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                );
-
-                CREATE INDEX IF NOT EXISTS idx_token_session ON session_token_usage(session_id);
-                CREATE INDEX IF NOT EXISTS idx_token_created ON session_token_usage(created_at);
             """
             )
 
@@ -349,34 +330,16 @@ class MLOptimizer:
             ml_logger.error("Failed to load recent performance data", exception=e)
 
     @detailed_log_function(LogCategory.SYSTEM)
-    def _load_recent_token_usage(self):
-        """Load recent token usage data into memory cache."""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.execute(
                     """
-                    SELECT session_id, tokens_used, created_at
-                    FROM session_token_usage
-                    WHERE created_at > datetime('now', '-7 days')
                     ORDER BY created_at DESC
                     LIMIT 5000
                 """
                 )
 
                 for row in cursor.fetchall():
-                    record = TokenUsageRecord(
-                        session_id=row[0],
-                        tokens_used=row[1],
-                        timestamp=datetime.fromisoformat(row[2]),
-                    )
-                    self.token_usage_history.append(record)
-
-            ml_logger.info(
-                f"Loaded {len(self.token_usage_history)} recent token usage records"
-            )
-
-        except Exception as e:
-            ml_logger.error("Failed to load recent token usage", exception=e)
 
     @detailed_log_function(LogCategory.PERFORMANCE)
     def record_performance(
@@ -459,6 +422,74 @@ class MLOptimizer:
             performance_logger.error(
                 f"Failed to record performance for {document_path}", exception=e
             )
+
+    @detailed_log_function(LogCategory.PERFORMANCE)
+    def record_step_metrics(
+        self, document_path: str, step_name: str, metrics: PerformanceMetrics
+    ) -> None:
+        """Record metrics for individual workflow steps."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute(
+                    """
+                    INSERT INTO step_performance_records
+                    (document_path, step_name, metrics_json)
+                    VALUES (?, ?, ?)
+                """,
+                    (
+                        document_path,
+                        step_name,
+                        json.dumps(asdict(metrics)),
+                    ),
+                )
+        except Exception as exc:  # pragma: no cover - best effort
+            performance_logger.error("Failed to record step metrics", exception=exc)
+
+    @detailed_log_function(LogCategory.SYSTEM)
+    def record_review_feedback(
+        self,
+        item_id: str,
+        item_type: str,
+        original_confidence: float,
+        decision: str,
+        confidence_adjustment: float,
+        notes: str = "",
+        user_id: Optional[str] = None,
+    ) -> None:
+        """Store reviewer feedback for threshold optimization."""
+        record = {
+            "item_id": item_id,
+            "item_type": item_type,
+            "original_confidence": original_confidence,
+            "review_decision": decision,
+            "confidence_adjustment": confidence_adjustment,
+            "notes": notes,
+            "user_id": user_id,
+            "timestamp": datetime.now(timezone.utc),
+        }
+        try:
+            with self._lock, sqlite3.connect(self.db_path) as conn:
+                conn.execute(
+                    """
+                    INSERT INTO feedback_records
+                    (item_id, item_type, original_confidence, review_decision,
+                     confidence_adjustment, notes, user_id, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                    (
+                        item_id,
+                        item_type,
+                        original_confidence,
+                        decision,
+                        confidence_adjustment,
+                        notes,
+                        user_id,
+                        record["timestamp"].isoformat(),
+                    ),
+                )
+            self.feedback_history.append(record)
+        except Exception as e:
+            ml_logger.error("Failed to record review feedback", exception=e)
 
     @detailed_log_function(LogCategory.SYSTEM)
     def record_token_usage(self, session_id: str, tokens_used: int) -> None:
@@ -868,6 +899,56 @@ class MLOptimizer:
 
         ml_logger.info("Optimization statistics generated", parameters=stats)
         return stats
+
+    @detailed_log_function(LogCategory.SYSTEM)
+    def train_threshold_model(self, min_samples: int = 50) -> Optional[ThresholdModel]:
+        """Derive confidence thresholds from reviewer feedback."""
+        approved = []
+        rejected = []
+        for record in self.feedback_history:
+            adjusted_conf = (record["original_confidence"] or 0.0) + (
+                record["confidence_adjustment"] or 0.0
+            )
+            decision = record["review_decision"].upper()
+            if decision in {"APPROVED", "AUTO_APPROVED", "MODIFIED", "CONFIRMED"}:
+                approved.append(adjusted_conf)
+            elif decision in {"REJECTED", "DISMISSED"}:
+                rejected.append(adjusted_conf)
+
+        if len(approved) + len(rejected) < min_samples or not approved or not rejected:
+            ml_logger.warning(
+                "Insufficient feedback samples for threshold optimization",
+                parameters={"sample_count": len(self.feedback_history)},
+            )
+            return None
+
+        X = np.array(approved + rejected).reshape(-1, 1)
+        y = np.array([1] * len(approved) + [0] * len(rejected))
+
+        try:
+            from sklearn.linear_model import LogisticRegression
+
+            model = LogisticRegression()
+            model.fit(X, y)
+
+            def prob_to_threshold(p: float) -> float:
+                val = (-model.intercept_[0] + np.log(p / (1 - p))) / model.coef_[0][0]
+                return max(0.0, min(1.0, float(val)))
+
+            thresholds = ThresholdModel(
+                auto_approve_threshold=prob_to_threshold(0.9),
+                review_threshold=prob_to_threshold(0.5),
+                reject_threshold=prob_to_threshold(0.2),
+                updated_at=datetime.now(timezone.utc).isoformat(),
+            )
+
+            self.threshold_model = thresholds
+            ml_logger.info("Threshold model trained", parameters=asdict(thresholds))
+            return thresholds
+
+        except Exception as e:
+            ml_logger.error("Threshold model training failed", exception=e)
+            return None
 
     async def initialize(self):
         """Async initialization for service container compatibility."""

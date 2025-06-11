@@ -27,7 +27,6 @@ from ..core.enhanced_persistence import (
 
 # Import detailed logging
 from ..core.detailed_logging import get_detailed_logger, LogCategory, detailed_log_function
-
 # Initialize loggers
 kg_logger = get_detailed_logger("Knowledge_Graph_Manager", LogCategory.KNOWLEDGE_GRAPH)
 entity_logger = get_detailed_logger("Entity_Management", LogCategory.KNOWLEDGE_GRAPH)
@@ -478,7 +477,6 @@ class KnowledgeGraphManager:
                                      relationship_types: Optional[List[RelationshipType]] = None,
                                      max_depth: int = 2) -> List[Entity]:
         """Find entities connected to the given entity."""
-        connected_entities: set[str] = set()
 
         if self.persistence:
             records = await self.persistence.relationship_repo.get_relationships_by_entity(entity_id)
@@ -500,7 +498,6 @@ class KnowledgeGraphManager:
                     if target_id != entity_id:
                         connected_entities.add(target_id)
 
-        return [self.entities[eid] for eid in connected_entities if eid in self.entities]
     
     # ==================== UTILITY METHODS ====================
     
@@ -627,14 +624,3 @@ class KnowledgeGraphManager:
 
 # Service container factory function
 def create_knowledge_graph_manager(
-    service_container: "ServiceContainer",
-    *,
-    connection_pool: ConnectionPool,
-    config: Optional[Dict[str, Any]] = None,
-) -> KnowledgeGraphManager:
-    """Factory for :class:`ServiceContainer`"""
-    return KnowledgeGraphManager(
-        storage_dir=config.get("STORAGE_DIR", "./storage/knowledge_graph") if config else "./storage/knowledge_graph",
-        service_config=config,
-        connection_pool=connection_pool,
-    )

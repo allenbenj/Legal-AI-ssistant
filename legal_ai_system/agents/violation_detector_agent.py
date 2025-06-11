@@ -7,7 +7,7 @@ This agent identifies and analyzes various types of legal violations.
 import json
 import re
 import uuid
-from collections import defaultdict
+from collections import defaultdict, Counter
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -85,12 +85,6 @@ class ViolationDetectorAgent(BaseAgent, MemoryMixin):
         self.config = config
         self.min_pattern_confidence = float(config.get("min_pattern_confidence", 0.55))
         self.min_llm_confidence = float(config.get("min_llm_confidence", 0.65))
-        self.enable_llm_analysis = bool(
-            config.get("enable_llm_analysis", True)
-        )  # Renamed from enable_llm_validation
-        self.max_text_for_llm = int(config.get("max_text_for_llm", 8000))  # Chars
-
-        self._init_violation_patterns()
 
         self.logger.info(
             f"{self.name} initialized.",
@@ -159,6 +153,27 @@ class ViolationDetectorAgent(BaseAgent, MemoryMixin):
             f"Initialized {len(self.all_violation_pattern_groups)} violation pattern groups."
         )
 
+    def discover_violation_patterns(self, texts: List[str], top_k: int = 5) -> None:
+        """Discover new potential violation patterns from *texts*."""
+        token_re = re.compile(r"[a-zA-Z]{3,}")
+        counter: Counter[str] = Counter()
+        for text in texts:
+            tokens = token_re.findall(text.lower())
+            for n in (2, 3):
+                for i in range(len(tokens) - n + 1):
+                    ngram = " ".join(tokens[i : i + n])
+                    counter[ngram] += 1
+        for phrase, _ in counter.most_common(top_k):
+            if any(
+                phrase in pat.lower()
+                for _, pats in self.all_violation_pattern_groups
+                for pat in pats
+            ):
+                continue
+            self.all_violation_pattern_groups.append(("dynamic", [phrase]))
+            self.dynamic_patterns.append(phrase)
+            self.logger.debug(f"Discovered dynamic violation pattern: {phrase}")
+
     async def _process_task(
         self, task_data: Dict[str, Any], metadata: Dict[str, Any]
     ) -> Dict[str, Any]:
@@ -172,6 +187,9 @@ class ViolationDetectorAgent(BaseAgent, MemoryMixin):
         start_time_obj = datetime.now(timezone.utc)
 
         output = ViolationDetectionOutput(document_id=document_id)
+
+        if self.enable_dynamic_discovery:
+            self.discover_violation_patterns([text_content])
 
         if not text_content or len(text_content.strip()) < 50:
             self.logger.warning(
@@ -251,16 +269,29 @@ class ViolationDetectorAgent(BaseAgent, MemoryMixin):
         violations: List[DetectedViolation] = []
         model_used: Optional[str] = None
 
-        # 1. Pattern-based detection
-        for violation_type_label, regex_patterns in self.all_violation_pattern_groups:
-            pattern_matches = self._find_matches_for_patterns(
-                text, regex_patterns, violation_type_label
+        # 1. ML-based classification
+        if self.violation_classifier:
+            classified = self.violation_classifier.detect_violations(
+                text, threshold=self.min_pattern_confidence
             )
-            violations.extend(pattern_matches)
-
-        self.logger.info(
-            f"Pattern matching found {len(violations)} potential violations for doc '{doc_id}'."
-        )
+            for span in classified:
+                violations.append(
+                    DetectedViolation(
+                        violation_type=span.violation_type,
+                        description=span.text,
+                        context=span.text,
+                        confidence=span.probability,
+                        severity=self._assess_violation_severity(span.violation_type, span.text),
+                        start_pos=span.start,
+                        end_pos=span.end,
+                        detected_by="ml_classifier",
+                    )
+                )
+            self.logger.info(
+                f"Classifier found {len(classified)} potential violations for doc '{doc_id}'."
+            )
+        else:
+            self.logger.warning("ViolationClassifier unavailable - skipping ML detection")
 
         # 2. LLM-based analysis (validation and new detection)
         if self.enable_llm_analysis and self.llm_manager:
@@ -573,12 +604,12 @@ class ViolationDetectorAgent(BaseAgent, MemoryMixin):
                     violation_type=item_data.get(
                         "violation_type", "Unknown LLM Violation"
                     ),
-                    description=description
-                    if description
-                    else exact_quote,  # Prefer description, fallback to quote
-                    context=exact_quote
-                    if exact_quote
-                    else description[:250],  # Use quote as context if available
+                    description=(
+                        description if description else exact_quote
+                    ),  # Prefer description, fallback to quote
+                    context=(
+                        exact_quote if exact_quote else description[:250]
+                    ),  # Use quote as context if available
                     confidence=confidence_val,
                     severity=str(item_data.get("severity", "medium")).lower(),
                     start_pos=start_pos,

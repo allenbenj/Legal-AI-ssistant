@@ -373,14 +373,7 @@ def _create_ml_optimizer_db_schema(db_path: Path):
         );
         CREATE INDEX IF NOT EXISTS idx_opt_cache_expires ON optimization_cache(expires_at);
 
-        CREATE TABLE IF NOT EXISTS session_token_usage (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_id TEXT NOT NULL,
-            tokens_used INTEGER NOT NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-        CREATE INDEX IF NOT EXISTS idx_token_session ON session_token_usage(session_id);
-        CREATE INDEX IF NOT EXISTS idx_token_created ON session_token_usage(created_at);
+
     """
     _execute_schema(db_path, schema)
 
