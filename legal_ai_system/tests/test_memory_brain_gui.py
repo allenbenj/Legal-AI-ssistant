@@ -9,7 +9,7 @@ def test_memory_brain_gui_main(mocker):
     panel_cls = mocker.Mock()
     mocker.patch.dict(
         sys.modules,
-        {"legal_ai_system.frontend.panels.memory_brain_panel": types.SimpleNamespace(MemoryBrainPanel=panel_cls)}
+        {"legal_ai_system.gui.panels.memory_brain_panel": types.SimpleNamespace(MemoryBrainPanel=panel_cls)}
     )
     module = importlib.import_module("legal_ai_system.scripts.memory_brain_gui")
     module.main()

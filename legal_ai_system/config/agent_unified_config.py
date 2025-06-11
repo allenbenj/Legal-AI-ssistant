@@ -21,9 +21,10 @@ from ..utils.hybrid_extractor import HybridLegalExtractor
 from ..services.realtime_graph_manager import RealTimeGraphManager
 from ..core.optimized_vector_store import OptimizedVectorStore
 from ..utils.reviewable_memory import ReviewableMemory
+from typing import Dict, Type, Any
 
 # Registry of agent and utility classes exposed for dynamic configuration
-AGENT_CLASS_REGISTRY = {
+AGENT_CLASS_REGISTRY: Dict[str, Type[Any]] = {
     "DocumentProcessorAgent": DocumentProcessorAgent,
     "DocumentProcessorAgentV2": DocumentProcessorAgentV2,
     "DocumentRewriterAgent": DocumentRewriterAgent,

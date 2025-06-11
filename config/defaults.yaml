@@ -34,9 +34,18 @@ document_index_path: /workspace/Legal-AI-ssistant/legal_ai_system/storage/vector
 entity_index_path: /workspace/Legal-AI-ssistant/legal_ai_system/storage/vectors/entity_index.faiss
 lance_db_path: /workspace/Legal-AI-ssistant/legal_ai_system/storage/vectors/lancedb
 lance_table_name: documents
+vector_store_optimization_interval: 3600
+vector_store_backup_interval: 86400
+vector_store_instances: 1
+vector_store_hosts: []
+load_balancing_strategy: round_robin
 sqlite_path: /workspace/Legal-AI-ssistant/legal_ai_system/storage/databases/legal_ai.db
 memory_db_path: /workspace/Legal-AI-ssistant/legal_ai_system/storage/databases/memory.db
 violations_db_path: /workspace/Legal-AI-ssistant/legal_ai_system/storage/databases/violations.db
+postgres_dsn: postgresql://postgres:postgres@localhost:5432/legalai
+metadata_pg_min_conn: 1
+metadata_pg_max_conn: 10
+enable_vector_neo4j_sync: false
 neo4j_uri: bolt://localhost:7687
 neo4j_user: neo4j
 neo4j_password: CaseDBMS
@@ -94,16 +103,16 @@ cache_ttl_hours: null
 max_cache_size_mb: null
 rate_limit_per_minute: null
 enable_request_logging: true
-  enable_data_encryption: false
-  encryption_key_path: null
-  test_data_dir: /workspace/Legal-AI-ssistant/legal_ai_system/tests/data
-  enable_test_mode: false
-  enable_agent_debugging: false
-  save_intermediate_results: false
-  enable_spacy_ner: false
-  spacy_ner_model: en_core_web_sm
-  enable_legal_bert: false
-  legal_bert_model_name: nlpaueb/legal-bert-base-uncased
-  agents:
-    legal_reasoning_engine_config: {}
-    knowledge_graph_reasoning_agent_config: {}
+enable_data_encryption: false
+encryption_key_path: null
+test_data_dir: /workspace/Legal-AI-ssistant/legal_ai_system/tests/data
+enable_test_mode: false
+enable_agent_debugging: false
+save_intermediate_results: false
+enable_spacy_ner: false
+spacy_ner_model: en_core_web_sm
+enable_legal_bert: false
+legal_bert_model_name: nlpaueb/legal-bert-base-uncased
+agents:
+  legal_reasoning_engine_config: {}
+  knowledge_graph_reasoning_agent_config: {}

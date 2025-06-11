@@ -996,7 +996,9 @@ class WorkflowDesignerTab:
             current = workflows[workflow_names.index(selection)]
 
         name = st.text_input("Name", value=current.get("name", "") if current else "")
-        enable_ner = st.checkbox("Enable NER", value=current.get("enable_ner", True) if current else True)
+        enable_ner = st.checkbox(
+            "Enable NER", value=current.get("enable_ner", True) if current else True
+        )
         enable_llm = st.checkbox(
             "Enable LLM Extraction",
             value=current.get("enable_llm_extraction", True) if current else True,
@@ -1023,7 +1025,9 @@ class WorkflowDesignerTab:
             if result.get("status") != "ERROR":
                 ErrorHandler.display_success("Workflow saved")
             else:
-                ErrorHandler.display_error("Failed to save workflow", result.get("message"))
+                ErrorHandler.display_error(
+                    "Failed to save workflow", result.get("message")
+                )
 
 
 class SettingsLogsTab:
@@ -1295,19 +1299,19 @@ class AnalysisDashboardTab:
         db = DatabaseManager()
         raw_metrics = db.get_analytics_data()
 
+        total_docs = raw_metrics.get("documents", {}).get("total", 0)
+        processed_docs = raw_metrics.get("documents", {}).get("processed", 0)
+        total_violations = raw_metrics.get("violations", {}).get("total", 0)
+        pending_violations = raw_metrics.get("violations", {}).get("pending", 0)
+
         metrics = {
-            "documents_processed": raw_metrics.get("documents", {}).get(
-                "processed", 0
-            ),
-            "documents_delta": 0,
-            "active_workflows": raw_metrics.get("knowledge_graph", {}).get(
-                "nodes", 0
-            ),
-            "workflows_delta": 0,
-            "pending_reviews": raw_metrics.get("violations", {}).get(
-                "pending", 0
-            ),
-            "reviews_delta": 0,
+            "documents_processed": processed_docs,
+            # show total documents as delta value for quick reference
+            "documents_delta": total_docs,
+            "active_workflows": raw_metrics.get("knowledge_graph", {}).get("nodes", 0),
+            "workflows_delta": raw_metrics.get("knowledge_graph", {}).get("edges", 0),
+            "pending_reviews": pending_violations,
+            "reviews_delta": total_violations,
             "system_health": f"{raw_metrics.get('documents', {}).get('success_rate', 0):.0f}%",
         }
 
@@ -1366,9 +1370,7 @@ class AnalysisDashboardTab:
                     if isinstance(ent, dict):
                         entities.append(ent)
 
-            fig_entities = DataVisualization.create_entity_distribution_chart(
-                entities
-            )
+            fig_entities = DataVisualization.create_entity_distribution_chart(entities)
             st.plotly_chart(fig_entities, use_container_width=True)
 
         # Document analysis
@@ -1388,8 +1390,8 @@ class AnalysisDashboardTab:
 
         with col2:
             # Document status distribution
-            if not docs_df.empty and "status" in docs_df.columns:
-                status_counts = docs_df["status"].value_counts()
+            if not docs_df.empty and "processing_status" in docs_df.columns:
+                status_counts = docs_df["processing_status"].value_counts()
                 fig_status = px.bar(
                     x=status_counts.values,
                     y=status_counts.index,
@@ -1456,7 +1458,7 @@ class AnalysisDashboardTab:
                     value=compliance_score,
                     domain={"x": [0, 1], "y": [0, 1]},
                     title={"text": "Compliance Score"},
-                    gauge={"axis": {"range": [None, 100]}}
+                    gauge={"axis": {"range": [None, 100]}},
                 )
             )
             st.plotly_chart(fig_compliance, use_container_width=True)

@@ -183,8 +183,14 @@ class AgentConfigHelper:
         """Get memory manager instance for agent"""
         return _get_service_sync(self.service_container, 'unified_memory_manager')
     
-    def store_agent_memory(self, agent_name: str, key: str, value: Any, 
-                          session_id: Optional[str] = None, memory_type: MemoryType = MemoryType.AGENT_SPECIFIC):
+    def store_agent_memory(
+        self,
+        agent_name: str,
+        key: str,
+        value: Any,
+        session_id: Optional[str] = None,
+        memory_type: MemoryType = MemoryType.AGENT_SPECIFIC,
+    ):
         """Store data in agent memory"""
         memory_manager = self.get_memory_manager_for_agent(agent_name)
         if memory_manager:
@@ -193,7 +199,7 @@ class AgentConfigHelper:
                 key=key,
                 value=value,
                 session_id=session_id,
-                memory_type=memory_type
+                memory_type=memory_type,
             )
             if asyncio.iscoroutine(result):
                 try:
@@ -203,8 +209,13 @@ class AgentConfigHelper:
             return result
         return False
     
-    def retrieve_agent_memory(self, agent_name: str, key: str, 
-                             session_id: Optional[str] = None, memory_type: MemoryType = MemoryType.AGENT_SPECIFIC):
+    def retrieve_agent_memory(
+        self,
+        agent_name: str,
+        key: str,
+        session_id: Optional[str] = None,
+        memory_type: MemoryType = MemoryType.AGENT_SPECIFIC,
+    ):
         """Retrieve data from agent memory"""
         memory_manager = self.get_memory_manager_for_agent(agent_name)
         if memory_manager:
@@ -212,7 +223,42 @@ class AgentConfigHelper:
                 agent_name=agent_name,
                 key=key,
                 session_id=session_id,
-                memory_type=memory_type
+                memory_type=memory_type,
+            )
+            if asyncio.iscoroutine(result):
+                try:
+                    return asyncio.get_event_loop().run_until_complete(result)
+                except RuntimeError:
+                    return asyncio.run(result)
+            return result
+        return None
+
+    def store_shared_memory(
+        self, key: str, value: Any, session_id: Optional[str] = None
+    ):
+        """Store data accessible to all agents in the session."""
+        memory_manager = self.get_memory_manager_for_agent("shared")
+        if memory_manager:
+            result = memory_manager.store_shared_memory(
+                session_id=session_id,
+                key=key,
+                value=value,
+            )
+            if asyncio.iscoroutine(result):
+                try:
+                    return asyncio.get_event_loop().run_until_complete(result)
+                except RuntimeError:
+                    return asyncio.run(result)
+            return result
+        return False
+
+    def retrieve_shared_memory(self, key: str, session_id: Optional[str] = None):
+        """Retrieve session shared data."""
+        memory_manager = self.get_memory_manager_for_agent("shared")
+        if memory_manager:
+            result = memory_manager.retrieve_shared_memory(
+                session_id=session_id,
+                key=key,
             )
             if asyncio.iscoroutine(result):
                 try:
@@ -268,6 +314,20 @@ def create_agent_memory_mixin():
                     session_id=session_id,
                     memory_type=memory_type
                 )
+            return None
+
+        def store_shared_memory(self, key: str, value: Any, session_id: Optional[str] = None):
+            """Store data shared across agents in the session."""
+            helper = self.get_agent_config_helper()
+            if helper:
+                return helper.store_shared_memory(key=key, value=value, session_id=session_id)
+            return False
+
+        def retrieve_shared_memory(self, key: str, session_id: Optional[str] = None):
+            """Retrieve shared session data."""
+            helper = self.get_agent_config_helper()
+            if helper:
+                return helper.retrieve_shared_memory(key=key, session_id=session_id)
             return None
         
         def get_optimized_llm_config(self):

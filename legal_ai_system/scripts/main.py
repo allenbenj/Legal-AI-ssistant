@@ -18,7 +18,7 @@ import uuid  # For generating IDs
 # import logging # Replaced by detailed_logging
 from contextlib import asynccontextmanager
 import datetime
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -215,19 +215,20 @@ async def lifespan(app: FastAPI):
 
     if SERVICES_AVAILABLE and ServiceContainer is not None:
         try:
-            # Factory function to build the service container
             from legal_ai_system.services.service_container import (
                 create_service_container,
             )
-
+            service_container_instance = create_service_container()
+        except Exception as e:
             main_api_logger.error(
                 "Failed to initialize service container.", exception=e
             )
-            service_container_instance = None  # Ensure it's None if init fails
+            service_container_instance = None
     else:
         main_api_logger.warning(
             "⚠️ ServiceContainer not available. API might run in a limited mode."
         )
+        service_container_instance = None
 
     if SERVICES_AVAILABLE and SecurityManager is not None:
         try:
@@ -439,6 +440,18 @@ class ReviewDecisionRequest(BaseModel):
     modified_data: Optional[Dict[str, Any]] = None
     reviewer_notes: Optional[str] = None  # Added
     # confidence_adjustment: Optional[float] = None # This might be complex to expose directly
+
+
+class ThresholdUpdateRequest(BaseModel):
+    auto_approve_threshold: Optional[float] = PydanticField(None, ge=0.0, le=1.0)
+    review_threshold: Optional[float] = PydanticField(None, ge=0.0, le=1.0)
+    reject_threshold: Optional[float] = PydanticField(None, ge=0.0, le=1.0)
+
+
+class ThresholdResponse(BaseModel):
+    auto_approve_threshold: float
+    review_threshold: float
+    reject_threshold: float
 
 
 class SystemHealthResponse(BaseModel):
@@ -922,8 +935,6 @@ async def process_document_rest(  # Renamed
     # user_id_for_task = current_user.user_id
     user_id_for_task = "mock_user_for_processing"  # Placeholder if auth is off
 
-
-        )
     background_tasks.add_task(
         process_document_background_task,
         document_id,
@@ -1079,6 +1090,35 @@ async def get_system_health_rest(  # Renamed
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Health check failed: {str(e)}",
         )
+
+
+@app.get("/api/v1/config/thresholds", response_model=ThresholdResponse)
+async def get_thresholds(service_container: ServiceContainer = Depends(get_service_container)):
+    rev_mem = await service_container.get_service("reviewable_memory")
+    thresholds = await rev_mem.get_thresholds_async()
+    return ThresholdResponse(**thresholds)
+
+
+@app.put("/api/v1/config/thresholds", response_model=ThresholdResponse)
+async def update_thresholds(
+    update: ThresholdUpdateRequest,
+    service_container: ServiceContainer = Depends(get_service_container),
+):
+    rev_mem = await service_container.get_service("reviewable_memory")
+    await rev_mem.update_thresholds_async(update.model_dump(exclude_none=True))
+    thresholds = await rev_mem.get_thresholds_async()
+    return ThresholdResponse(**thresholds)
+
+
+@app.post("/api/v1/config/thresholds/optimize", response_model=ThresholdResponse)
+async def optimize_thresholds(service_container: ServiceContainer = Depends(get_service_container)):
+    ml_opt = await service_container.get_service("ml_optimizer")
+    rev_mem = await service_container.get_service("reviewable_memory")
+    result = ml_opt.train_threshold_model()
+    if not result:
+        raise HTTPException(status_code=400, detail="Not enough feedback data")
+    await rev_mem.update_thresholds_async(asdict(result))
+    return ThresholdResponse(**asdict(result))
 
 
 @app.post("/api/v1/calibration/review", status_code=status.HTTP_200_OK)

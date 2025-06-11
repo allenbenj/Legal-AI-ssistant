@@ -31,10 +31,10 @@ config_manager_logger = get_detailed_logger("ConfigurationManager", LogCategory.
 
 
 class ConfigurationManager:
-    """
-    Service-oriented configuration manager that provides centralized
-    access to all Legal AI System configuration settings.
-    """
+    """Centralized access to configuration settings."""
+
+    # Path to the YAML file containing default settings
+    DEFAULTS_FILE = Path(__file__).resolve().parents[2] / "config" / "defaults.yaml"
     
     @detailed_log_function(LogCategory.CONFIG)
     def __init__(self, custom_settings_instance: Optional[LegalAISettings] = None): # Renamed for clarity
@@ -61,7 +61,7 @@ class ConfigurationManager:
     @detailed_log_function(LogCategory.CONFIG)
     def _load_defaults(self) -> LegalAISettings:
         """Load default settings from YAML file."""
-        defaults_path = Path(__file__).resolve().parents[2] / "config" / "defaults.yaml"
+        defaults_path = self.DEFAULTS_FILE
         if defaults_path.exists():
             try:
                 with defaults_path.open("r") as f:
@@ -262,7 +262,12 @@ class ConfigurationManager:
             'document_index_path': str(self.get('document_index_path', data_dir / "vectors/document_index.faiss")),
             'entity_index_path': str(self.get('entity_index_path', data_dir / "vectors/entity_index.faiss")),
             'lance_db_path': str(self.get('lance_db_path', data_dir / "vectors/lancedb")),
-            'lance_table_name': self.get('lance_table_name', "documents")
+            'lance_table_name': self.get('lance_table_name', "documents"),
+            'optimization_interval_sec': self.get('vector_store_optimization_interval', 3600),
+            'backup_interval_sec': self.get('vector_store_backup_interval', 86400),
+            'instances': self.get('vector_store_instances', 1),
+            'hosts': self.get('vector_store_hosts', []),
+            'load_balancing_strategy': self.get('load_balancing_strategy', 'round_robin'),
         }
         
         config_manager_logger.info("Vector store configuration retrieved", parameters=config)

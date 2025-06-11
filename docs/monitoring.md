@@ -14,6 +14,10 @@ Metrics available:
 - `workflow_execution_seconds` – histogram of workflow execution times.
 - `workflow_errors_total` – counter of workflow processing errors.
 
+Execution time is recorded and errors are incremented automatically each time
+`WorkflowOrchestrator.execute_workflow_instance` runs.  This provides a quick
+view of system throughput and reliability.
+
 Access the metrics endpoint at `http://localhost:8001/metrics` after starting the
 application.
 
@@ -23,5 +27,6 @@ application.
 structured log file uses the `.jsonl` extension and is created in the
 `legal_ai_system/logs` directory.
 
-These logs include extra fields such as the logger name and function. They can be
-shipped to monitoring systems for further analysis.
+Structured logs now include an `app` field identifying the application name as
+well as the logger and function. They can be shipped to monitoring systems for
+further analysis.
