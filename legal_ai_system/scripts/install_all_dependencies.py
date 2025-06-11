@@ -70,14 +70,23 @@ def main() -> None:
         [
             "install",
             "ffmpeg-python",
+            "moviepy",
             "openai-whisper",
             "whisperx",
             "pdfplumber",
+            "openpyxl",
             "pyannote.audio",
         ],
     )
 
     verify_imports(venv_path)
+
+    # Verify optional dependencies used by advanced agents
+    run([
+        str(venv_path / "bin" / "python"),
+        str(repo_root / "legal_ai_system" / "scripts" / "check_optional_dependencies.py"),
+    ])
+
     run_tests(venv_path)
 
     # Node dependencies

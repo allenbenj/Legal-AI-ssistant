@@ -62,7 +62,11 @@ PY
 
 If the script prints `Environment ready` without errors, the setup was successful.
 
-You can automate these steps by running `python legal_ai_system/scripts/install_all_dependencies.py` from the repository root. This script installs all Python and Node packages and executes the test suite.
+You can automate these steps by running `python legal_ai_system/scripts/install_all_dependencies.py` from the repository root. This script installs all Python and Node packages, verifies optional dependencies, and executes the test suite. You can also run the check separately:
+
+```bash
+python legal_ai_system/scripts/check_optional_dependencies.py
+```
 
 ## Configuration Overrides
 The application loads defaults from `config/defaults.yaml`. Any environment variable

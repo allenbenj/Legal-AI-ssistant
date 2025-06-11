@@ -8,7 +8,6 @@ from ..core.base_agent import BaseAgent, AgentError
 from ..core.detailed_logging import (
     LogCategory,
     detailed_log_function,
-    get_detailed_logger,
 )
 from ..utils.multimodal_types import (
     MultiModalDocument,
@@ -64,7 +63,7 @@ class DocumentProcessorAgentV2(BaseAgent, Generic[InputT, OutputT]):
 
         model = whisper.load_model("base")
         result = model.transcribe(str(audio_path))
-        segments = [
+        return [
             AudioSegment(
                 start_ms=int(seg["start"] * 1000),
                 end_ms=int(seg["end"] * 1000),
@@ -72,7 +71,6 @@ class DocumentProcessorAgentV2(BaseAgent, Generic[InputT, OutputT]):
             )
             for seg in result.get("segments", [])
         ]
-        return segments
 
     async def process_legal_forms(self, form_path: Path) -> StructuredForm:
         """Detect fields within legal forms (PDF or Excel)."""
@@ -119,7 +117,7 @@ class DocumentProcessorAgentV2(BaseAgent, Generic[InputT, OutputT]):
             raise AgentError("python-docx and lxml required for redline analysis", self.name) from exc
 
         doc = docx.Document(str(doc_path))
-        root = etree.fromstring(doc._part.blob)
+        root = etree.fromstring(doc._part.blob, parser=etree.XMLParser())
         ns = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
         additions = [el.text for el in root.iter(f"{ns}ins") if el.text]
         deletions = [el.text for el in root.iter(f"{ns}del") if el.text]
