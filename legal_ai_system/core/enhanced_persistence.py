@@ -900,9 +900,6 @@ class EnhancedPersistenceManager:
     def __init__(
         self,
         connection_pool: ConnectionPool,
-        config: Optional[Dict[str, Any]] = None,
-        metrics_exporter: Optional[Any] = None,
-    ) -> None:
         self.config = config or {}
         cache_ttl = self.config.get("cache_default_ttl_seconds", 3600)
 
@@ -1137,4 +1134,33 @@ class EnhancedPersistenceManager:
 
 # Factory function for service container
 def create_enhanced_persistence_manager(
+    connection_pool: Optional[ConnectionPool] | None = None,
+    config: Optional[Dict[str, Any]] | None = None,
+    metrics_exporter: Optional[Any] = None,
+) -> EnhancedPersistenceManager:
+    """Synchronously create an :class:`EnhancedPersistenceManager` instance.
 
+    Parameters
+    ----------
+    connection_pool:
+        Existing :class:`ConnectionPool` to reuse. If ``None`` a new pool is
+        created using values from ``config``.
+    config:
+        Optional dictionary containing ``database_url`` and ``redis_url`` as well
+        as an optional ``persistence_config`` key.
+    metrics_exporter:
+        Optional metrics exporter to attach to the manager.
+    """
+
+    config = config or {}
+    if connection_pool is None:
+        connection_pool = ConnectionPool(
+            config.get("database_url"),
+            config.get("redis_url"),
+        )
+
+    return EnhancedPersistenceManager(
+        connection_pool,
+        config.get("persistence_config", {}),
+        metrics_exporter,
+    )
