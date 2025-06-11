@@ -72,6 +72,28 @@ tual environment and run the tests:
 python legal_ai_system/scripts/setup_environment_task.py
 ```
 
+## Running Tests
+
+Before invoking `pytest`, install the development dependencies:
+
+```bash
+pip install -e .[dev]
+```
+
+Alternatively, run the installation helper:
+
+```bash
+python legal_ai_system/scripts/install_all_dependencies.py
+```
+
+Missing packages such as `pytest-mock` will cause test failures. After installation execute:
+
+```bash
+pytest
+```
+
+See [docs/test_setup.md](docs/test_setup.md) for more information.
+
 ### Extraction Options
 
 The ontology extraction agent supports multiple NER backends. Enable them in
