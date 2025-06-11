@@ -168,4 +168,17 @@ async def test_process_document_realtime_updates_graph_and_vectors() -> None:
     wf._update_vector_store_realtime.assert_awaited()
 
 
+@pytest.mark.asyncio
+async def test_process_document_realtime_queues_job_when_queue_available() -> None:
+    queue = MagicMock()
+    queue.enqueue = MagicMock(return_value="job")
+    wf = DummyWorkflow(queue=queue)
+
+    result = await wf.process_document_realtime("sample.txt")
+
+    assert result == "job"
+    queue.enqueue.assert_called_once()
+    wf._notify_progress.assert_awaited_with("queued", 0.0)
+
+
 

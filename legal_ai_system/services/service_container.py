@@ -799,7 +799,9 @@ async def create_service_container(
     await container.register_service(
         "realtime_analysis_workflow",
         factory=lambda sc: RealTimeAnalysisWorkflow(
-            sc, workflow_config=WorkflowConfig(**sc.get_active_workflow_config())
+            sc,
+            workflow_config=WorkflowConfig(**sc.get_active_workflow_config()),
+            task_queue=sc._services.get("task_queue"),
         ),
         is_async_factory=False,
     )
