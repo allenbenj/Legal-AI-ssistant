@@ -175,6 +175,7 @@ class DocumentProcessingOutput:
     processing_strategy_used: str
 
     text_content: Optional[str] = None
+    text_chunks: Optional[List[str]] = None
     content_hash_sha256: Optional[str] = None  # Renamed for clarity
     is_legal_document_classified: Optional[bool] = None
     classification_details: Optional[Dict[str, Any]] = None
@@ -526,6 +527,7 @@ class DocumentProcessorAgent(BaseAgent, MemoryMixin):
             output.processing_notes.extend(handler_result.get("processing_notes", []))
 
             if output.text_content:
+                output.text_chunks = self.chunker.chunk_text(output.text_content)
                 output.word_count = len(output.text_content.split())
                 output.character_count = len(output.text_content)
                 # Use a faster hash if performance is critical for many small files, SHA256 is robust.
