@@ -248,6 +248,24 @@ class RealTimeGraphManager:
             # raise KnowledgeGraphError(f"Real-time relationship processing failed for doc {document_id}", cause=e)
             return None
 
+    async def add_entity_realtime(
+        self,
+        entity_data: Any,
+        document_id: str,
+        source_metadata: Optional[Dict[str, Any]] = None,
+    ) -> Optional[str]:
+        """Wrapper for process_entity_realtime for external callers."""
+        return await self.process_entity_realtime(entity_data, document_id, source_metadata)
+
+    async def add_relationship_realtime(
+        self,
+        relationship_data: Any,
+        document_id: str,
+        source_metadata: Optional[Dict[str, Any]] = None,
+    ) -> Optional[str]:
+        """Wrapper for process_relationship_realtime for external callers."""
+        return await self.process_relationship_realtime(relationship_data, document_id, source_metadata)
+
     def register_update_callback(self, callback: Callable[[str, Dict[str, Any]], None]):
         """Register a callback function for graph updates."""
         self.update_callbacks.append(callback)
