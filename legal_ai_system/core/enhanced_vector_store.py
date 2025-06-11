@@ -324,8 +324,8 @@ class EnhancedVectorStore:
         index_params: Optional[Dict[str, Any]] = None,
         document_index_path: str | None = None,
         entity_index_path: str | None = None,
-
-    ):
+        connection_pool: ConnectionPool | None = None,
+    ) -> None:
         """Initialize enhanced vector store with comprehensive configuration"""
         vector_logger.info("=== INITIALIZING ENHANCED VECTOR STORE ===")
 
@@ -369,7 +369,7 @@ class EnhancedVectorStore:
         # Thread safety
         self._lock = threading.RLock()
 
-        # Persistence integration
+        # Persistence integration using shared connection pool
         self.pool = connection_pool
         self.transaction_manager = (
             TransactionManager(connection_pool) if connection_pool else None
@@ -405,9 +405,8 @@ class EnhancedVectorStore:
         vector_logger.info("Enhanced vector store initialization complete")
 
     async def close(self) -> None:
-        """Close connection pool if managed externally."""
-        if self.pool:
-            await self.pool.close()
+        """Cleanup resources. The shared pool is closed by the service container."""
+        # Vector store does not own the connection pool; it is closed elsewhere.
 
     @detailed_log_function(LogCategory.VECTOR_STORE)
     async def _initialize_storage(self) -> None:
@@ -822,49 +821,7 @@ class EnhancedVectorStore:
             # Placeholder for future optimization logic
             time.sleep(0.1)
             self.optimization_queue.task_done()
-
-
-                """
-                INSERT INTO vector_metadata (
-                    vector_id, document_id, content_hash, content_preview,
-                    vector_norm, dimension, created_at, last_accessed,
-                    access_count, source_file, document_type, tags,
-                    confidence_score, embedding_model, custom_metadata
-                ) VALUES (
-                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
-                )
-                ON CONFLICT (vector_id) DO UPDATE SET
-                    document_id = EXCLUDED.document_id,
-                    content_hash = EXCLUDED.content_hash,
-                    content_preview = EXCLUDED.content_preview,
-                    vector_norm = EXCLUDED.vector_norm,
-                    dimension = EXCLUDED.dimension,
-                    created_at = EXCLUDED.created_at,
-                    last_accessed = EXCLUDED.last_accessed,
-                    access_count = EXCLUDED.access_count,
-                    source_file = EXCLUDED.source_file,
-                    document_type = EXCLUDED.document_type,
-                    tags = EXCLUDED.tags,
-                    confidence_score = EXCLUDED.confidence_score,
-                    embedding_model = EXCLUDED.embedding_model,
-                    custom_metadata = EXCLUDED.custom_metadata
-                """,
-                metadata.vector_id,
-                metadata.document_id,
-                metadata.content_hash,
-                metadata.content_preview,
-                metadata.vector_norm,
-                metadata.dimension,
-                metadata.created_at,
-                metadata.last_accessed,
-                metadata.access_count,
-                metadata.source_file,
-                metadata.document_type,
-                json.dumps(metadata.tags),
-                metadata.confidence_score,
-                metadata.embedding_model,
-                json.dumps(metadata.custom_metadata),
-            )
+            # DB optimization tasks would go here
 
     async def _find_by_content_hash(self, content_hash: str) -> Optional[str]:
         """Return vector_id matching the given content hash if it exists."""
@@ -960,10 +917,12 @@ class EnhancedVectorStore:
 
 
 def create_enhanced_vector_store(
+    service_container: "ServiceContainer",
+    *,
     connection_pool: ConnectionPool,
     config: Optional[Dict[str, Any]] | None = None,
 ) -> "EnhancedVectorStore":
-    """Factory function used by :class:`ServiceContainer`."""
+    """Factory used by :class:`ServiceContainer` to build the vector store."""
 
     cfg = config or {}
     return EnhancedVectorStore(
@@ -975,10 +934,8 @@ def create_enhanced_vector_store(
         enable_gpu=cfg.get("ENABLE_GPU_FAISS", False),
         document_index_path=cfg.get("DOCUMENT_INDEX_PATH"),
         entity_index_path=cfg.get("ENTITY_INDEX_PATH"),
-
+        connection_pool=connection_pool,
     )
 
     # ------------------------------------------------------------------
 
-
-if __name__ == "__main__":
