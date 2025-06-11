@@ -1,6 +1,7 @@
 import datetime
+
 from legal_ai_system.services.database_manager import DatabaseManager
-from legal_ai_system.agents.violation_review import ViolationReviewEntry
+from legal_ai_system.services.violation_review import ViolationReviewEntry
 
 
 def test_dashboard_data_retrieval(tmp_path):
@@ -21,23 +22,25 @@ def test_dashboard_data_retrieval(tmp_path):
     manager.violation_manager.insert_violation(
         ViolationReviewEntry(
             id="v1",
-            case_id="d1",
-            actor="system",
+            document_id="d1",
             violation_type="Data",
-            description="desc",
+            severity="HIGH",
             status="PENDING",
-            metadata={"severity": "HIGH", "confidence": 0.9},
+            description="desc",
+            confidence=0.9,
+            detected_time=datetime.datetime.now(),
         )
     )
     manager.violation_manager.insert_violation(
         ViolationReviewEntry(
             id="v2",
-            case_id="d2",
-            actor="system",
+            document_id="d2",
             violation_type="Privacy",
-            description="desc",
+            severity="LOW",
             status="RESOLVED",
-            metadata={"severity": "LOW", "confidence": 0.8},
+            description="desc",
+            confidence=0.8,
+            detected_time=datetime.datetime.now(),
         )
     )
 
