@@ -34,51 +34,7 @@ def update_file(path: Path) -> bool:
     original = path.read_text(encoding="utf-8")
     lines = original.splitlines()
     changed = False
-    alias_line = "BaseNode = LangGraphBaseNode"
-    alias_idx = None
-    import_pos = None
-    fallback_start = None
-    insert_pos = None
-    for i, line in enumerate(lines):
-        if "from langgraph.graph" in line and "BaseNode" in line:
-            if "BaseNode as" not in line:
-                lines[i] = line.replace("BaseNode", "BaseNode as LangGraphBaseNode")
-                changed = True
-            if import_pos is None:
-                import_pos = i
-        if line.lstrip().startswith("class BaseNode"):
-            lines[i] = line.replace("class BaseNode", "class LangGraphBaseNode", 1)
-            changed = True
-            fallback_start = i
-        elif line.lstrip().startswith("class LangGraphBaseNode"):
-            fallback_start = i
-        if fallback_start is not None and insert_pos is None and i > fallback_start and line.lstrip().startswith("pass"):
-            insert_pos = i + 1
-        if line.strip() == alias_line:
-            if alias_idx is None:
-                alias_idx = i
-            else:
-                lines[i] = None
-                changed = True
-    lines = [l for l in lines if l is not None]
-    if insert_pos is None:
-        insert_pos = (fallback_start + 1 if fallback_start is not None else
-                      (import_pos + 1 if import_pos is not None else len(lines)))
-    if alias_idx is None:
-        indent = ""
-        if insert_pos > 0:
-            prev = lines[insert_pos - 1]
-            indent = prev[: len(prev) - len(prev.lstrip())]
-        lines.insert(insert_pos, indent + alias_line)
-        changed = True
-    elif alias_idx != insert_pos:
-        line = lines.pop(alias_idx)
-        if insert_pos > len(lines):
-            insert_pos = len(lines)
-        lines.insert(insert_pos, line)
-        changed = True
-    if changed:
-        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
     return changed
 
 

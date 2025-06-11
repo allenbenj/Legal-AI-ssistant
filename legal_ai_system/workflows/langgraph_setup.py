@@ -68,3 +68,4 @@ def build_advanced_legal_workflow(topic: str) -> StateGraph:
 
 
 __all__ = ["build_graph", "build_advanced_legal_workflow", "CitationCheckNode"]
+BaseNode = LangGraphBaseNode
