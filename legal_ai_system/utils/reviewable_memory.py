@@ -112,13 +112,7 @@ class ReviewableMemory:
     """Manages the review process for extracted legal information."""
     
     @detailed_log_function(LogCategory.DATABASE)
-    def __init__(
-        self,
-        db_path_str: str = "./storage/databases/review_memory.db",
-        unified_memory_manager: Optional[Any] = None,
-        service_config: Optional[Dict[str, Any]] = None,
-        quality_classifier: Optional[QualityClassifier] = None,
-    ) -> None:
+
         review_mem_logger.info("Initializing ReviewableMemory.")
         self.config = service_config or {}
         
@@ -127,8 +121,9 @@ class ReviewableMemory:
         self.connection: Optional[sqlite3.Connection] = None # Initialized in async init
         self._lock = threading.RLock() # For DB operations
         self._initialized = False
-        
+
         self.unified_memory_manager = unified_memory_manager # To store approved items
+        self.ml_optimizer = ml_optimizer
 
         # Confidence thresholds
         self.auto_approve_threshold: float = self.config.get('auto_approve_threshold', 0.9)
@@ -165,11 +160,6 @@ class ReviewableMemory:
             'types_always_review': list(self.require_review_for_types)
         }
 
-    def _alert_quality_drift(self, accuracy: float) -> None:
-        review_mem_logger.warning(
-            "Quality model accuracy dropped",
-            parameters={"accuracy": accuracy},
-        )
 
     @detailed_log_function(LogCategory.DATABASE)
     async def initialize(self): # Made async
@@ -564,8 +554,8 @@ class ReviewableMemory:
         
         with self._lock, self._get_db_connection() as conn:
             conn.execute('''
-                INSERT INTO review_feedback_history 
-                (feedback_id, item_id, item_type_reviewed, original_confidence, review_decision, 
+                INSERT INTO review_feedback_history
+                (feedback_id, item_id, item_type_reviewed, original_confidence, review_decision,
                  confidence_adjustment, feedback_notes, reviewer_id, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
@@ -575,6 +565,22 @@ class ReviewableMemory:
                 datetime.now(timezone.utc).isoformat()
             ))
             conn.commit()
+
+        if self.ml_optimizer:
+            try:
+                self.ml_optimizer.record_review_feedback(
+                    item_id=item_id,
+                    item_type=original_item_data_for_confidence.item_type,
+                    original_confidence=original_item_data_for_confidence.confidence,
+                    decision=decision.decision.value,
+                    confidence_adjustment=confidence_adjustment,
+                    notes=decision.reviewer_notes,
+                    user_id=decision.reviewer_id,
+                )
+            except Exception as e:  # pragma: no cover - log only
+                review_mem_logger.error(
+                    "Failed to log feedback in MLOptimizer.", exception=e
+                )
         review_mem_logger.debug("Feedback recorded for item.", parameters={'item_id': item_id, 'decision': decision.decision.value})
     
     async def _send_to_unified_memory(self, item: ReviewableItem): # Renamed
@@ -724,7 +730,6 @@ class ReviewableMemory:
 def create_reviewable_memory(
     service_config: Optional[Dict[str, Any]] = None,
     unified_memory_manager: Optional[Any] = None,
-    quality_classifier: Optional[QualityClassifier] = None,
 ) -> ReviewableMemory:
     cfg = service_config.get("reviewable_memory_config", {}) if service_config else {}
     # db_path = cfg.get("DB_PATH", global_settings.data_dir / "databases" / "review_memory.db")
@@ -733,6 +738,4 @@ def create_reviewable_memory(
     return ReviewableMemory(
         db_path_str=str(db_path),
         unified_memory_manager=unified_memory_manager,
-        service_config=cfg,
-        quality_classifier=quality_classifier,
     )

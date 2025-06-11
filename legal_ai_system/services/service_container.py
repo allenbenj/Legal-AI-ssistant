@@ -768,6 +768,14 @@ async def create_service_container(
         service_config=umm_conf,
     )
 
+    from ..core.ml_optimizer import create_ml_optimizer
+
+    await container.register_service(
+        "ml_optimizer",
+        factory=create_ml_optimizer,
+    )
+    ml_opt_service = await container.get_service("ml_optimizer")
+
     from ..utils.reviewable_memory import create_reviewable_memory
 
     umm_service = await container.get_service("unified_memory_manager")
@@ -781,6 +789,7 @@ async def create_service_container(
         factory=create_reviewable_memory,
         service_config=revmem_conf,
         unified_memory_manager=umm_service,
+        ml_optimizer=ml_opt_service,
     )
 
     from .violation_review import ViolationReviewDB
