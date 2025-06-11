@@ -102,17 +102,20 @@ Before invoking `pytest`, install the development dependencies:
 pip install -e .[dev]
 ```
 
+Running tests with coverage is enabled by default via `pytest-cov`. After
+installing the development dependencies simply run `pytest`:
+
+```bash
+pytest
+```
+
 Alternatively, run the installation helper:
 
 ```bash
 python legal_ai_system/scripts/install_all_dependencies.py
 ```
 
-Missing packages such as `pytest-mock` will cause test failures. After installation execute:
-
-```bash
-pytest
-```
+Missing packages such as `pytest-mock` will cause test failures.
 
 See [docs/test_setup.md](docs/test_setup.md) for more information.
 
