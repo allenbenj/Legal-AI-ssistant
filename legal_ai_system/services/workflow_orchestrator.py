@@ -77,10 +77,27 @@ class WorkflowOrchestrator:
         if not self.connection_manager:
             return
         try:
+            await self.connection_manager.broadcast(
+                "workflow_progress",
+                {"type": "progress", "message": message, "progress": progress},
             )
         except Exception as exc:  # pragma: no cover - network issues
             wo_logger.error(
                 "Failed to broadcast progress update.", exception=exc
+            )
+
+    async def _broadcast_update(self, event_type: str, data: Dict[str, Any]) -> None:
+        """Broadcast workflow updates to subscribed clients."""
+        if not self.connection_manager:
+            return
+        try:
+            await self.connection_manager.broadcast(
+                "workflow_updates",
+                {"type": event_type, **data},
+            )
+        except Exception as exc:  # pragma: no cover - network issues
+            wo_logger.error(
+                "Failed to broadcast workflow update.", exception=exc
             )
 
     @detailed_log_function(LogCategory.SYSTEM)
@@ -102,6 +119,8 @@ class WorkflowOrchestrator:
                 self.connection_manager = None
 
         if self.connection_manager:
+            self.workflow.register_progress_callback(self._broadcast_progress)
+            self.workflow.register_update_callback(self._broadcast_update)
 
     def _create_builder_graph(self, topic: Optional[str] = None):
         """Return a LangGraph graph for the provided topic."""
