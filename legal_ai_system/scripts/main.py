@@ -213,23 +213,6 @@ async def lifespan(app: FastAPI):
     # Load any saved workflow configurations
     load_workflow_configs()
 
-    if SERVICES_AVAILABLE and ServiceContainer is not None:
-        try:
-            from legal_ai_system.services.service_container import (
-                create_service_container,
-            )
-
-            service_container_instance = await create_service_container()
-        except Exception as e:
-            main_api_logger.error(
-                "Failed to initialize service container.", exception=e
-            )
-            service_container_instance = None
-    else:
-        main_api_logger.warning(
-            "⚠️ ServiceContainer not available. API might run in a limited mode."
-        )
-        service_container_instance = None
 
     if SERVICES_AVAILABLE and SecurityManager is not None:
         try:
