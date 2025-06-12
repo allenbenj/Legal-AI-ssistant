@@ -34,7 +34,7 @@ class ConfigurationManager:
     """Centralized access to configuration settings."""
 
     # Path to the YAML file containing default settings
-    DEFAULTS_FILE = Path(__file__).resolve().parents[2] / "config" / "defaults.yaml"
+    DEFAULTS_FILE = Path(__file__).resolve().parents[1] / "config" / "defaults.yaml"
     
     @detailed_log_function(LogCategory.CONFIG)
     def __init__(self, custom_settings_instance: Optional[LegalAISettings] = None): # Renamed for clarity
