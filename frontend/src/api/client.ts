@@ -12,6 +12,7 @@ import {
   ReviewDecisionResponse,
   ReviewStats,
 } from "../types/review";
+import { ViolationRecord, ViolationDecisionRequest } from "../types/violation";
 
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -82,4 +83,21 @@ export async function submitReviewDecision(
 export async function fetchReviewStats(): Promise<ReviewStats> {
   const res = await fetch(`/api/v1/reviews/stats`);
   return handleResponse<ReviewStats>(res);
+}
+
+export async function fetchPendingViolations(): Promise<ViolationRecord[]> {
+  const res = await fetch(`/api/v1/violations?status=pending`);
+  return handleResponse<ViolationRecord[]>(res);
+}
+
+export async function submitViolationDecision(
+  id: string,
+  data: ViolationDecisionRequest
+): Promise<void> {
+  const res = await fetch(`/api/v1/violations/${id}/decision`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  await handleResponse(res);
 }
