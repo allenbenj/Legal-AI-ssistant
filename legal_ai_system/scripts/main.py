@@ -95,6 +95,11 @@ from legal_ai_system.api.review_models import (
     ReviewDecisionResponse,
     ReviewStatsResponse,
 )
+from legal_ai_system.api.violation_models import (
+    ViolationRecord,
+    ViolationDecisionRequest,
+    ViolationDecisionResponse,
+)
 from legal_ai_system.utils.reviewable_memory import (
     ReviewPriority,
     ReviewStatus,
@@ -1200,6 +1205,65 @@ async def get_review_stats(
     rev_mem = await service_container.get_service("reviewable_memory")
     stats = await rev_mem.get_review_stats_async()
     return ReviewStatsResponse(**stats)
+
+
+@app.get(
+    "/api/v1/violations",
+    response_model=List[ViolationRecord],
+    status_code=status.HTTP_200_OK,
+)
+async def list_violations(
+    status_filter: ReviewStatus = ReviewStatus.PENDING,
+    service_container: ServiceContainer = Depends(get_service_container),
+):
+    """Return violations filtered by status."""
+    vr_db = await service_container.get_service("violation_review_db")
+    entries = vr_db.fetch_violations()
+    results = []
+    for ent in entries:
+        if status_filter and ent.status != status_filter.value:
+            continue
+        results.append(
+            ViolationRecord(
+                id=ent.id,
+                document_id=ent.document_id,
+                violation_type=ent.violation_type,
+                severity=ent.severity,
+                status=ent.status,
+                description=ent.description,
+                confidence=ent.confidence,
+                detected_time=ent.detected_time,
+                reviewed_by=ent.reviewed_by,
+                review_time=ent.review_time,
+                comments=ent.recommended_motion,
+            )
+        )
+    return results
+
+
+@app.post(
+    "/api/v1/violations/{violation_id}/decision",
+    response_model=ViolationDecisionResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def submit_violation_decision(
+    violation_id: str,
+    request: ViolationDecisionRequest,
+    service_container: ServiceContainer = Depends(get_service_container),
+):
+    """Update violation status and retrain the classifier."""
+    vr_db = await service_container.get_service("violation_review_db")
+    classifier = await service_container.get_service("violation_classifier")
+    success = vr_db.update_violation_status(
+        violation_id, request.decision.value, reviewed_by=request.reviewer_id
+    )
+    if not success:
+        raise HTTPException(status_code=400, detail="Failed to update violation")
+
+    if classifier:
+        classifier.train_from_review_db(vr_db)
+
+    return ViolationDecisionResponse(status="updated", violation_id=violation_id)
 
 
 # --- WebSocket Endpoint ---
