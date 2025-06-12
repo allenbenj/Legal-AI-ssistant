@@ -357,6 +357,10 @@ class IntegratedMainWindow(QMainWindow):
         # Processing Queue tab
         self.queue_widget = self.createQueueView()
         self.main_tabs.addTab(self.queue_widget, "Processing Queue")
+
+        # Workflow Builder tab
+        self.builder_widget = self.createWorkflowBuilderView()
+        self.main_tabs.addTab(self.builder_widget, "Workflow Builder")
         
         main_layout.addWidget(self.main_tabs)
         
@@ -488,8 +492,14 @@ class IntegratedMainWindow(QMainWindow):
         self.queue_list = QListWidget()
         self.queue_list.setAlternatingRowColors(True)
         layout.addWidget(self.queue_list)
-        
+
         return widget
+
+    def createWorkflowBuilderView(self) -> QWidget:
+        """Create drag-and-drop workflow builder."""
+        from .workflow_builder import WorkflowBuilderWidget
+
+        return WorkflowBuilderWidget()
         
     def setupDocks(self):
         """Setup dockable panels"""
