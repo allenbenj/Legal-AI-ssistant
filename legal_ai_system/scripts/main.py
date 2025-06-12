@@ -229,7 +229,7 @@ async def lifespan(app: FastAPI):
             from legal_ai_system.services.service_container import (
                 create_service_container,
             )
-            service_container_instance = create_service_container()
+            service_container_instance = await create_service_container()
         except Exception as e:
             main_api_logger.error(
                 "Failed to initialize service container.", exception=e

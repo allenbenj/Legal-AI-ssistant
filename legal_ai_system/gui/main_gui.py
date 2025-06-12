@@ -24,6 +24,11 @@ class APIClient:
     def __init__(self, base_url: str) -> None:
         self.base_url = base_url.rstrip("/")
         self.session = requests.Session()
+        self.token: Optional[str] = None
+
+    # ------------------------------------------------------------------
+    # Basic service endpoints
+    # ------------------------------------------------------------------
 
     def health(self) -> Dict[str, Any]:
         try:
@@ -32,6 +37,44 @@ class APIClient:
             return r.json()
         except Exception as exc:  # pragma: no cover - network failures
             return {"status": "error", "message": str(exc)}
+
+    def service_status(self) -> Dict[str, Any]:
+        """Return per-service health details."""
+        data = self.health()
+        return data.get("services_status", {}) if isinstance(data, dict) else {}
+
+    def metrics(self) -> Dict[str, Any]:
+        """Fetch metrics snapshot from the backend."""
+        try:
+            r = self.session.get(f"{self.base_url}/metrics", timeout=5)
+            r.raise_for_status()
+            return r.json()
+        except Exception:  # pragma: no cover - network failures
+            return {}
+
+    def login(self, username: str, password: str) -> bool:
+        """Authenticate via SecurityManager backed endpoint."""
+        try:
+            r = self.session.post(
+                f"{self.base_url}/api/v1/auth/token",
+                json={"username": username, "password": password},
+                timeout=5,
+            )
+            r.raise_for_status()
+            data = r.json()
+            token = data.get("access_token")
+            if token:
+                self.token = token
+                self.session.headers.update({"Authorization": f"Bearer {token}"})
+                return True
+        except Exception:
+            pass
+        return False
+
+    def logout(self) -> None:
+        """Remove stored auth token."""
+        self.token = None
+        self.session.headers.pop("Authorization", None)
 
     def upload(self, file_path: Path) -> Optional[str]:
         try:
@@ -95,15 +138,35 @@ class APIClient:
 
 
 class WebSocketWorker(QtCore.QThread):
-    """Background thread to receive WebSocket messages."""
+    """Background thread to receive WebSocket messages via ConnectionManager."""
 
     message_received = QtCore.pyqtSignal(dict)
 
-    def __init__(self, url: str, topics: List[str]) -> None:
+    def __init__(self, url: str, topics: Optional[List[str]] = None) -> None:
         super().__init__()
         self.url = url
-        self.topics = topics
+        self.topics = set(topics or [])
         self._stop = threading.Event()
+        self._ws: Any = None
+
+    # ------------------------------------------------------------------
+    # Public API for subscription management
+    # ------------------------------------------------------------------
+    def subscribe(self, topic: str) -> None:
+        self.topics.add(topic)
+        if self._ws:
+            try:
+                self._ws.send(json.dumps({"type": "subscribe", "topic": topic}))
+            except Exception:
+                pass
+
+    def unsubscribe(self, topic: str) -> None:
+        self.topics.discard(topic)
+        if self._ws:
+            try:
+                self._ws.send(json.dumps({"type": "unsubscribe", "topic": topic}))
+            except Exception:
+                pass
 
     def stop(self) -> None:
         self._stop.set()
@@ -122,9 +185,11 @@ class WebSocketWorker(QtCore.QThread):
             self.message_received.emit(data)
 
         def on_open(ws: Any) -> None:  # pragma: no cover - GUI thread
+            self._ws = ws
             for t in self.topics:
                 ws.send(json.dumps({"type": "subscribe", "topic": t}))
 
+        self._ws = None
         ws = websocket.WebSocketApp(
             self.url,
             on_message=on_message,
@@ -136,6 +201,8 @@ class WebSocketWorker(QtCore.QThread):
                 ws.run_forever(ping_interval=20, ping_timeout=10)
             except Exception:
                 pass
+            finally:
+                self._ws = None
             if not self._stop.wait(2):
                 continue
 
@@ -216,19 +283,27 @@ class UploadTab(QtWidgets.QWidget):
         if not self.document_id:
             return
         url = f"{self.ws_base}/ws/{self.client_id}"
-        topics = [f"document_updates_{self.document_id}"]
+        topics = [f"document_updates_{self.document_id}", "system_status"]
         self.ws_worker = WebSocketWorker(url, topics)
         self.ws_worker.message_received.connect(self.handle_update)
         self.ws_worker.start()
 
     def handle_update(self, data: Dict[str, Any]) -> None:
+        msg_type = data.get("type")
+        if msg_type == "system_status":
+            self.output.append(
+                f"System CPU {data.get('cpu')}% MEM {data.get('memory')}%"
+            )
+            return
+
         if data.get("document_id") != self.document_id:
             return
-        if data.get("type") == "processing_progress":
+
+        if msg_type == "processing_progress":
             prog = int(float(data.get("progress", 0)) * 100)
             self.progress.setValue(prog)
             self.output.append(f"Stage: {data.get('stage')}")
-        elif data.get("type") == "processing_complete":
+        elif msg_type == "processing_complete":
             self.progress.setValue(100)
             self.output.append("Completed")
 
