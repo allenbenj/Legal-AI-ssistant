@@ -198,3 +198,7 @@ The audit report in
 [legal_ai_system/docs/file_audit.md](legal_ai_system/docs/file_audit.md)
 captures the current folder layout, dependency findings, and a cleanup plan.
 Refer to it when making structural changes or removing deprecated modules.
+
+If PostgreSQL becomes unavailable, the application enters a degraded mode.
+Refer to [legal_ai_system/docs/postgres_downtime_impact.md](legal_ai_system/docs/postgres_downtime_impact.md)
+for a detailed list of features that are disabled or limited during downtime.
