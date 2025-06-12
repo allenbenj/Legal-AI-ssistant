@@ -24,7 +24,7 @@ pip install --upgrade pip
 pip install -r requirements.txt
 pip install -r requirements-dev.txt  # development and testing tools
 ```
-   The requirements file includes database drivers such as **asyncpg** for PostgreSQL and **aioredis** for Redis. Installing `requirements-dev.txt` pulls in optional tools like `pytest` and linters.
+   The requirements file includes database drivers such as **asyncpg** for PostgreSQL and **aioredis** for Redis. Installing `requirements-dev.txt` pulls in optional tools like `nose2` and linters.
 3. Install Node packages for the React frontend:
    ```bash
    (cd frontend && npm install)
@@ -102,7 +102,7 @@ python legal_ai_system/scripts/setup_environment_task.py
 ```
 For a faster workflow, you can run the helper script below. It automatically
 creates `.venv` if needed, installs all development dependencies, and invokes
-`pytest`:
+`nose2`:
 
 ```bash
 ./scripts/run_tests.sh
@@ -110,17 +110,17 @@ creates `.venv` if needed, installs all development dependencies, and invokes
 
 ## Running Tests
 
-Before invoking `pytest`, install the development dependencies:
+Before invoking `nose2`, install the development dependencies:
 
 ```bash
 pip install -e .[dev]
 ```
 
 Running tests with coverage is enabled by default via `pytest-cov`. After
-installing the development dependencies simply run `pytest`:
+installing the development dependencies simply run `nose2`:
 
 ```bash
-pytest
+nose2
 ```
 
 Alternatively, run the installation helper:

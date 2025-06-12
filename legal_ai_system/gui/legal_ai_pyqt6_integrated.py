@@ -327,10 +327,12 @@ class IntegratedMainWindow(QMainWindow):
         # Quick action buttons
         self.upload_btn = GlowingButton("Upload")
         self.upload_btn.clicked.connect(self.uploadDocuments)
+        self.upload_btn.setEnabled(False)
         top_layout.addWidget(self.upload_btn)
-        
+
         self.process_btn = GlowingButton("Process Queue")
         self.process_btn.clicked.connect(self.processQueue)
+        self.process_btn.setEnabled(False)
         top_layout.addWidget(self.process_btn)
         
         main_layout.addWidget(top_toolbar)
@@ -749,6 +751,8 @@ class IntegratedMainWindow(QMainWindow):
 
     def onBackendReady(self):
         """Backend bridge initialised."""
+        self.upload_btn.setEnabled(True)
+        self.process_btn.setEnabled(True)
         self.network_manager.checkConnection()
         self.loadDocuments()
         self.updateDashboard()
