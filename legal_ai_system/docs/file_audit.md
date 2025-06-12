@@ -184,3 +184,33 @@ match the current codebase:
   redundant once those services are fully retired.
 
 Please update or prune these documents during the next cleanup cycle.
+
+## Task Summary and Recommendations
+
+### Collected Tasks
+
+The repository contains several task lists that inform upcoming cleanup and
+development work:
+
+- The [Code Cleanup Backlog](cleanup_backlog.md) flags stub modules such as
+  `legal_ai_desktop`, `legal_ai_widgets`, `legal_ai_charts`, and
+  `legal_ai_network` for removal or replacement with real implementations【F:docs/cleanup_backlog.md†L5-L16】.
+- The [Agent Task List](tasks/agent_tasks.md) outlines improvements like
+  auditing `asyncio.to_thread` usage, expanding async streaming, integrating
+  Legal‑BERT models, adding caching, and ensuring persistence across the
+  workflow【F:docs/tasks/agent_tasks.md†L5-L14】.
+- The [Application Assessment](application_assessment.md) suggests expanding
+  documentation, introducing stronger typing, improving configuration
+  management, adding asynchronous task orchestration, and enhancing
+  monitoring and the React GUI【F:docs/application_assessment.md†L31-L36】.
+
+### Recommended Actions
+
+- **Keep** the consolidated PyQt6 GUI as the primary interface
+  (`gui/legal_ai_pyqt6_integrated.py`)【F:docs/legacy/removed_backends.md†L9-L14】.
+- **Remove** or replace stub packages listed in `cleanup_backlog.md` once their
+  functionality is migrated.
+- **Refactor** the core workflow and service modules to adopt the asynchronous
+  and persistence improvements described in `agent_tasks.md`.
+- **Update** documentation and typing per the recommendations in
+  `application_assessment.md`.
