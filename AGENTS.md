@@ -37,3 +37,4 @@ Atomic Commits: Make small, focused commits with clear, descriptive messages.
 Strategic Version Control: Adhere to branching strategies; understand merge vs. rebase implications.
 Learn Continuously: Analyze all feedback, reflect on successes/failures, and adapt to new paradigms.
 Optimize Workflow: Streamline your own coding processes.
+Use unittest with nose2 for testing. 
