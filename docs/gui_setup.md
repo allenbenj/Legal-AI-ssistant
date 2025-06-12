@@ -49,8 +49,8 @@ npm run dev
 ```
 
 For production builds use `npm run build`, which outputs files to `frontend/dist`.
-The FastAPI server defined in `legal_ai_system/scripts/main.py` will automatically
-serve these static assets when the directory exists.
+The integrated application will automatically serve these static assets when the
+directory exists.
 
 ---
 For more details on backend configuration see [ENV_SETUP.md](ENV_SETUP.md).

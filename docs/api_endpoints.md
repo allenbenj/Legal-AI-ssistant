@@ -24,5 +24,6 @@ Each endpoint accepts a JSON payload and returns the structured result from the 
 - `overall_status` – aggregate status for the entire system.
 - `services_status` – map of service names to their individual status.
 
-Implemented by `get_system_health_rest` in
-[`legal_ai_system/scripts/main.py`](../legal_ai_system/scripts/main.py).
+The `get_system_health_rest` handler is provided in the integrated PyQt6
+application located at
+[`legal_ai_system/gui/legal_ai_pyqt6_integrated.py`](../legal_ai_system/gui/legal_ai_pyqt6_integrated.py).
