@@ -21,9 +21,6 @@ from legal_ai_system.gui.widgets.legal_ai_charts import (
     AnalyticsDashboardWidget,
     BarChartWidget,
     ChartData,
-    HeatMapWidget,
-    LineChartWidget,
-    PieChartWidget,
 )
 from legal_ai_system.legal_ai_database import (
     CacheManager,
@@ -370,10 +367,6 @@ class IntegratedMainWindow(QMainWindow):
         self.queue_widget = self.createQueueView()
         self.main_tabs.addTab(self.queue_widget, "Processing Queue")
 
-        # Agent Management tab
-        self.agents_widget = self.createAgentManagementView()
-        self.main_tabs.addTab(self.agents_widget, "Agents")
-
         main_layout.addWidget(self.main_tabs)
 
     def createDashboard(self) -> QWidget:
@@ -499,102 +492,6 @@ class IntegratedMainWindow(QMainWindow):
         self.queue_list = QListWidget()
         self.queue_list.setAlternatingRowColors(True)
         layout.addWidget(self.queue_list)
-
-        return widget
-
-    def createAgentManagementView(self) -> QWidget:
-        """Create agent management interface."""
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-
-        self.agent_tabs = QTabWidget()
-        self.agent_tables: Dict[str, QTableWidget] = {}
-
-        for category in ["Analysis", "Document Processing", "Other"]:
-            table = QTableWidget(0, 4)
-            table.setHorizontalHeaderLabels(
-                [
-                    "Agent",
-                    "State",
-                    "CPU %",
-                    "Actions",
-                ]
-            )
-            self.agent_tabs.addTab(table, category)
-            self.agent_tables[category] = table
-
-        layout.addWidget(self.agent_tabs)
-
-        self.agent_refresh_timer = QTimer()
-        self.agent_refresh_timer.timeout.connect(self.refreshAgentsStatus)
-        self.agent_refresh_timer.start(5000)
-
-        return widget
-
-    def refreshAgentsStatus(self) -> None:
-        """Fetch agent status from backend and update tables."""
-        future = self.backend_bridge.get_services_status()
-
-        def _done(fut: asyncio.Future) -> None:
-            try:
-                data = fut.result()
-            except Exception as exc:  # pragma: no cover - async failure
-                self.log(f"Failed to get agent status: {exc}", level="error")
-                return
-
-            QTimer.singleShot(0, lambda d=data: self.populateAgentTables(d))
-
-        future.add_done_callback(_done)
-
-    def populateAgentTables(self, data: Dict[str, Any]) -> None:
-        """Populate agent tables with latest status."""
-        services = data.get("services", {})
-
-        categories = {
-            "analysis": "Analysis",
-            "document": "Document Processing",
-        }
-
-        grouped: Dict[str, list] = {
-            "Analysis": [],
-            "Document Processing": [],
-            "Other": [],
-        }
-
-        for name, info in services.items():
-            cat = "Other"
-            lname = name.lower()
-            for key, label in categories.items():
-                if key in lname:
-                    cat = label
-                    break
-            grouped[cat].append((name, info.get("state", "")))
-
-        for cat, table in self.agent_tables.items():
-            table.setRowCount(len(grouped.get(cat, [])))
-            for row, (name, state) in enumerate(grouped.get(cat, [])):
-                table.setItem(row, 0, QTableWidgetItem(name))
-                table.setItem(row, 1, QTableWidgetItem(state))
-                table.setItem(row, 2, QTableWidgetItem("0"))  # AGENT_STUB metrics
-
-                actions = QWidget()
-                layout = QHBoxLayout(actions)
-                layout.setContentsMargins(0, 0, 0, 0)
-                start_btn = QPushButton("Start")
-                start_btn.clicked.connect(lambda _, n=name: self.startAgent(n))
-                stop_btn = QPushButton("Stop")
-                stop_btn.clicked.connect(lambda _, n=name: self.stopAgent(n))
-                layout.addWidget(start_btn)
-                layout.addWidget(stop_btn)
-                table.setCellWidget(row, 3, actions)
-
-    def startAgent(self, name: str) -> None:
-        """Start an agent via BackendBridge."""  # AGENT_STUB
-        self.backend_bridge.start_agent(name)
-
-    def stopAgent(self, name: str) -> None:
-        """Stop an agent via BackendBridge."""  # AGENT_STUB
-        self.backend_bridge.stop_agent(name)
 
     def setupDocks(self):
         """Setup dockable panels"""

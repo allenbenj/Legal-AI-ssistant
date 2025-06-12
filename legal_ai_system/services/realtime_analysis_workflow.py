@@ -211,9 +211,23 @@ class RealTimeAnalysisWorkflow:
                 self._run_realtime_pipeline, document_path, **kwargs
             )
             await self._notify_progress("queued", 0.0)
+            await self._notify_update(
+                "workflow_queued",
+                {"document_id": document_id, "job_id": getattr(job, "id", None)},
+            )
             return job
 
-        return await self._run_realtime_pipeline(document_path, **kwargs)
+        try:
+            result = await self._run_realtime_pipeline(document_path, **kwargs)
+            await self._notify_update(
+                "workflow_completed", {"document_id": document_id}
+            )
+            return result
+        except Exception as e:
+            await self._notify_update(
+                "workflow_failed", {"document_id": document_id, "error": str(e)}
+            )
+            raise
 
     async def _run_realtime_pipeline(self, document_path: str, **kwargs):
         """Run the end-to-end real-time processing pipeline."""
