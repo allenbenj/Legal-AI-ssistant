@@ -6,7 +6,7 @@ The following modules or folders either duplicate functionality that now lives e
 |---------------|-------------|--------|
 | `legal_ai_desktop` | Minimal PyQt6 widgets and application shell used for early prototypes. Functionality is now in `legal_ai_system/gui/legal_ai_pyqt6_integrated.py`. | **Remove** once integration is complete |
 | `legal_ai_widgets` | Standalone widget collection duplicating `legal_ai_system/gui/widgets`. | **Remove** when main GUI is finalized |
-| `legal_ai_charts` | Wrapper that simply re-exports `legal_ai_system/gui/legal_ai_charts.py`. | **Remove** after references are updated |
+| `legal_ai_charts` | Wrapper that simply re-exports `legal_ai_system/gui/widgets/legal_ai_charts.py`. | **Remove** after references are updated |
 | `legal_ai_network` | Stubbed network classes for the GUI. | **Replace** with real network service |
 | `legal_ai_database` | Stub database and cache managers. | **Replace** with production database layer |
 | `aioredis` | Thin alias to `redis.asyncio` to avoid optional dependency. | **Remove** after adopting official client |
