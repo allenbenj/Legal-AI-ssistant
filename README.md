@@ -150,7 +150,9 @@ choose the one that suits your workflow:
 
 ### PyQt6 Interface
 
-Install `PyQt6` and launch the integrated desktop GUI:
+Install `PyQt6` and launch the integrated desktop GUI. The interface now bundles
+its own widgets and utility classes so no extra prototype packages are
+required:
 
 ```bash
 pip install PyQt6
@@ -172,6 +174,11 @@ window.show()
 The bridge ensures the desktop app communicates with the same backend services
 as the API and other frontends. It is primarily a demo and lacks the advanced
 features of the Streamlit and React frontends.
+
+The asynchronous network and database layers have been consolidated into the
+application itself, so document uploads and preference storage no longer rely on
+stub modules. Metrics can be streamed to connected clients by enabling the
+`RealtimePublisher` in the configuration.
 
 Detailed instructions are available in [docs/gui_setup.md](legal_ai_system/docs/gui_setup.md).
 
