@@ -3,18 +3,33 @@
 
 __all__ = [
     "LegalAIIntegrationService",
+    "ServiceContainer",
+    "create_service_container",
+    "WorkflowOrchestrator",
 ]
 
 try:
     from legal_ai_system.services.integration_service import LegalAIIntegrationService
+    from legal_ai_system.services.service_container import (
+        ServiceContainer,
+        create_service_container,
+    )
+    from legal_ai_system.services.workflow_orchestrator import WorkflowOrchestrator
 except Exception:  # pragma: no cover - optional during minimal setups
     LegalAIIntegrationService = None
+    ServiceContainer = None  # type: ignore
+    create_service_container = None  # type: ignore
+    WorkflowOrchestrator = None  # type: ignore
 
 # Provide minimal ServiceContainer when tests stub out the module.
 import sys
+
 if "legal_ai_system.services.service_container" in sys.modules:
     mod = sys.modules["legal_ai_system.services.service_container"]
-    if not hasattr(mod, "ServiceContainer") or not hasattr(mod.ServiceContainer, "register_service"):
+    if not hasattr(mod, "ServiceContainer") or not hasattr(
+        mod.ServiceContainer, "register_service"
+    ):
+
         class _DummyServiceContainer:
             def __init__(self) -> None:
                 self._initialization_order = []

@@ -1,10 +1,10 @@
 """Networking stubs for the integrated GUI."""
+
 from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, List
 
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
-
 
 
 class NetworkManager(QObject):
@@ -37,21 +37,53 @@ class LegalAIAPIClient(QObject):
 
 
 class DocumentProcessingWorker(QThread):  # pragma: no cover - thread logic
-    """Dummy background worker."""
+    """Background worker that drives the WorkflowOrchestrator."""
 
     progress = pyqtSignal(str, int, str)
 
-    def __init__(self, _client: LegalAIAPIClient) -> None:
+    def __init__(
+        self, _client: LegalAIAPIClient, service_container: Any | None = None
+    ) -> None:
         super().__init__()
         self._queue: List[tuple[str, Path, Dict[str, Any]]] = []
+        self.service_container = service_container
 
     def addDocument(self, doc_id: str, path: Path, options: Dict[str, Any]) -> None:
         self._queue.append((doc_id, path, options))
+        if not self.isRunning():
+            self.start()
 
     def run(self) -> None:
-        for doc_id, _path, _opts in self._queue:
-            for pct in range(0, 101, 20):
-                self.progress.emit(doc_id, pct, "processing")
+        import asyncio
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        orchestrator = None
+        if self.service_container is not None:
+            try:
+                orchestrator = loop.run_until_complete(
+                    self.service_container.get_workflow_orchestrator()
+                )
+            except Exception:
+                orchestrator = None
+
+        for doc_id, path, opts in self._queue:
+            if orchestrator is not None:
+                orchestrator.workflow.register_progress_callback(
+                    lambda msg, prog, did=doc_id: self.progress.emit(
+                        did, int(prog * 100), msg
+                    )
+                )
+                loop.run_until_complete(
+                    orchestrator.execute_workflow_instance(
+                        document_path_str=str(path),
+                        custom_metadata={"document_id": doc_id, **opts},
+                    )
+                )
+            else:
+                for pct in range(0, 101, 20):
+                    self.progress.emit(doc_id, pct, "processing")
+
         self._queue.clear()
 
 
