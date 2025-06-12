@@ -6,7 +6,7 @@ This guide outlines the five-phase plan for integrating the Legal AI System, com
 
 1. **Environment Preparation** – Install Python and Node dependencies as described in [ENV_SETUP.md](ENV_SETUP.md). Verify that packages such as `fastapi`, `uvicorn`, and database drivers install correctly.
 2. **Service Container Configuration** – Use the `create_service_container` function to wire services together in the correct order. The initialization order is summarised in [system_layout.md](system_layout.md).
-3. **API and WebSocket Endpoints** – Expose REST endpoints from `main.py` and set up the `ConnectionManager` for real-time updates. React hooks from `frontend/src/hooks` subscribe to updates during document processing.
+3. **API and WebSocket Endpoints** – Expose REST endpoints from the integrated application and set up the `ConnectionManager` for real-time updates. React hooks from `frontend/src/hooks` subscribe to updates during document processing.
 4. **Deployment** – Run the FastAPI app with Uvicorn or inside Docker. Ensure environment variables for database connections and secret keys are provided. Build the frontend once and serve the static files from `frontend/dist`.
 5. **Monitoring and Optimization** – Start the `RealtimePublisher` to broadcast system metrics and log performance. Tune database connections and vector stores based on load patterns.
 

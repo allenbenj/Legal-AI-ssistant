@@ -137,11 +137,11 @@ choose the one that suits your workflow:
 
 ### PyQt6 Interface
 
-Install `PyQt6` and launch the desktop GUI module:
+Install `PyQt6` and launch the integrated desktop GUI:
 
 ```bash
 pip install PyQt6
-python -m legal_ai_system.gui.integrated_gui
+
 ```
 
 This interface can open local documents and run the default analysis workflow
