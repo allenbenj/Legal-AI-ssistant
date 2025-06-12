@@ -164,3 +164,18 @@ The following packages are mostly stubs and were previously flagged in `cleanup_
 - langgraph
 
 These modules contain minimal code and are primarily re-export or placeholder implementations. They can likely be removed or consolidated once the PyQt6 GUI (`legal_ai_system/gui/legal_ai_pyqt6_integrated.py`) is fully adopted.
+
+## Unused Configuration Keys
+
+The following keys defined in `config/defaults.yaml` were not referenced by any Python modules at the time of audit:
+
+| Key | Notes |
+|-----|------|
+| `postgres_dsn` | Obsolete; database initialization uses environment variable `DATABASE_URL` instead. |
+| `metadata_pg_min_conn` | No module reads this minimum connection setting. |
+| `metadata_pg_max_conn` | No module reads this maximum connection setting. |
+| `enable_vector_neo4j_sync` | No synchronization logic implemented. |
+
+`agents.knowledge_graph_reasoning_agent_config` is currently only present as a placeholder in the settings defaults and is not actively consumed by the codebase.
+
+No duplicate keys were detected in the YAML configuration.
