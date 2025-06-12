@@ -34,6 +34,10 @@ from legal_ai_database import (
     DocumentSearchEngine
 )
 
+from .sections.dashboard_section import DashboardSection
+from .sections.document_section import DocumentSection
+from .sections.queue_section import QueueSection
+
 
 # ==================== INTEGRATED MAIN WINDOW ====================
 class IntegratedMainWindow(QMainWindow):
@@ -79,15 +83,18 @@ class IntegratedMainWindow(QMainWindow):
         ws_url = self.prefs_manager.get("websocket_url", "ws://localhost:8000/ws")
         self.websocket_client = WebSocketClient(ws_url)
         
-        # Document storage
-        self.documents: Dict[str, Document] = {}
-        self.active_viewers: List[DocumentViewer] = []
+
         
     def setupUI(self):
         """Setup main UI"""
         central = QWidget()
         self.setCentralWidget(central)
         main_layout = QVBoxLayout(central)
+
+        # Instantiate helper sections
+        self.dashboard_section = DashboardSection(self)
+        self.document_section = DocumentSection(self)
+        self.queue_section = QueueSection(self)
         
         # Top toolbar with quick actions
         top_toolbar = QWidget()
@@ -96,17 +103,22 @@ class IntegratedMainWindow(QMainWindow):
         
         # Search bar
         self.global_search = QLineEdit()
-        self.global_search.setPlaceholderText("Search documents, entities, or legal terms...")
-        self.global_search.returnPressed.connect(self.performGlobalSearch)
+        self.global_search.setPlaceholderText(
+            "Search documents, entities, or legal terms..."
+        )
+        # Delegate search handling to document section
+        self.global_search.returnPressed.connect(
+            lambda: self.document_section.perform_global_search()
+        )
         top_layout.addWidget(self.global_search)
         
         # Quick action buttons
         self.upload_btn = GlowingButton("Upload")
-        self.upload_btn.clicked.connect(self.uploadDocuments)
+        self.upload_btn.clicked.connect(self.document_section.upload_documents)
         top_layout.addWidget(self.upload_btn)
         
         self.process_btn = GlowingButton("Process Queue")
-        self.process_btn.clicked.connect(self.processQueue)
+        self.process_btn.clicked.connect(self.queue_section.process_queue)
         top_layout.addWidget(self.process_btn)
         
         main_layout.addWidget(top_toolbar)
@@ -117,11 +129,11 @@ class IntegratedMainWindow(QMainWindow):
         self.main_tabs.setMovable(True)
         
         # Dashboard tab
-        self.dashboard_widget = self.createDashboard()
+        self.dashboard_widget = self.dashboard_section.create_widget()
         self.main_tabs.addTab(self.dashboard_widget, "Dashboard")
         
         # Documents tab
-        self.documents_widget = self.createDocumentsView()
+        self.documents_widget = self.document_section.create_widget()
         self.main_tabs.addTab(self.documents_widget, "Documents")
         
         # Analytics tab
@@ -129,141 +141,12 @@ class IntegratedMainWindow(QMainWindow):
         self.main_tabs.addTab(self.analytics_widget, "Analytics")
         
         # Processing Queue tab
-        self.queue_widget = self.createQueueView()
+        self.queue_widget = self.queue_section.create_widget()
         self.main_tabs.addTab(self.queue_widget, "Processing Queue")
         
         main_layout.addWidget(self.main_tabs)
         
-    def createDashboard(self) -> QWidget:
-        """Create dashboard with overview widgets"""
-        dashboard = QWidget()
-        layout = QGridLayout(dashboard)
-        
-        # Stats cards
-        stats_frame = QFrame()
-        stats_frame.setFrameStyle(QFrame.Shape.Box)
-        stats_layout = QHBoxLayout(stats_frame)
-        
-        # Create flip cards for stats
-        self.doc_count_card = FlipCard(
-            "Total Documents\n0",
-            "Click for details"
-        )
-        stats_layout.addWidget(self.doc_count_card)
-        
-        self.success_rate_card = FlipCard(
-            "Success Rate\n0%",
-            "Processing accuracy"
-        )
-        stats_layout.addWidget(self.success_rate_card)
-        
-        self.active_users_card = FlipCard(
-            "Active Users\n0",
-            "Currently online"
-        )
-        stats_layout.addWidget(self.active_users_card)
-        
-        layout.addWidget(stats_frame, 0, 0, 1, 2)
-        
-        # Recent activity timeline
-        self.timeline = TimelineWidget()
-        timeline_frame = QGroupBox("Recent Activity")
-        timeline_layout = QVBoxLayout(timeline_frame)
-        timeline_layout.addWidget(self.timeline)
-        layout.addWidget(timeline_frame, 1, 0)
-        
-        # Tag cloud
-        self.tag_cloud = TagCloud()
-        tag_frame = QGroupBox("Popular Tags")
-        tag_layout = QVBoxLayout(tag_frame)
-        tag_layout.addWidget(self.tag_cloud)
-        layout.addWidget(tag_frame, 1, 1)
-        
-        # Quick charts
-        self.mini_pie = PieChartWidget()
-        self.mini_pie.setMaximumHeight(300)
-        layout.addWidget(self.mini_pie, 2, 0)
-        
-        self.mini_bar = BarChartWidget()
-        self.mini_bar.setMaximumHeight(300)
-        layout.addWidget(self.mini_bar, 2, 1)
-        
-        return dashboard
-        
-    def createDocumentsView(self) -> QWidget:
-        """Create documents management view"""
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-        
-        # Toolbar
-        toolbar = QWidget()
-        toolbar_layout = QHBoxLayout(toolbar)
-        
-        # Filter controls
-        toolbar_layout.addWidget(QLabel("Status:"))
-        self.status_filter = SearchableComboBox()
-        self.status_filter.addItems(["All", "Pending", "Processing", "Completed", "Failed"])
-        self.status_filter.currentTextChanged.connect(self.filterDocuments)
-        toolbar_layout.addWidget(self.status_filter)
-        
-        toolbar_layout.addWidget(QLabel("Type:"))
-        self.type_filter = SearchableComboBox()
-        self.type_filter.addItems(["All", "Contract", "Legal Brief", "Patent", "Compliance"])
-        toolbar_layout.addWidget(self.type_filter)
-        
-        toolbar_layout.addStretch()
-        
-        # Export button
-        export_btn = QPushButton("Export Selected")
-        export_btn.clicked.connect(self.exportDocuments)
-        toolbar_layout.addWidget(export_btn)
-        
-        layout.addWidget(toolbar)
-        
-        # Document table
-        self.doc_table = QTableView()
-        self.doc_model = DocumentTableModel()
-        self.doc_table.setModel(self.doc_model)
-        self.doc_table.setSelectionBehavior(QTableView.SelectionBehavior.SelectRows)
-        self.doc_table.setAlternatingRowColors(True)
-        self.doc_table.doubleClicked.connect(self.viewDocument)
-        
-        # Context menu
-        self.doc_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.doc_table.customContextMenuRequested.connect(self.showDocumentContextMenu)
-        
-        layout.addWidget(self.doc_table)
-        
-        return widget
-        
-    def createQueueView(self) -> QWidget:
-        """Create processing queue view"""
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-        
-        # Queue controls
-        controls = QWidget()
-        controls_layout = QHBoxLayout(controls)
-        
-        pause_btn = QPushButton("Pause Queue")
-        pause_btn.setCheckable(True)
-        pause_btn.toggled.connect(self.toggleQueueProcessing)
-        controls_layout.addWidget(pause_btn)
-        
-        clear_btn = QPushButton("Clear Completed")
-        clear_btn.clicked.connect(self.clearCompletedItems)
-        controls_layout.addWidget(clear_btn)
-        
-        controls_layout.addStretch()
-        
-        layout.addWidget(controls)
-        
-        # Queue list
-        self.queue_list = QListWidget()
-        self.queue_list.setAlternatingRowColors(True)
-        layout.addWidget(self.queue_list)
-        
-        return widget
+
         
     def setupDocks(self):
         """Setup dockable panels"""
@@ -301,7 +184,7 @@ class IntegratedMainWindow(QMainWindow):
         
         upload_action = file_menu.addAction("Upload Documents...")
         upload_action.setShortcut("Ctrl+O")
-        upload_action.triggered.connect(self.uploadDocuments)
+        upload_action.triggered.connect(self.document_section.upload_documents)
         
         file_menu.addSeparator()
         
@@ -415,7 +298,7 @@ class IntegratedMainWindow(QMainWindow):
         tray_menu.addSeparator()
         
         process_action = tray_menu.addAction("Process Queue")
-        process_action.triggered.connect(self.processQueue)
+        process_action.triggered.connect(self.queue_section.process_queue)
         
         tray_menu.addSeparator()
         
@@ -433,17 +316,27 @@ class IntegratedMainWindow(QMainWindow):
         self.db_manager.error.connect(self.onDatabaseError)
         
         # Network signals
-        self.network_manager.connectionStatusChanged.connect(self.onConnectionStatusChanged)
-        self.api_client.documentsLoaded.connect(self.onDocumentsLoaded)
-        self.api_client.documentUploaded.connect(self.onDocumentUploaded)
-        self.api_client.processingComplete.connect(self.onProcessingComplete)
+        self.network_manager.connectionStatusChanged.connect(
+            self.onConnectionStatusChanged
+        )
+        self.api_client.documentsLoaded.connect(
+            self.document_section.on_documents_loaded
+        )
+        self.api_client.documentUploaded.connect(
+            self.document_section.on_document_uploaded
+        )
+        self.api_client.processingComplete.connect(
+            self.document_section.on_processing_complete
+        )
         
         # WebSocket signals
         self.websocket_client.connected.connect(self.onWebSocketConnected)
         self.websocket_client.messageReceived.connect(self.onWebSocketMessage)
         
         # Worker signals
-        self.processing_worker.progress.connect(self.onProcessingProgress)
+        self.processing_worker.progress.connect(
+            self.document_section.on_processing_progress
+        )
         
         # Preferences signals
         self.prefs_manager.preferenceChanged.connect(self.onPreferenceChanged)
@@ -509,14 +402,14 @@ class IntegratedMainWindow(QMainWindow):
         self.websocket_client.connect()
         
         # Load initial data
-        self.loadDocuments()
-        self.updateDashboard()
+        self.document_section.load_documents()
+        self.dashboard_section.update()
         
     # ==================== SLOTS ====================
     def onDatabaseReady(self):
         """Handle database ready"""
         self.log("Database initialized")
-        self.loadLocalDocuments()
+        self.document_section.load_local_documents()
         
     def onDatabaseError(self, error: str):
         """Handle database error"""
@@ -534,69 +427,6 @@ class IntegratedMainWindow(QMainWindow):
             self.connection_indicator.setStyleSheet("color: #f44336;")
             self.showNotification("Disconnected from server", "error")
             
-    def onDocumentsLoaded(self, documents: List[Dict]):
-        """Handle documents loaded from API"""
-        self.log(f"Loaded {len(documents)} documents from server")
-        
-        # Update model
-        for doc_data in documents:
-            doc = Document(
-                id=doc_data["document_id"],
-                filename=doc_data["filename"],
-                status=doc_data["status"],
-                progress=doc_data.get("progress", 0),
-                uploaded_at=datetime.fromisoformat(doc_data["uploaded_at"]),
-                file_size=doc_data.get("file_size", 0),
-                doc_type=doc_data.get("type", "Unknown")
-            )
-            self.documents[doc.id] = doc
-            self.doc_model.addDocument(doc)
-            
-            # Save to local database
-            self.db_manager.saveDocument(
-                doc.id, doc.filename,
-                file_size=doc.file_size,
-                metadata=doc_data.get("metadata")
-            )
-            
-    def onDocumentUploaded(self, doc_id: str):
-        """Handle document uploaded"""
-        self.log(f"Document uploaded: {doc_id}")
-        self.showNotification("Document uploaded successfully", "success")
-        
-        # Add to processing queue
-        if doc_id in self.documents:
-            self.queue_list.addItem(f"Processing: {self.documents[doc_id].filename}")
-            
-    def onProcessingComplete(self, doc_id: str, results: Dict):
-        """Handle processing complete"""
-        self.log(f"Processing complete for document: {doc_id}")
-        
-        # Update document status
-        if doc_id in self.documents:
-            self.documents[doc_id].status = "completed"
-            self.doc_model.updateDocument(doc_id, "completed", 1.0)
-            
-        # Save results to database
-        self.db_manager.updateDocumentStatus(doc_id, "completed", results)
-        
-        # Index for search
-        if "text_content" in results:
-            self.search_engine.indexDocument(
-                doc_id,
-                self.documents[doc_id].filename,
-                results["text_content"],
-                results
-            )
-            
-        self.showNotification(f"Processing complete: {self.documents[doc_id].filename}", "success")
-        
-    def onProcessingProgress(self, doc_id: str, progress: int, stage: str):
-        """Handle processing progress"""
-        self.log(f"Processing {doc_id}: {stage} ({progress}%)")
-        
-        if doc_id in self.documents:
-            self.doc_model.updateDocument(doc_id, "processing", progress / 100)
             
     def onWebSocketConnected(self):
         """Handle WebSocket connected"""
@@ -609,7 +439,9 @@ class IntegratedMainWindow(QMainWindow):
         if msg_type == "document_update":
             doc_id = message.get("document_id")
             status = message.get("status")
-            self.doc_model.updateDocument(doc_id, status, message.get("progress", 0))
+            self.document_section.doc_model.updateDocument(
+                doc_id, status, message.get("progress", 0)
+            )
             
         elif msg_type == "notification":
             self.showNotification(message.get("text", ""), message.get("level", "info"))
@@ -620,72 +452,6 @@ class IntegratedMainWindow(QMainWindow):
             self.applyTheme()
             
     # ==================== ACTIONS ====================
-    def uploadDocuments(self):
-        """Upload documents"""
-        files, _ = QFileDialog.getOpenFileNames(
-            self,
-            "Select Documents",
-            str(Path.home()),
-            "Documents (*.pdf *.docx *.txt *.md);;All Files (*.*)"
-        )
-        
-        if files:
-            self.upload_btn.startGlow()
-            
-            for file_path in files:
-                path = Path(file_path)
-                
-                # Upload via API
-                self.api_client.uploadDocument(
-                    path,
-                    {
-                        "enable_ner": self.prefs_manager.get("enable_ner", True),
-                        "enable_llm": self.prefs_manager.get("enable_llm", True),
-                        "confidence_threshold": self.prefs_manager.get("confidence_threshold", 0.7)
-                    }
-                )
-                
-            self.upload_btn.stopGlow()
-            
-    def processQueue(self):
-        """Process document queue"""
-        self.process_btn.startGlow()
-        
-        # Start processing worker
-        for doc_id, doc in self.documents.items():
-            if doc.status == "pending":
-                self.processing_worker.addDocument(
-                    doc_id,
-                    Path(doc.filename),
-                    {}
-                )
-                
-    def viewDocument(self, index: QModelIndex):
-        """View document details"""
-        row = index.row()
-        doc_id = self.doc_model.documents.iloc[row]["ID"]
-        
-        viewer = DocumentViewer(doc_id, self)
-        viewer.show()
-        self.active_viewers.append(viewer)
-        
-    def performGlobalSearch(self):
-        """Perform global search"""
-        query = self.global_search.text()
-        if query:
-            results = self.search_engine.search(query)
-            self.log(f"Search returned {len(results)} results")
-            
-            # Show results in new tab
-            results_widget = QListWidget()
-            for result in results:
-                item = QListWidgetItem(f"{result['filename']}: {result['snippet']}")
-                item.setData(Qt.ItemDataRole.UserRole, result['document_id'])
-                results_widget.addItem(item)
-                
-            self.main_tabs.addTab(results_widget, f"Search: {query}")
-            self.main_tabs.setCurrentWidget(results_widget)
-            
     def showSettings(self):
         """Show settings dialog"""
         dialog = SettingsDialog(self)
@@ -719,104 +485,6 @@ class IntegratedMainWindow(QMainWindow):
             
         self.console.append(html)
         
-    def updateDashboard(self):
-        """Update dashboard widgets"""
-        # Update flip cards
-        doc_count = len(self.documents)
-        self.doc_count_card.front_content = f"Total Documents\n{doc_count}"
-        
-        # Update timeline
-        now = QDateTime.currentDateTime()
-        for i, (doc_id, doc) in enumerate(list(self.documents.items())[:5]):
-            self.timeline.addEvent(
-                now.addSecs(-i * 3600),
-                doc.filename,
-                f"Status: {doc.status}",
-                "success" if doc.status == "completed" else "info"
-            )
-            
-        # Update tag cloud
-        tags = [
-            {"text": "Contract", "weight": 2.0},
-            {"text": "Legal", "weight": 1.5},
-            {"text": "Compliance", "weight": 1.0},
-            {"text": "Patent", "weight": 0.8},
-        ]
-        self.tag_cloud.setTags(tags)
-        
-        # Update mini charts
-        pie_data = [
-            ChartData("Completed", 75),
-            ChartData("Processing", 15),
-            ChartData("Pending", 10),
-        ]
-        self.mini_pie.setData(pie_data)
-        
-        bar_data = [
-            ChartData("Mon", 12),
-            ChartData("Tue", 19),
-            ChartData("Wed", 15),
-            ChartData("Thu", 25),
-            ChartData("Fri", 22),
-        ]
-        self.mini_bar.setData(bar_data)
-        
-    def loadLocalDocuments(self):
-        """Load documents from local database"""
-        docs = self.db_manager.getDocuments(limit=1000)
-        for doc_data in docs:
-            doc = Document(
-                id=doc_data["document_id"],
-                filename=doc_data["filename"],
-                status=doc_data["status"],
-                progress=1.0 if doc_data["status"] == "completed" else 0.5,
-                uploaded_at=datetime.fromisoformat(doc_data["upload_date"]),
-                file_size=doc_data.get("file_size", 0)
-            )
-            self.documents[doc.id] = doc
-            self.doc_model.addDocument(doc)
-            
-    def loadDocuments(self):
-        """Load documents from API"""
-        self.api_client.loadDocuments()
-        
-    def filterDocuments(self):
-        """Filter documents based on criteria"""
-        # Implement filtering logic
-        pass
-        
-    def exportDocuments(self):
-        """Export selected documents"""
-        # Implement export logic
-        pass
-        
-    def showDocumentContextMenu(self, pos: QPoint):
-        """Show context menu for documents"""
-        menu = QMenu(self)
-        
-        view_action = menu.addAction("View")
-        view_action.triggered.connect(lambda: self.viewDocument(self.doc_table.currentIndex()))
-        
-        menu.addSeparator()
-        
-        reprocess_action = menu.addAction("Reprocess")
-        delete_action = menu.addAction("Delete")
-        
-        menu.exec(self.doc_table.mapToGlobal(pos))
-        
-    def toggleQueueProcessing(self, paused: bool):
-        """Toggle queue processing"""
-        if paused:
-            self.processing_worker.requestInterruption()
-        else:
-            self.processQueue()
-            
-    def clearCompletedItems(self):
-        """Clear completed items from queue"""
-        for i in range(self.queue_list.count() - 1, -1, -1):
-            item = self.queue_list.item(i)
-            if "Complete" in item.text():
-                self.queue_list.takeItem(i)
                 
     def toggleFullScreen(self):
         """Toggle full screen mode"""
@@ -867,7 +535,7 @@ class IntegratedMainWindow(QMainWindow):
         self.savePreferences()
         
         # Close child windows
-        for viewer in self.active_viewers:
+        for viewer in self.document_section.active_viewers:
             viewer.close()
             
         # Cleanup
