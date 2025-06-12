@@ -2,18 +2,21 @@ from __future__ import annotations
 
 import asyncio
 import threading
-from pathlib import Path
-from typing import Any, Dict, Optional, Callable, Awaitable
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Awaitable, Callable, Dict, Optional
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
-from legal_ai_system.services.service_container import create_service_container, ServiceContainer
 from legal_ai_system.services.integration_service import (
-    create_integration_service,
     LegalAIIntegrationService,
+    create_integration_service,
 )
-from legal_ai_system.services.security_manager import User, AccessLevel
+from legal_ai_system.services.security_manager import AccessLevel, User
+from legal_ai_system.services.service_container import (
+    ServiceContainer,
+    create_service_container,
+)
 
 
 class BackendBridge(QObject):
@@ -50,7 +53,9 @@ class BackendBridge(QObject):
             is_async_factory=False,
         )
         await self._container.initialize_all_services()
-        self._integration_service = await self._container.get_service("integration_service")
+        self._integration_service = await self._container.get_service(
+            "integration_service"
+        )
         self._ready = True
         self.serviceReady.emit()
 
@@ -91,7 +96,9 @@ class BackendBridge(QObject):
             progress_cb=cb,
         )
 
-    def upload_document(self, file_path: Path, options: Dict[str, Any]) -> asyncio.Future:
+    def upload_document(
+        self, file_path: Path, options: Dict[str, Any]
+    ) -> asyncio.Future:
         """Upload a document and start processing."""
         return self.run_async(self._upload_document_async(file_path, options))
 
@@ -107,8 +114,33 @@ class BackendBridge(QObject):
             access_level=AccessLevel.READ,
             created_at=datetime.now(timezone.utc),
         )
-        return await self._integration_service.get_document_analysis_status(document_id, user)
+        return await self._integration_service.get_document_analysis_status(
+            document_id, user
+        )
 
     def get_status(self, document_id: str) -> asyncio.Future:
         return self.run_async(self._get_status_async(document_id))
 
+    async def _get_services_status_async(self) -> Dict[str, Any]:
+        """Return status information for all registered services."""
+        if not self._container:
+            return {}
+        return self._container.get_services_status()
+
+    def get_services_status(self) -> asyncio.Future:
+        """Fetch service status details asynchronously."""
+        return self.run_async(self._get_services_status_async())
+
+    async def _start_agent_async(self, _agent_name: str) -> None:  # AGENT_STUB
+        """Placeholder for starting an agent via the service container."""
+        raise NotImplementedError
+
+    def start_agent(self, agent_name: str) -> asyncio.Future:
+        return self.run_async(self._start_agent_async(agent_name))
+
+    async def _stop_agent_async(self, _agent_name: str) -> None:  # AGENT_STUB
+        """Placeholder for stopping an agent via the service container."""
+        raise NotImplementedError
+
+    def stop_agent(self, agent_name: str) -> asyncio.Future:
+        return self.run_async(self._stop_agent_async(agent_name))
