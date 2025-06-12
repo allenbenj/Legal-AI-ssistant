@@ -1,12 +1,12 @@
 # Testing Setup
 
-This project uses **pytest** for running automated tests. Before running `pytest`, install the development dependencies with `pip install -e .[dev]` or `python legal_ai_system/scripts/install_all_dependencies.py`. Missing packages such as **pytest-mock** will cause test failures.
+This project uses **nose2** for running automated tests built on the standard `unittest` framework. Before running `nose2`, install the development dependencies with `pip install -e .[dev]` or `python legal_ai_system/scripts/install_all_dependencies.py`. Missing packages such as **pytest-mock** will cause test failures.
 
 ## Required Python Packages
 
 The core dependencies for running the tests are listed below. They can be installed using `pip install -r requirements.txt` for the runtime libraries and `pip install -r requirements-dev.txt` or `pip install -e .[dev]` when using Poetry.
 
-- `pytest` and `pytest-asyncio` – main test framework with asyncio support
+- `nose2` and `pytest-asyncio` – test runner with asyncio support
 - `pytest-mock` – utilities for mocking during tests
 - `pytest-cov` – required because coverage reporting is enabled by default
 - `typer` – required to test the CLI script
@@ -22,7 +22,7 @@ example, missing `pytest-mock` will cause fixture failures.
 
 ## Running the Tests
 
-Ensure the development dependencies are installed before executing `pytest`. Run
+Ensure the development dependencies are installed before executing `nose2`. Run
 `pip install -e .[dev]` or use `python legal_ai_system/scripts/install_all_dependencies.py`.
 
 ```bash
@@ -30,7 +30,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
 pip install -e .[dev]
-pytest
+nose2
 ```
 
 Missing packages such as `pytest-mock` will cause failures if the development dependencies are not installed.
@@ -43,4 +43,4 @@ the helper script:
 ```
 
 `run_tests.sh` ensures `.venv` exists, installs the required packages, and then
-invokes `pytest`.
+invokes `nose2`.

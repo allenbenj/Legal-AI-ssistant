@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Simple helper to create a virtual environment, install dev dependencies,
-# and execute the pytest suite.
+# and execute the nose2 test suite.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -19,4 +19,4 @@ python -m pip install -r requirements.txt
 python -m pip install -r requirements-dev.txt
 python -m pip install -e ".[dev]"
 
-pytest "$@"
+nose2 "$@"
