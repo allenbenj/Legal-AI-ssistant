@@ -9,6 +9,7 @@ Install the Python dependencies and then launch the interface:
 
 ```bash
 pip install -r requirements.txt  # includes Streamlit
+pip install -r requirements-dev.txt
 python -m legal_ai_system
 ```
 

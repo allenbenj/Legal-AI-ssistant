@@ -4,7 +4,7 @@ This project uses **pytest** for running automated tests. Before running `pytest
 
 ## Required Python Packages
 
-The core dependencies for running the tests are listed below. They can be installed using `pip install -r requirements.txt` for the runtime libraries and `pip install -e .[dev]` when using Poetry.
+The core dependencies for running the tests are listed below. They can be installed using `pip install -r requirements.txt` for the runtime libraries and `pip install -r requirements-dev.txt` or `pip install -e .[dev]` when using Poetry.
 
 - `pytest` and `pytest-asyncio` – main test framework with asyncio support
 - `pytest-mock` – utilities for mocking during tests
@@ -12,7 +12,7 @@ The core dependencies for running the tests are listed below. They can be instal
 - `typer` – required to test the CLI script
 - `streamlit` – used by the GUI script (tests mock this module)
 
-Additional packages from `requirements.txt` are needed for the application itself (FastAPI, pydantic, etc.).
+Additional packages from `requirements.txt` are needed for the application itself (FastAPI, pydantic, etc.). Development tools come from `requirements-dev.txt`.
 
 Running the tests without these dependencies will result in import errors. For
 example, missing `pytest-mock` will cause fixture failures.
