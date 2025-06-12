@@ -39,3 +39,4 @@ Learn Continuously: Analyze all feedback, reflect on successes/failures, and ada
 Optimize Workflow: Streamline your own coding processes.
 Use unittest with nose2 for testing. 
 Use this as the GUI- legal_ai_system/gui/legal_ai_pyqt6_integrated.py
+Everything should be consolidated under Legal-AI-ssistant/legal_ai_system
