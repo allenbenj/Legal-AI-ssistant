@@ -12,28 +12,251 @@ from PyQt6.QtCore import *
 from PyQt6.QtGui import *
 
 # Import all our custom modules
-from legal_ai_system.legal_ai_desktop import (
-    MainWindow, DocumentViewer, AnalyticsDashboard, 
-    SettingsDialog, AboutDialog, LegalAIApplication,
-    DocumentTableModel, Document
-)
-from legal_ai_system.legal_ai_widgets import (
-    GlowingButton, FlipCard, TagCloud, TimelineWidget,
-    NotificationWidget, SearchableComboBox, DockablePanel
-)
-from legal_ai_system.legal_ai_charts import (
-    PieChartWidget, BarChartWidget, LineChartWidget, 
-    HeatMapWidget, ChartData, AnalyticsDashboardWidget
+from legal_ai_system.gui.widgets.legal_ai_charts import (
+    PieChartWidget,
+    BarChartWidget,
+    LineChartWidget,
+    HeatMapWidget,
+    ChartData,
+    AnalyticsDashboardWidget,
 )
 from legal_ai_system.legal_ai_network import (
-    NetworkManager, LegalAIAPIClient, DocumentProcessingWorker,
-    WebSocketClient, AsyncAPIClient
+    NetworkManager,
+    LegalAIAPIClient,
+    DocumentProcessingWorker,
+    WebSocketClient,
+    AsyncAPIClient,
 )
 from legal_ai_system.legal_ai_database import (
-    DatabaseManager, CacheManager, PreferencesManager,
-    DocumentSearchEngine
+    DatabaseManager,
+    CacheManager,
+    PreferencesManager,
+    DocumentSearchEngine,
 )
 from .backend_bridge import BackendBridge
+
+# Consolidated widget and helper classes from the former prototype packages
+from dataclasses import dataclass
+import pandas as pd
+
+
+class GlowingButton(QPushButton):
+    """Button that toggles a simple glow effect."""
+
+    def __init__(self, text: str, parent: QWidget | None = None) -> None:
+        super().__init__(text, parent)
+        self._glowing = False
+
+    def startGlow(self) -> None:
+        self._glowing = True
+        self.setStyleSheet("background-color: #ffa500;")
+
+    def stopGlow(self) -> None:
+        self._glowing = False
+        self.setStyleSheet("")
+
+
+class FlipCard(QWidget):
+    """Widget showing front/back text when clicked."""
+
+    def __init__(self, front: str, back: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.front = QLabel(front)
+        self.back = QLabel(back)
+        self.back.hide()
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.front)
+        layout.addWidget(self.back)
+        self.front.mousePressEvent = self._toggle  # type: ignore[assignment]
+        self.back.mousePressEvent = self._toggle  # type: ignore[assignment]
+
+    def _toggle(self, event) -> None:  # pragma: no cover - UI method
+        if self.front.isVisible():
+            self.front.hide()
+            self.back.show()
+        else:
+            self.back.hide()
+            self.front.show()
+
+
+class TagCloud(QWidget):  # pragma: no cover - demo widget
+    """Very small placeholder tag cloud."""
+
+    def __init__(self, tags: list[str] | None = None, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        layout = QVBoxLayout(self)
+        self.labels: list[QLabel] = []
+        for tag in tags or []:
+            lbl = QLabel(tag)
+            self.labels.append(lbl)
+            layout.addWidget(lbl)
+
+
+class TimelineWidget(QWidget):  # pragma: no cover - demo widget
+    """Placeholder timeline view."""
+
+
+class NotificationWidget(QMessageBox):
+    """Simple pop-up notification."""
+
+    def __init__(self, message: str, level: str = "info", parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setText(message)
+        if level == "success":
+            self.setIcon(QMessageBox.Icon.Information)
+        elif level == "error":
+            self.setIcon(QMessageBox.Icon.Critical)
+        else:
+            self.setIcon(QMessageBox.Icon.Warning)
+
+    def show(self, parent: QWidget | None = None) -> None:  # type: ignore[override]
+        if parent:
+            super().show()
+        else:
+            super().exec()
+
+
+class SearchableComboBox(QComboBox):  # pragma: no cover - minimal behaviour
+    """Combo box with typing filter."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setEditable(True)
+        self.lineEdit().textEdited.connect(self._filter_items)
+
+    def _filter_items(self, text: str) -> None:
+        for i in range(self.count()):
+            self.setRowHidden(i, text.lower() not in self.itemText(i).lower())
+
+
+class DockablePanel(QDockWidget):  # pragma: no cover - stub
+    """Simple dock widget."""
+
+    def __init__(self, title: str, parent: QWidget | None = None) -> None:
+        super().__init__(title, parent)
+
+
+@dataclass
+class Document:
+    """Simple document structure used by the GUI."""
+
+    id: str
+    filename: str
+    status: str = "pending"
+    progress: float = 0.0
+    uploaded_at: datetime | None = None
+    file_size: int = 0
+    doc_type: str = "Unknown"
+
+
+class DocumentTableModel(QAbstractTableModel):
+    """Very small table model for storing documents."""
+
+    headers = [
+        "ID",
+        "Filename",
+        "Status",
+        "Progress",
+        "UploadedAt",
+        "Size",
+        "Type",
+    ]
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.documents = pd.DataFrame(columns=self.headers)
+
+    # Qt model implementation -------------------------------------------------
+    def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:  # noqa: D401
+        return 0 if parent.isValid() else len(self.documents)
+
+    def columnCount(self, parent: QModelIndex = QModelIndex()) -> int:  # noqa: D401
+        return 0 if parent.isValid() else len(self.documents.columns)
+
+    def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole) -> Any:
+        if not index.isValid() or role != Qt.ItemDataRole.DisplayRole:
+            return None
+        value = self.documents.iat[index.row(), index.column()]
+        return str(value)
+
+    def headerData(
+        self,
+        section: int,
+        orientation: Qt.Orientation,
+        role: int = Qt.ItemDataRole.DisplayRole,
+    ) -> Any:
+        if role != Qt.ItemDataRole.DisplayRole:
+            return None
+        if orientation == Qt.Orientation.Horizontal:
+            try:
+                return str(self.documents.columns[section])
+            except IndexError:
+                return None
+        return str(section)
+
+    # Convenience helpers ----------------------------------------------------
+    def addDocument(self, doc: Document) -> None:
+        row = {
+            "ID": doc.id,
+            "Filename": doc.filename,
+            "Status": doc.status,
+            "Progress": doc.progress,
+            "UploadedAt": doc.uploaded_at.isoformat() if doc.uploaded_at else "",
+            "Size": doc.file_size,
+            "Type": doc.doc_type,
+        }
+        self.beginInsertRows(QModelIndex(), len(self.documents), len(self.documents))
+        self.documents = pd.concat([self.documents, pd.DataFrame([row])], ignore_index=True)
+        self.endInsertRows()
+
+    def updateDocument(self, doc_id: str, status: str, progress: float) -> None:
+        idx = self.documents.index[self.documents["ID"] == doc_id]
+        if not idx.empty:
+            row = idx[0]
+            self.documents.at[row, "Status"] = status
+            self.documents.at[row, "Progress"] = progress
+            self.dataChanged.emit(self.index(row, 0), self.index(row, self.columnCount() - 1))
+
+
+class DocumentViewer(QWidget):
+    """Trivial document viewer."""
+
+    def __init__(self, doc_id: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(f"Document {doc_id}")
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel(f"Viewing document: {doc_id}"))
+
+
+class SettingsDialog(QDialog):
+    """Basic settings dialog with a few editable fields."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Settings")
+        layout = QVBoxLayout(self)
+        self.api_url = QLabel("API URL: placeholder")
+        self.openai_key = QLabel("OpenAI Key: ********")
+        self.enable_ner = QLabel("NER Enabled")
+        self.enable_llm = QLabel("LLM Enabled")
+        layout.addWidget(self.api_url)
+        layout.addWidget(self.openai_key)
+        layout.addWidget(self.enable_ner)
+        layout.addWidget(self.enable_llm)
+
+
+class AboutDialog(QDialog):
+    """Simple about dialog."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("About")
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("Legal AI System"))
+
+
+class LegalAIApplication(QApplication):
+    """Thin wrapper around :class:`QApplication`."""
 
 
 # ==================== INTEGRATED MAIN WINDOW ====================
