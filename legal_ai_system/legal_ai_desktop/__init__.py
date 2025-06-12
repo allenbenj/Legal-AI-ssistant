@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QAbstractTableModel, QModelIndex
 import pandas as pd
 
-from legal_ai_system.gui.legal_ai_charts import AnalyticsDashboardWidget
+from legal_ai_system.gui.widgets.legal_ai_charts import AnalyticsDashboardWidget
 
 
 @dataclass
