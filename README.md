@@ -178,6 +178,11 @@ features of the Streamlit and React frontends.
 It now includes an experimental **Agent Management** tab for viewing registered
 agents. Real‑time metrics and control actions require a future backend API.
 
+To connect the GUI to a remote PostgreSQL instance, open **Database Connections**
+from the *Settings* menu. The dialog stores the host, port, user, password and
+database name using ``QSettings`` and updates ``DATABASE_URL`` for the running
+session.
+
 The asynchronous network and database layers have been consolidated into the
 application itself, so document uploads and preference storage no longer rely on
 stub modules. Metrics can be streamed to connected clients by enabling the
