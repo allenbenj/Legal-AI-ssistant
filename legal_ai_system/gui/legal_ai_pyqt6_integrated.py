@@ -33,6 +33,7 @@ from legal_ai_system.legal_ai_database import (
     DatabaseManager, CacheManager, PreferencesManager,
     DocumentSearchEngine
 )
+from .backend_bridge import BackendBridge
 
 
 # ==================== INTEGRATED MAIN WINDOW ====================
@@ -69,13 +70,13 @@ class IntegratedMainWindow(QMainWindow):
         self.prefs_manager = PreferencesManager(self.db_manager)
         self.search_engine = DocumentSearchEngine(self.db_manager)
         
-        # Network
-        base_url = self.prefs_manager.get("api_base_url", "http://localhost:8000")
-        self.network_manager = NetworkManager(base_url)
-        self.api_client = LegalAIAPIClient(self.network_manager)
+        # Backend bridge and network client
+        self.backend_bridge = BackendBridge()
+        self.network_manager = NetworkManager(self.backend_bridge)
+        self.api_client = LegalAIAPIClient(self.backend_bridge)
         self.processing_worker = DocumentProcessingWorker(self.api_client)
-        
-        # WebSocket for real-time updates
+
+        # WebSocket placeholder for future real-time updates
         ws_url = self.prefs_manager.get("websocket_url", "ws://localhost:8000/ws")
         self.websocket_client = WebSocketClient(ws_url)
         
@@ -439,7 +440,7 @@ class IntegratedMainWindow(QMainWindow):
         self.network_manager.connectionStatusChanged.connect(self.onConnectionStatusChanged)
         self.api_client.documentsLoaded.connect(self.onDocumentsLoaded)
         self.api_client.documentUploaded.connect(self.onDocumentUploaded)
-        self.api_client.processingComplete.connect(self.onProcessingComplete)
+        self.api_client.processingProgress.connect(self.onProcessingProgress)
         
         # WebSocket signals
         self.websocket_client.connected.connect(self.onWebSocketConnected)
@@ -504,16 +505,13 @@ class IntegratedMainWindow(QMainWindow):
     def startServices(self):
         """Start background services"""
         self.log("Starting services...")
-        
-        # Connect to backend
-        self.network_manager.checkConnection()
-        
-        # Connect WebSocket
+
+        # Start backend bridge
+        self.backend_bridge.serviceReady.connect(self.onBackendReady)
+        self.backend_bridge.start()
+
+        # Connect WebSocket placeholder
         self.websocket_client.connect()
-        
-        # Load initial data
-        self.loadDocuments()
-        self.updateDashboard()
         
     # ==================== SLOTS ====================
     def onDatabaseReady(self):
@@ -525,6 +523,12 @@ class IntegratedMainWindow(QMainWindow):
         """Handle database error"""
         self.log(f"Database error: {error}", level="error")
         QMessageBox.critical(self, "Database Error", error)
+
+    def onBackendReady(self):
+        """Backend bridge initialised."""
+        self.network_manager.checkConnection()
+        self.loadDocuments()
+        self.updateDashboard()
         
     def onConnectionStatusChanged(self, connected: bool):
         """Handle connection status change"""
@@ -637,15 +641,14 @@ class IntegratedMainWindow(QMainWindow):
             
             for file_path in files:
                 path = Path(file_path)
-                
-                # Upload via API
+
                 self.api_client.uploadDocument(
                     path,
                     {
                         "enable_ner": self.prefs_manager.get("enable_ner", True),
                         "enable_llm": self.prefs_manager.get("enable_llm", True),
-                        "confidence_threshold": self.prefs_manager.get("confidence_threshold", 0.7)
-                    }
+                        "confidence_threshold": self.prefs_manager.get("confidence_threshold", 0.7),
+                    },
                 )
                 
             self.upload_btn.stopGlow()
@@ -653,14 +656,15 @@ class IntegratedMainWindow(QMainWindow):
     def processQueue(self):
         """Process document queue"""
         self.process_btn.startGlow()
-        
-        # Start processing worker
+
         for doc_id, doc in self.documents.items():
             if doc.status == "pending":
-                self.processing_worker.addDocument(
-                    doc_id,
+                self.api_client.uploadDocument(
                     Path(doc.filename),
-                    {}
+                    {
+                        "enable_ner": self.prefs_manager.get("enable_ner", True),
+                        "enable_llm": self.prefs_manager.get("enable_llm", True),
+                    },
                 )
                 
     def viewDocument(self, index: QModelIndex):
