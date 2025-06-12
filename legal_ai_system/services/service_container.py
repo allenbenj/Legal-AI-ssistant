@@ -865,6 +865,17 @@ async def create_service_container(
         "violation_classifier", instance=classifier
     )
 
+    # Lightweight analytics utilities
+    from .keyword_extraction_service import KeywordExtractionService
+    from .quality_assessment_service import QualityAssessmentService
+
+    await container.register_service(
+        "keyword_extraction_service", instance=KeywordExtractionService()
+    )
+    await container.register_service(
+        "quality_assessment_service", instance=QualityAssessmentService()
+    )
+
     from .workflow_config import WorkflowConfig
     from .realtime_analysis_workflow import RealTimeAnalysisWorkflow
 
