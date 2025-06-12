@@ -473,6 +473,14 @@ class SystemHealthResponse(BaseModel):
     )
 
 
+class ServicesOverviewResponse(BaseModel):
+    services: Dict[str, Dict[str, Any]]
+    active_workflow_config: Dict[str, Any]
+    timestamp: str = PydanticField(
+        default_factory=lambda: datetime.now(tz=timezone.utc).isoformat()
+    )
+
+
 # --- JWT Utilities & Auth Mock ---
 # In a real app, these would use SecurityManager
 def create_access_token(
@@ -1095,6 +1103,23 @@ async def get_system_health_rest(  # Renamed
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Health check failed: {str(e)}",
+        )
+
+
+@app.get("/api/v1/services", response_model=ServicesOverviewResponse)
+async def get_services_overview(
+    service_container: ServiceContainer = Depends(get_service_container),
+):
+    """Return status and config of registered services."""
+    main_api_logger.info("Services overview requested.")
+    try:
+        overview = service_container.get_services_status()
+        return ServicesOverviewResponse(**overview)
+    except Exception as e:
+        main_api_logger.error("Failed to get services overview.", exception=e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get services status: {str(e)}",
         )
 
 
