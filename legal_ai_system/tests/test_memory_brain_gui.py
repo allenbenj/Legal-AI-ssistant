@@ -11,7 +11,7 @@ def test_memory_brain_gui_main(mocker):
         sys.modules,
         {"legal_ai_system.gui.panels.memory_brain_panel": types.SimpleNamespace(MemoryBrainPanel=panel_cls)}
     )
-    module = importlib.import_module("legal_ai_system.scripts.memory_brain_gui")
+    module = importlib.import_module("legal_ai_system.gui.scripts.memory_brain_gui")
     module.main()
     st.set_page_config.assert_called_once_with(page_title="Memory Brain", page_icon="🧠", layout="wide")
     panel_cls.assert_called_once()
