@@ -10,7 +10,15 @@ from ..workflow_engine.merge import (
     DictUpdateMerge,
 )
 
-from .workflow_policy import WorkflowPolicy
+try:  # pragma: no cover - optional dependencies
+    from .workflow_policy import WorkflowPolicy
+except Exception:  # pragma: no cover - gracefully handle missing ML deps
+    WorkflowPolicy = None  # type: ignore[misc]
+
+from importlib import import_module as _import_module
+
+# Re-export nodes subpackage for convenient access
+nodes = _import_module(".nodes", __name__)
 
 __all__ = [
     "AgentWorkflow",
@@ -19,5 +27,7 @@ __all__ = [
     "MergeStrategy",
     "ConcatMerge",
     "ListMerge",
+    "DictUpdateMerge",
     "WorkflowPolicy",
+    "nodes",
 ]
