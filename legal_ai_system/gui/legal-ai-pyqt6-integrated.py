@@ -1,11 +1,9 @@
 # legal_ai_integrated.py - Complete integrated Legal AI Desktop Application
 
 import sys
-import os
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List
 from datetime import datetime
-import json
 
 from PyQt6.QtWidgets import *
 from PyQt6.QtCore import *
@@ -13,21 +11,28 @@ from PyQt6.QtGui import *
 
 # Import all our custom modules
 from legal_ai_desktop import (
-    MainWindow, DocumentViewer, AnalyticsDashboard, 
-    SettingsDialog, AboutDialog, LegalAIApplication,
-    DocumentTableModel, Document
+    DocumentViewer,
+    SettingsDialog,
+    AboutDialog,
+    LegalAIApplication,
+    DocumentTableModel,
+    Document,
 )
 from legal_ai_widgets import (
     GlowingButton, FlipCard, TagCloud, TimelineWidget,
     NotificationWidget, SearchableComboBox, DockablePanel
 )
 from legal_ai_charts import (
-    PieChartWidget, BarChartWidget, LineChartWidget, 
-    HeatMapWidget, ChartData, AnalyticsDashboardWidget
+    PieChartWidget,
+    BarChartWidget,
+    ChartData,
+    AnalyticsDashboardWidget,
 )
 from legal_ai_network import (
-    NetworkManager, LegalAIAPIClient, DocumentProcessingWorker,
-    WebSocketClient, AsyncAPIClient
+    NetworkManager,
+    LegalAIAPIClient,
+    DocumentProcessingWorker,
+    WebSocketClient,
 )
 from legal_ai_database import (
     DatabaseManager, CacheManager, PreferencesManager,
