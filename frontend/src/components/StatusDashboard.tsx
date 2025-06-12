@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { Card, Grid } from '../design-system';
-import useWebSocket from '../hooks/useWebSocket';
 import { spacing, colors } from '../design-system/tokens';
 
 interface WorkflowUpdate {
@@ -15,12 +14,6 @@ export interface StatusDashboardProps {
 
 const StatusDashboard: React.FC<StatusDashboardProps> = ({ clientId }) => {
   const [workflows, setWorkflows] = useState<Record<string, WorkflowUpdate>>({});
-  useWebSocket(
-    `/ws/${clientId}`,
-    handleMessage,
-    ['workflow_progress'],
-  );
-
   function handleMessage(data: any) {
     if (data.type === 'workflow_progress') {
       setWorkflows(prev => ({
@@ -39,41 +32,14 @@ const StatusDashboard: React.FC<StatusDashboardProps> = ({ clientId }) => {
 
   return (
     <div style={{ marginBottom: spacing['2xl'] }}>
-      <h3 style={{ marginBottom: spacing.sm }}>Workflow Status</h3>
-      {items.length === 0 ? (
-        <div style={{ color: colors.gray600 }}>No workflows running</div>
-      ) : (
-        <Grid columns={1} gap="md">
-          {items.map(item => {
-            const pct = Math.round((item.progress ?? 0) * 100);
-            return (
-              <Card key={item.workflow_id} style={{ padding: spacing.sm }}>
-                <div style={{ marginBottom: spacing.xs, fontWeight: 500 }}>
-                  {item.stage || 'Processing'} ({pct}%)
-                </div>
-                <div
-                  style={{
-                    width: '100%',
-                    backgroundColor: colors.gray200,
-                    height: '0.5rem',
-                    borderRadius: spacing.xs,
-                  }}
-                >
                   <div
                     style={{
-                      width: `${pct}%`,
-                      backgroundColor: colors.primary,
-                      height: '100%',
+                      width: '100%',
+                      backgroundColor: colors.gray200,
+                      height: '0.5rem',
                       borderRadius: spacing.xs,
-                      transition: 'width 0.3s',
                     }}
-                  />
-                </div>
-              </Card>
-            );
-          })}
-        </Grid>
-      )}
+
     </div>
   );
 };

@@ -77,14 +77,6 @@ class WorkflowOrchestrator:
         if not self.connection_manager:
             return
         try:
-            await self.connection_manager.broadcast(
-                f"workflow_progress_{self.topic}",
-                {
-                    "type": "workflow_progress",
-                    "workflow_id": self.topic,
-                    "stage": message,
-                    "progress": float(progress),
-                },
             )
         except Exception as exc:  # pragma: no cover - network issues
             wo_logger.error(
@@ -110,7 +102,6 @@ class WorkflowOrchestrator:
                 self.connection_manager = None
 
         if self.connection_manager:
-            self.workflow.register_progress_callback(self._broadcast_progress)
 
     def _create_builder_graph(self, topic: Optional[str] = None):
         """Return a LangGraph graph for the provided topic."""
