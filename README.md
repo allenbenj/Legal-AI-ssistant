@@ -167,6 +167,7 @@ real time.
 
 ```python
 from legal_ai_system.gui import IntegratedMainWindow
+
 window = IntegratedMainWindow()
 window.show()
 ```
@@ -174,6 +175,8 @@ window.show()
 The bridge ensures the desktop app communicates with the same backend services
 as the API and other frontends. It is primarily a demo and lacks the advanced
 features of the Streamlit and React frontends.
+It now includes an experimental **Agent Management** tab for viewing registered
+agents. Real‑time metrics and control actions require a future backend API.
 
 The asynchronous network and database layers have been consolidated into the
 application itself, so document uploads and preference storage no longer rely on
