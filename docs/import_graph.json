@@ -1,0 +1,1169 @@
+{
+    "__main__": {
+        "bacon": 0,
+        "imports": [
+            "legal_ai_system",
+            "legal_ai_system.__main__",
+            "legal_ai_system.aioredis",
+            "legal_ai_system.analytics",
+            "legal_ai_system.analytics.keyword_extractor",
+            "legal_ai_system.analytics.quality_classifier",
+            "legal_ai_system.config",
+            "legal_ai_system.config.agent_unified_config",
+            "legal_ai_system.config.constants",
+            "legal_ai_system.config.settings",
+            "legal_ai_system.config.workflow_config",
+            "legal_ai_system.constants",
+            "legal_ai_system.core",
+            "legal_ai_system.core.agent_grok_config",
+            "legal_ai_system.core.agent_memory_store",
+            "legal_ai_system.core.agent_types",
+            "legal_ai_system.core.agent_unified_config",
+            "legal_ai_system.core.base_agent",
+            "legal_ai_system.core.config_models",
+            "legal_ai_system.core.configuration_manager",
+            "legal_ai_system.core.constants",
+            "legal_ai_system.core.detailed_logging",
+            "legal_ai_system.core.embedding_manager",
+            "legal_ai_system.core.enhanced_persistence",
+            "legal_ai_system.core.enhanced_vector_store",
+            "legal_ai_system.core.grok_config",
+            "legal_ai_system.core.llm_providers",
+            "legal_ai_system.core.ml_optimizer",
+            "legal_ai_system.core.model_switcher",
+            "legal_ai_system.core.models",
+            "legal_ai_system.core.optimized_vector_store",
+            "legal_ai_system.core.performance",
+            "legal_ai_system.core.providers",
+            "legal_ai_system.core.settings",
+            "legal_ai_system.core.shared_components",
+            "legal_ai_system.core.unified_exceptions",
+            "legal_ai_system.core.unified_memory_manager",
+            "legal_ai_system.core.unified_services",
+            "legal_ai_system.core.vector_metadata_repository",
+            "legal_ai_system.core.vector_store_manager",
+            "legal_ai_system.gui",
+            "legal_ai_system.gui.db_connection_dialog",
+            "legal_ai_system.gui.legal_ai_pyqt6_integrated",
+            "legal_ai_system.gui.memory_brain_core",
+            "legal_ai_system.gui.memory_brain_widget",
+            "legal_ai_system.gui.memory_table_model",
+            "legal_ai_system.gui.panels",
+            "legal_ai_system.gui.panels.memory_brain_panel",
+            "legal_ai_system.gui.streamlit_app",
+            "legal_ai_system.gui.tray_icon",
+            "legal_ai_system.gui.widgets",
+            "legal_ai_system.gui.widgets.legal_ai_charts",
+            "legal_ai_system.langgraph",
+            "legal_ai_system.langgraph.graph",
+            "legal_ai_system.legal_ai_charts",
+            "legal_ai_system.legal_ai_database",
+            "legal_ai_system.legal_ai_desktop",
+            "legal_ai_system.legal_ai_network",
+            "legal_ai_system.legal_ai_widgets",
+            "legal_ai_system.log_setup",
+            "legal_ai_system.tools",
+            "legal_ai_system.tools.contradiction_detector",
+            "legal_ai_system.tools.tool_launcher",
+            "legal_ai_system.workflow_engine",
+            "legal_ai_system.workflow_engine.builder",
+            "legal_ai_system.workflow_engine.merge",
+            "legal_ai_system.workflow_engine.models",
+            "legal_ai_system.workflow_engine.retry",
+            "legal_ai_system.workflow_engine.types",
+            "legal_ai_system.workflows",
+            "legal_ai_system.workflows.advanced_langgraph",
+            "legal_ai_system.workflows.agent_workflow",
+            "legal_ai_system.workflows.case_workflow_state",
+            "legal_ai_system.workflows.langgraph_setup",
+            "legal_ai_system.workflows.legal_workflow_builder",
+            "legal_ai_system.workflows.lexpredict_pipeline",
+            "legal_ai_system.workflows.merge",
+            "legal_ai_system.workflows.nodes",
+            "legal_ai_system.workflows.nodes.human_review_node",
+            "legal_ai_system.workflows.nodes.legal_error_handling_node",
+            "legal_ai_system.workflows.nodes.progress_tracking_node",
+            "legal_ai_system.workflows.realtime_nodes",
+            "legal_ai_system.workflows.retry",
+            "legal_ai_system.workflows.routing",
+            "legal_ai_system.workflows.routing.advanced_workflow",
+            "legal_ai_system.workflows.routing.analysis_paths",
+            "legal_ai_system.workflows.routing.document_classification_node",
+            "legal_ai_system.workflows.workflow_policy"
+        ],
+        "name": "__main__",
+        "path": null
+    },
+    "legal_ai_system": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system",
+            "legal_ai_system.config.constants",
+            "legal_ai_system.constants",
+            "legal_ai_system.core.embedding_manager",
+            "legal_ai_system.core.providers",
+            "legal_ai_system.core.settings",
+            "legal_ai_system.gui.legal_ai_pyqt6_integrated",
+            "legal_ai_system.gui.streamlit_app",
+            "legal_ai_system.legal_ai_charts",
+            "legal_ai_system.legal_ai_desktop"
+        ],
+        "imports": [
+            "legal_ai_system"
+        ],
+        "name": "legal_ai_system",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/__init__.py"
+    },
+    "legal_ai_system.__main__": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__"
+        ],
+        "imports": [
+            "legal_ai_system.gui",
+            "legal_ai_system.gui.legal_ai_pyqt6_integrated"
+        ],
+        "name": "legal_ai_system.__main__",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/__main__.py"
+    },
+    "legal_ai_system.aioredis": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__"
+        ],
+        "name": "legal_ai_system.aioredis",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/aioredis/__init__.py"
+    },
+    "legal_ai_system.analytics": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__"
+        ],
+        "imports": [
+            "legal_ai_system.analytics.keyword_extractor"
+        ],
+        "name": "legal_ai_system.analytics",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/analytics/__init__.py"
+    },
+    "legal_ai_system.analytics.keyword_extractor": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.analytics"
+        ],
+        "name": "legal_ai_system.analytics.keyword_extractor",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/analytics/keyword_extractor.py"
+    },
+    "legal_ai_system.analytics.quality_classifier": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__"
+        ],
+        "name": "legal_ai_system.analytics.quality_classifier",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/analytics/quality_classifier.py"
+    },
+    "legal_ai_system.config": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.gui.streamlit_app"
+        ],
+        "name": "legal_ai_system.config",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/config/__init__.py"
+    },
+    "legal_ai_system.config.agent_unified_config": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__"
+        ],
+        "imports": [
+            "legal_ai_system.core",
+            "legal_ai_system.core.agent_unified_config",
+            "legal_ai_system.core.optimized_vector_store"
+        ],
+        "name": "legal_ai_system.config.agent_unified_config",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/config/agent_unified_config.py"
+    },
+    "legal_ai_system.config.constants": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__"
+        ],
+        "imports": [
+            "legal_ai_system",
+            "legal_ai_system.constants"
+        ],
+        "name": "legal_ai_system.config.constants",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/config/constants.py"
+    },
+    "legal_ai_system.config.settings": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.gui.streamlit_app"
+        ],
+        "imports": [
+            "legal_ai_system.core",
+            "legal_ai_system.core.settings"
+        ],
+        "name": "legal_ai_system.config.settings",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/config/settings.py"
+    },
+    "legal_ai_system.config.workflow_config": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__"
+        ],
+        "name": "legal_ai_system.config.workflow_config",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/config/workflow_config.py"
+    },
+    "legal_ai_system.constants": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.config.constants"
+        ],
+        "imports": [
+            "legal_ai_system",
+            "legal_ai_system.core",
+            "legal_ai_system.core.constants"
+        ],
+        "name": "legal_ai_system.constants",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/constants.py"
+    },
+    "legal_ai_system.core": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.config.agent_unified_config",
+            "legal_ai_system.config.settings",
+            "legal_ai_system.constants",
+            "legal_ai_system.core.base_agent",
+            "legal_ai_system.core.enhanced_persistence",
+            "legal_ai_system.core.providers",
+            "legal_ai_system.core.settings",
+            "legal_ai_system.core.unified_memory_manager",
+            "legal_ai_system.gui.memory_table_model",
+            "legal_ai_system.gui.streamlit_app",
+            "legal_ai_system.gui.tray_icon",
+            "legal_ai_system.log_setup",
+            "legal_ai_system.workflows.agent_workflow",
+            "legal_ai_system.workflows.workflow_policy"
+        ],
+        "imports": [
+            "legal_ai_system.core.config_models",
+            "legal_ai_system.core.llm_providers"
+        ],
+        "name": "legal_ai_system.core",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/core/__init__.py"
+    },
+    "legal_ai_system.core.agent_grok_config": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.core.agent_unified_config"
+        ],
+        "imports": [
+            "legal_ai_system.core.grok_config",
+            "legal_ai_system.core.llm_providers"
+        ],
+        "name": "legal_ai_system.core.agent_grok_config",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/core/agent_grok_config.py"
+    },
+    "legal_ai_system.core.agent_memory_store": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__"
+        ],
+        "name": "legal_ai_system.core.agent_memory_store",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/core/agent_memory_store.py"
+    },
+    "legal_ai_system.core.agent_types": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.workflows.agent_workflow"
+        ],
+        "name": "legal_ai_system.core.agent_types",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/core/agent_types.py"
+    },
+    "legal_ai_system.core.agent_unified_config": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.config.agent_unified_config",
+            "legal_ai_system.core.enhanced_persistence"
+        ],
+        "imports": [
+            "legal_ai_system.core.agent_grok_config",
+            "legal_ai_system.core.unified_memory_manager"
+        ],
+        "name": "legal_ai_system.core.agent_unified_config",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/core/agent_unified_config.py"
+    },
+    "legal_ai_system.core.base_agent": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__"
+        ],
+        "imports": [
+            "legal_ai_system.core",
+            "legal_ai_system.core.constants",
+            "legal_ai_system.core.detailed_logging"
+        ],
+        "name": "legal_ai_system.core.base_agent",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/core/base_agent.py"
+    },
+    "legal_ai_system.core.config_models": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.core",
+            "legal_ai_system.core.configuration_manager",
+            "legal_ai_system.core.ml_optimizer",
+            "legal_ai_system.core.optimized_vector_store",
+            "legal_ai_system.core.unified_memory_manager"
+        ],
+        "name": "legal_ai_system.core.config_models",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/core/config_models.py"
+    },
+    "legal_ai_system.core.configuration_manager": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__"
+        ],
+        "imports": [
+            "legal_ai_system.core.config_models",
+            "legal_ai_system.core.constants",
+            "legal_ai_system.core.detailed_logging",
+            "legal_ai_system.core.llm_providers",
+            "legal_ai_system.core.settings"
+        ],
+        "name": "legal_ai_system.core.configuration_manager",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/core/configuration_manager.py"
+    },
+    "legal_ai_system.core.constants": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.constants",
+            "legal_ai_system.core.base_agent",
+            "legal_ai_system.core.configuration_manager",
+            "legal_ai_system.core.ml_optimizer",
+            "legal_ai_system.core.settings",
+            "legal_ai_system.core.unified_memory_manager",
+            "legal_ai_system.gui.streamlit_app"
+        ],
+        "name": "legal_ai_system.core.constants",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/core/constants.py"
+    },
+    "legal_ai_system.core.detailed_logging": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.core.base_agent",
+            "legal_ai_system.core.configuration_manager",
+            "legal_ai_system.core.enhanced_persistence",
+            "legal_ai_system.core.enhanced_vector_store",
+            "legal_ai_system.core.llm_providers",
+            "legal_ai_system.core.ml_optimizer",
+            "legal_ai_system.core.model_switcher",
+            "legal_ai_system.core.providers",
+            "legal_ai_system.core.unified_exceptions",
+            "legal_ai_system.core.unified_memory_manager",
+            "legal_ai_system.core.vector_metadata_repository",
+            "legal_ai_system.log_setup"
+        ],
+        "name": "legal_ai_system.core.detailed_logging",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/core/detailed_logging.py"
+    },
+    "legal_ai_system.core.embedding_manager": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__"
+        ],
+        "imports": [
+            "legal_ai_system"
+        ],
+        "name": "legal_ai_system.core.embedding_manager",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/core/embedding_manager.py"
+    },
+    "legal_ai_system.core.enhanced_persistence": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.core.enhanced_vector_store"
+        ],
+        "imports": [
+            "legal_ai_system.core",
+            "legal_ai_system.core.agent_unified_config",
+            "legal_ai_system.core.detailed_logging",
+            "legal_ai_system.core.unified_exceptions"
+        ],
+        "name": "legal_ai_system.core.enhanced_persistence",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/core/enhanced_persistence.py"
+    },
+    "legal_ai_system.core.enhanced_vector_store": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.core.optimized_vector_store",
+            "legal_ai_system.core.vector_store_manager"
+        ],
+        "imports": [
+            "legal_ai_system.core.detailed_logging",
+            "legal_ai_system.core.enhanced_persistence"
+        ],
+        "name": "legal_ai_system.core.enhanced_vector_store",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/core/enhanced_vector_store.py"
+    },
+    "legal_ai_system.core.grok_config": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.core.agent_grok_config",
+            "legal_ai_system.core.model_switcher"
+        ],
+        "imports": [
+            "legal_ai_system.core.llm_providers",
+            "legal_ai_system.core.settings"
+        ],
+        "name": "legal_ai_system.core.grok_config",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/core/grok_config.py"
+    },
+    "legal_ai_system.core.llm_providers": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.core",
+            "legal_ai_system.core.agent_grok_config",
+            "legal_ai_system.core.configuration_manager",
+            "legal_ai_system.core.grok_config",
+            "legal_ai_system.core.model_switcher"
+        ],
+        "imports": [
+            "legal_ai_system.core.detailed_logging",
+            "legal_ai_system.core.unified_exceptions"
+        ],
+        "name": "legal_ai_system.core.llm_providers",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/core/llm_providers.py"
+    },
+    "legal_ai_system.core.ml_optimizer": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.core.unified_memory_manager",
+            "legal_ai_system.workflows.workflow_policy"
+        ],
+        "imports": [
+            "legal_ai_system.core.config_models",
+            "legal_ai_system.core.constants",
+            "legal_ai_system.core.detailed_logging"
+        ],
+        "name": "legal_ai_system.core.ml_optimizer",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/core/ml_optimizer.py"
+    },
+    "legal_ai_system.core.model_switcher": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__"
+        ],
+        "imports": [
+            "legal_ai_system.core.detailed_logging",
+            "legal_ai_system.core.grok_config",
+            "legal_ai_system.core.llm_providers"
+        ],
+        "name": "legal_ai_system.core.model_switcher",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/core/model_switcher.py"
+    },
+    "legal_ai_system.core.models": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__"
+        ],
+        "name": "legal_ai_system.core.models",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/core/models.py"
+    },
+    "legal_ai_system.core.optimized_vector_store": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.config.agent_unified_config"
+        ],
+        "imports": [
+            "legal_ai_system.core.config_models",
+            "legal_ai_system.core.enhanced_vector_store"
+        ],
+        "name": "legal_ai_system.core.optimized_vector_store",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/core/optimized_vector_store.py"
+    },
+    "legal_ai_system.core.performance": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__"
+        ],
+        "name": "legal_ai_system.core.performance",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/core/performance.py"
+    },
+    "legal_ai_system.core.providers": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__"
+        ],
+        "imports": [
+            "legal_ai_system",
+            "legal_ai_system.core",
+            "legal_ai_system.core.detailed_logging",
+            "legal_ai_system.core.unified_exceptions"
+        ],
+        "name": "legal_ai_system.core.providers",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/core/providers.py"
+    },
+    "legal_ai_system.core.settings": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.config.settings",
+            "legal_ai_system.core.configuration_manager",
+            "legal_ai_system.core.grok_config",
+            "legal_ai_system.gui.tray_icon"
+        ],
+        "imports": [
+            "legal_ai_system",
+            "legal_ai_system.core",
+            "legal_ai_system.core.constants"
+        ],
+        "name": "legal_ai_system.core.settings",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/core/settings.py"
+    },
+    "legal_ai_system.core.shared_components": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__"
+        ],
+        "name": "legal_ai_system.core.shared_components",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/core/shared_components.py"
+    },
+    "legal_ai_system.core.unified_exceptions": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.core.enhanced_persistence",
+            "legal_ai_system.core.llm_providers",
+            "legal_ai_system.core.providers",
+            "legal_ai_system.core.unified_memory_manager",
+            "legal_ai_system.core.vector_metadata_repository"
+        ],
+        "imports": [
+            "legal_ai_system.core.detailed_logging"
+        ],
+        "name": "legal_ai_system.core.unified_exceptions",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/core/unified_exceptions.py"
+    },
+    "legal_ai_system.core.unified_memory_manager": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.core.agent_unified_config",
+            "legal_ai_system.core.unified_services",
+            "legal_ai_system.gui.memory_table_model"
+        ],
+        "imports": [
+            "legal_ai_system.core",
+            "legal_ai_system.core.config_models",
+            "legal_ai_system.core.constants",
+            "legal_ai_system.core.detailed_logging",
+            "legal_ai_system.core.ml_optimizer",
+            "legal_ai_system.core.unified_exceptions"
+        ],
+        "name": "legal_ai_system.core.unified_memory_manager",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/core/unified_memory_manager.py"
+    },
+    "legal_ai_system.core.unified_services": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__"
+        ],
+        "imports": [
+            "legal_ai_system.core.unified_memory_manager",
+            "legal_ai_system.core.vector_store_manager"
+        ],
+        "name": "legal_ai_system.core.unified_services",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/core/unified_services.py"
+    },
+    "legal_ai_system.core.vector_metadata_repository": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__"
+        ],
+        "imports": [
+            "legal_ai_system.core.detailed_logging",
+            "legal_ai_system.core.unified_exceptions"
+        ],
+        "name": "legal_ai_system.core.vector_metadata_repository",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/core/vector_metadata_repository.py"
+    },
+    "legal_ai_system.core.vector_store_manager": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.core.unified_services"
+        ],
+        "imports": [
+            "legal_ai_system.core.enhanced_vector_store"
+        ],
+        "name": "legal_ai_system.core.vector_store_manager",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/core/vector_store_manager.py"
+    },
+    "legal_ai_system.gui": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.__main__",
+            "legal_ai_system.legal_ai_charts",
+            "legal_ai_system.legal_ai_desktop"
+        ],
+        "imports": [
+            "legal_ai_system.gui.legal_ai_pyqt6_integrated"
+        ],
+        "name": "legal_ai_system.gui",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/gui/__init__.py"
+    },
+    "legal_ai_system.gui.db_connection_dialog": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.gui.legal_ai_pyqt6_integrated"
+        ],
+        "name": "legal_ai_system.gui.db_connection_dialog",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/gui/db_connection_dialog.py"
+    },
+    "legal_ai_system.gui.legal_ai_pyqt6_integrated": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.__main__",
+            "legal_ai_system.gui"
+        ],
+        "imports": [
+            "legal_ai_system",
+            "legal_ai_system.gui.db_connection_dialog",
+            "legal_ai_system.legal_ai_charts",
+            "legal_ai_system.legal_ai_database",
+            "legal_ai_system.legal_ai_desktop",
+            "legal_ai_system.legal_ai_network",
+            "legal_ai_system.legal_ai_widgets"
+        ],
+        "name": "legal_ai_system.gui.legal_ai_pyqt6_integrated",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/gui/legal_ai_pyqt6_integrated.py"
+    },
+    "legal_ai_system.gui.memory_brain_core": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.gui.memory_brain_widget",
+            "legal_ai_system.gui.panels.memory_brain_panel"
+        ],
+        "imports": [
+            "legal_ai_system.tools",
+            "legal_ai_system.tools.contradiction_detector"
+        ],
+        "name": "legal_ai_system.gui.memory_brain_core",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/gui/memory_brain_core.py"
+    },
+    "legal_ai_system.gui.memory_brain_widget": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__"
+        ],
+        "imports": [
+            "legal_ai_system.gui.memory_brain_core",
+            "legal_ai_system.gui.memory_table_model",
+            "legal_ai_system.gui.panels",
+            "legal_ai_system.gui.panels.memory_brain_panel"
+        ],
+        "name": "legal_ai_system.gui.memory_brain_widget",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/gui/memory_brain_widget.py"
+    },
+    "legal_ai_system.gui.memory_table_model": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.gui.memory_brain_widget"
+        ],
+        "imports": [
+            "legal_ai_system.core",
+            "legal_ai_system.core.unified_memory_manager"
+        ],
+        "name": "legal_ai_system.gui.memory_table_model",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/gui/memory_table_model.py"
+    },
+    "legal_ai_system.gui.panels": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.gui.memory_brain_widget"
+        ],
+        "name": "legal_ai_system.gui.panels",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/gui/panels/__init__.py"
+    },
+    "legal_ai_system.gui.panels.memory_brain_panel": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.gui.memory_brain_widget"
+        ],
+        "imports": [
+            "legal_ai_system.gui.memory_brain_core",
+            "legal_ai_system.tools",
+            "legal_ai_system.tools.contradiction_detector"
+        ],
+        "name": "legal_ai_system.gui.panels.memory_brain_panel",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/gui/panels/memory_brain_panel.py"
+    },
+    "legal_ai_system.gui.streamlit_app": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__"
+        ],
+        "imports": [
+            "legal_ai_system",
+            "legal_ai_system.config",
+            "legal_ai_system.config.settings",
+            "legal_ai_system.core",
+            "legal_ai_system.core.constants"
+        ],
+        "name": "legal_ai_system.gui.streamlit_app",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/gui/streamlit_app.py"
+    },
+    "legal_ai_system.gui.tray_icon": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__"
+        ],
+        "imports": [
+            "legal_ai_system.core",
+            "legal_ai_system.core.settings"
+        ],
+        "name": "legal_ai_system.gui.tray_icon",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/gui/tray_icon.py"
+    },
+    "legal_ai_system.gui.widgets": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.legal_ai_charts",
+            "legal_ai_system.legal_ai_desktop"
+        ],
+        "imports": [
+            "legal_ai_system.gui.widgets.legal_ai_charts"
+        ],
+        "name": "legal_ai_system.gui.widgets",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/gui/widgets/__init__.py"
+    },
+    "legal_ai_system.gui.widgets.legal_ai_charts": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.gui.widgets",
+            "legal_ai_system.legal_ai_charts",
+            "legal_ai_system.legal_ai_desktop"
+        ],
+        "name": "legal_ai_system.gui.widgets.legal_ai_charts",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/gui/widgets/legal_ai_charts.py"
+    },
+    "legal_ai_system.langgraph": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__"
+        ],
+        "imports": [
+            "legal_ai_system.langgraph.graph"
+        ],
+        "name": "legal_ai_system.langgraph",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/langgraph/__init__.py"
+    },
+    "legal_ai_system.langgraph.graph": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.langgraph"
+        ],
+        "name": "legal_ai_system.langgraph.graph",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/langgraph/graph.py"
+    },
+    "legal_ai_system.legal_ai_charts": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.gui.legal_ai_pyqt6_integrated"
+        ],
+        "imports": [
+            "legal_ai_system",
+            "legal_ai_system.gui",
+            "legal_ai_system.gui.widgets",
+            "legal_ai_system.gui.widgets.legal_ai_charts"
+        ],
+        "name": "legal_ai_system.legal_ai_charts",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/legal_ai_charts/__init__.py"
+    },
+    "legal_ai_system.legal_ai_database": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.gui.legal_ai_pyqt6_integrated"
+        ],
+        "name": "legal_ai_system.legal_ai_database",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/legal_ai_database/__init__.py"
+    },
+    "legal_ai_system.legal_ai_desktop": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.gui.legal_ai_pyqt6_integrated"
+        ],
+        "imports": [
+            "legal_ai_system",
+            "legal_ai_system.gui",
+            "legal_ai_system.gui.widgets",
+            "legal_ai_system.gui.widgets.legal_ai_charts"
+        ],
+        "name": "legal_ai_system.legal_ai_desktop",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/legal_ai_desktop/__init__.py"
+    },
+    "legal_ai_system.legal_ai_network": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.gui.legal_ai_pyqt6_integrated"
+        ],
+        "name": "legal_ai_system.legal_ai_network",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/legal_ai_network/__init__.py"
+    },
+    "legal_ai_system.legal_ai_widgets": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.gui.legal_ai_pyqt6_integrated"
+        ],
+        "name": "legal_ai_system.legal_ai_widgets",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/legal_ai_widgets/__init__.py"
+    },
+    "legal_ai_system.log_setup": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__"
+        ],
+        "imports": [
+            "legal_ai_system.core",
+            "legal_ai_system.core.detailed_logging"
+        ],
+        "name": "legal_ai_system.log_setup",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/log_setup.py"
+    },
+    "legal_ai_system.tools": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.gui.memory_brain_core",
+            "legal_ai_system.gui.panels.memory_brain_panel"
+        ],
+        "imports": [
+            "legal_ai_system.tools.tool_launcher"
+        ],
+        "name": "legal_ai_system.tools",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/tools/__init__.py"
+    },
+    "legal_ai_system.tools.contradiction_detector": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.gui.memory_brain_core",
+            "legal_ai_system.gui.panels.memory_brain_panel"
+        ],
+        "name": "legal_ai_system.tools.contradiction_detector",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/tools/contradiction_detector.py"
+    },
+    "legal_ai_system.tools.tool_launcher": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.tools"
+        ],
+        "name": "legal_ai_system.tools.tool_launcher",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/tools/tool_launcher.py"
+    },
+    "legal_ai_system.workflow_engine": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.workflows",
+            "legal_ai_system.workflows.legal_workflow_builder",
+            "legal_ai_system.workflows.realtime_nodes"
+        ],
+        "imports": [
+            "legal_ai_system.workflow_engine.builder",
+            "legal_ai_system.workflow_engine.merge",
+            "legal_ai_system.workflow_engine.retry"
+        ],
+        "name": "legal_ai_system.workflow_engine",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/workflow_engine/__init__.py"
+    },
+    "legal_ai_system.workflow_engine.builder": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.workflow_engine"
+        ],
+        "imports": [
+            "legal_ai_system.workflow_engine.merge",
+            "legal_ai_system.workflow_engine.retry"
+        ],
+        "name": "legal_ai_system.workflow_engine.builder",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/workflow_engine/builder.py"
+    },
+    "legal_ai_system.workflow_engine.merge": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.workflow_engine",
+            "legal_ai_system.workflow_engine.builder",
+            "legal_ai_system.workflows",
+            "legal_ai_system.workflows.legal_workflow_builder"
+        ],
+        "name": "legal_ai_system.workflow_engine.merge",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/workflow_engine/merge.py"
+    },
+    "legal_ai_system.workflow_engine.models": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__"
+        ],
+        "name": "legal_ai_system.workflow_engine.models",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/workflow_engine/models.py"
+    },
+    "legal_ai_system.workflow_engine.retry": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.workflow_engine",
+            "legal_ai_system.workflow_engine.builder"
+        ],
+        "name": "legal_ai_system.workflow_engine.retry",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/workflow_engine/retry.py"
+    },
+    "legal_ai_system.workflow_engine.types": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.workflows.realtime_nodes"
+        ],
+        "name": "legal_ai_system.workflow_engine.types",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/workflow_engine/types.py"
+    },
+    "legal_ai_system.workflows": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__"
+        ],
+        "imports": [
+            "legal_ai_system.workflow_engine",
+            "legal_ai_system.workflow_engine.merge",
+            "legal_ai_system.workflows.agent_workflow",
+            "legal_ai_system.workflows.legal_workflow_builder",
+            "legal_ai_system.workflows.workflow_policy"
+        ],
+        "name": "legal_ai_system.workflows",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/workflows/__init__.py"
+    },
+    "legal_ai_system.workflows.advanced_langgraph": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__"
+        ],
+        "name": "legal_ai_system.workflows.advanced_langgraph",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/workflows/advanced_langgraph.py"
+    },
+    "legal_ai_system.workflows.agent_workflow": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.workflows"
+        ],
+        "imports": [
+            "legal_ai_system.core",
+            "legal_ai_system.core.agent_types"
+        ],
+        "name": "legal_ai_system.workflows.agent_workflow",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/workflows/agent_workflow.py"
+    },
+    "legal_ai_system.workflows.case_workflow_state": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__"
+        ],
+        "name": "legal_ai_system.workflows.case_workflow_state",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/workflows/case_workflow_state.py"
+    },
+    "legal_ai_system.workflows.langgraph_setup": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__"
+        ],
+        "imports": [
+            "legal_ai_system.workflows.nodes"
+        ],
+        "name": "legal_ai_system.workflows.langgraph_setup",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/workflows/langgraph_setup.py"
+    },
+    "legal_ai_system.workflows.legal_workflow_builder": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.workflows"
+        ],
+        "imports": [
+            "legal_ai_system.workflow_engine",
+            "legal_ai_system.workflow_engine.merge"
+        ],
+        "name": "legal_ai_system.workflows.legal_workflow_builder",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/workflows/legal_workflow_builder.py"
+    },
+    "legal_ai_system.workflows.lexpredict_pipeline": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__"
+        ],
+        "name": "legal_ai_system.workflows.lexpredict_pipeline",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/workflows/lexpredict_pipeline.py"
+    },
+    "legal_ai_system.workflows.merge": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__"
+        ],
+        "name": "legal_ai_system.workflows.merge",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/workflows/merge.py"
+    },
+    "legal_ai_system.workflows.nodes": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.workflows.langgraph_setup",
+            "legal_ai_system.workflows.realtime_nodes"
+        ],
+        "imports": [
+            "legal_ai_system.workflows.nodes.human_review_node",
+            "legal_ai_system.workflows.nodes.progress_tracking_node"
+        ],
+        "name": "legal_ai_system.workflows.nodes",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/workflows/nodes/__init__.py"
+    },
+    "legal_ai_system.workflows.nodes.human_review_node": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.workflows.nodes"
+        ],
+        "name": "legal_ai_system.workflows.nodes.human_review_node",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/workflows/nodes/human_review_node.py"
+    },
+    "legal_ai_system.workflows.nodes.legal_error_handling_node": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__"
+        ],
+        "name": "legal_ai_system.workflows.nodes.legal_error_handling_node",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/workflows/nodes/legal_error_handling_node.py"
+    },
+    "legal_ai_system.workflows.nodes.progress_tracking_node": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.workflows.nodes"
+        ],
+        "name": "legal_ai_system.workflows.nodes.progress_tracking_node",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/workflows/nodes/progress_tracking_node.py"
+    },
+    "legal_ai_system.workflows.realtime_nodes": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__"
+        ],
+        "imports": [
+            "legal_ai_system.workflow_engine",
+            "legal_ai_system.workflow_engine.types",
+            "legal_ai_system.workflows.nodes"
+        ],
+        "name": "legal_ai_system.workflows.realtime_nodes",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/workflows/realtime_nodes.py"
+    },
+    "legal_ai_system.workflows.retry": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__"
+        ],
+        "name": "legal_ai_system.workflows.retry",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/workflows/retry.py"
+    },
+    "legal_ai_system.workflows.routing": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__"
+        ],
+        "imports": [
+            "legal_ai_system.workflows.routing.advanced_workflow",
+            "legal_ai_system.workflows.routing.analysis_paths",
+            "legal_ai_system.workflows.routing.document_classification_node"
+        ],
+        "name": "legal_ai_system.workflows.routing",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/workflows/routing/__init__.py"
+    },
+    "legal_ai_system.workflows.routing.advanced_workflow": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.workflows.routing"
+        ],
+        "imports": [
+            "legal_ai_system.workflows.routing.analysis_paths",
+            "legal_ai_system.workflows.routing.document_classification_node"
+        ],
+        "name": "legal_ai_system.workflows.routing.advanced_workflow",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/workflows/routing/advanced_workflow.py"
+    },
+    "legal_ai_system.workflows.routing.analysis_paths": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.workflows.routing",
+            "legal_ai_system.workflows.routing.advanced_workflow"
+        ],
+        "name": "legal_ai_system.workflows.routing.analysis_paths",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/workflows/routing/analysis_paths.py"
+    },
+    "legal_ai_system.workflows.routing.document_classification_node": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.workflows.routing",
+            "legal_ai_system.workflows.routing.advanced_workflow"
+        ],
+        "name": "legal_ai_system.workflows.routing.document_classification_node",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/workflows/routing/document_classification_node.py"
+    },
+    "legal_ai_system.workflows.workflow_policy": {
+        "bacon": 1,
+        "imported_by": [
+            "__main__",
+            "legal_ai_system.workflows"
+        ],
+        "imports": [
+            "legal_ai_system.core",
+            "legal_ai_system.core.ml_optimizer"
+        ],
+        "name": "legal_ai_system.workflows.workflow_policy",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/workflows/workflow_policy.py"
+    }
+}
