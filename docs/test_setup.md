@@ -11,6 +11,9 @@ The core dependencies for running the tests are listed below. They can be instal
 - `pytest-cov` – required because coverage reporting is enabled by default
 - `typer` – required to test the CLI script
 - `streamlit` – used by the GUI script (tests mock this module)
+- `numpy` – used by vector store operations
+- `PyYAML` – configuration parsing in multiple modules
+- `joblib` – saving and loading ML models
 
 Additional packages from `requirements.txt` are needed for the application itself (FastAPI, pydantic, etc.). Development tools come from `requirements-dev.txt`.
 
