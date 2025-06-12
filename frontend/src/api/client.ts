@@ -12,6 +12,7 @@ import {
   ReviewDecisionResponse,
   ReviewStats,
 } from "../types/review";
+import { ViolationEntry } from "../types/violation";
 
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -82,4 +83,31 @@ export async function submitReviewDecision(
 export async function fetchReviewStats(): Promise<ReviewStats> {
   const res = await fetch(`/api/v1/reviews/stats`);
   return handleResponse<ReviewStats>(res);
+}
+
+export async function fetchViolations(documentId?: string): Promise<ViolationEntry[]> {
+  const query = documentId ? `?document_id=${encodeURIComponent(documentId)}` : "";
+  const res = await fetch(`/api/v1/violations${query}`);
+  return handleResponse<ViolationEntry[]>(res);
+}
+
+export async function fetchReviewedViolations(): Promise<ViolationEntry[]> {
+  const res = await fetch(`/api/v1/violations/reviewed`);
+  return handleResponse<ViolationEntry[]>(res);
+}
+
+export async function updateViolationStatus(
+  id: string,
+  status: string,
+  reviewedBy?: string
+): Promise<void> {
+  const res = await fetch(`/api/v1/violations/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status, reviewed_by: reviewedBy }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || res.statusText);
+  }
 }

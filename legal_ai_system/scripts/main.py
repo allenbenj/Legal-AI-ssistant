@@ -30,6 +30,7 @@ try:
         get_detailed_logger,
         LogCategory,
     )
+
     main_api_logger = get_detailed_logger("MainAPI", LogCategory.API)
 except Exception:  # pragma: no cover - fallback minimal logger
     logging.basicConfig(level=logging.INFO)
@@ -74,9 +75,10 @@ try:
         status,
     )
     from fastapi.middleware.cors import CORSMiddleware
-    from fastapi.responses import (  # Added HTMLResponse for root
+    from fastapi.responses import (
         HTMLResponse,
         JSONResponse,
+        Response,
     )
     from fastapi.security import (
         HTTPAuthorizationCredentials,
@@ -94,6 +96,10 @@ from legal_ai_system.api.review_models import (
     ReviewDecisionRequest,
     ReviewDecisionResponse,
     ReviewStatsResponse,
+)
+from legal_ai_system.api.violation_models import (
+    ViolationEntry,
+    ViolationStatusUpdate,
 )
 from legal_ai_system.utils.reviewable_memory import (
     ReviewPriority,
@@ -229,7 +235,8 @@ async def lifespan(app: FastAPI):
             from legal_ai_system.services.service_container import (
                 create_service_container,
             )
-            service_container_instance = create_service_container()
+
+            service_container_instance = await create_service_container()
         except Exception as e:
             main_api_logger.error(
                 "Failed to initialize service container.", exception=e
@@ -258,7 +265,9 @@ async def lifespan(app: FastAPI):
                     # Assuming encryption_password might not be directly in settings for security reasons
                     # but fetched from a secure store or env var by SecurityManager itself.
                     # For allowed_directories, they should be part of the app's config.
-                    allowed_dirs_list = sec_config.allowed_directories or allowed_dirs_list
+                    allowed_dirs_list = (
+                        sec_config.allowed_directories or allowed_dirs_list
+                    )
                     # encryption_pwd might be handled internally by SecurityManager based on env vars
 
             security_manager_instance = SecurityManager(
@@ -298,9 +307,7 @@ async def lifespan(app: FastAPI):
     )
     realtime_publisher_instance.start_system_monitoring()
 
-    main_api_logger.info(
-        "✅ Legal AI System API started successfully via lifespan."
-    )
+    main_api_logger.info("✅ Legal AI System API started successfully via lifespan.")
 
     yield  # API is running
 
@@ -470,9 +477,7 @@ class SystemHealthResponse(BaseModel):
 
 # --- JWT Utilities & Auth Mock ---
 # In a real app, these would use SecurityManager
-def create_access_token(
-    data: dict, expires_delta: Optional[timedelta] = None
-) -> str:
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
     expire_time = datetime.now(tz=timezone.utc) + (
         expires_delta or timedelta(hours=Constants.Time.SESSION_TIMEOUT_HOURS)
@@ -1094,7 +1099,9 @@ async def get_system_health_rest(  # Renamed
 
 
 @app.get("/api/v1/config/thresholds", response_model=ThresholdResponse)
-async def get_thresholds(service_container: ServiceContainer = Depends(get_service_container)):
+async def get_thresholds(
+    service_container: ServiceContainer = Depends(get_service_container),
+):
     rev_mem = await service_container.get_service("reviewable_memory")
     thresholds = await rev_mem.get_thresholds_async()
     return ThresholdResponse(**thresholds)
@@ -1112,7 +1119,9 @@ async def update_thresholds(
 
 
 @app.post("/api/v1/config/thresholds/optimize", response_model=ThresholdResponse)
-async def optimize_thresholds(service_container: ServiceContainer = Depends(get_service_container)):
+async def optimize_thresholds(
+    service_container: ServiceContainer = Depends(get_service_container),
+):
     ml_opt = await service_container.get_service("ml_optimizer")
     rev_mem = await service_container.get_service("reviewable_memory")
     result = ml_opt.train_threshold_model()
@@ -1200,6 +1209,54 @@ async def get_review_stats(
     rev_mem = await service_container.get_service("reviewable_memory")
     stats = await rev_mem.get_review_stats_async()
     return ReviewStatsResponse(**stats)
+
+
+@app.get(
+    "/api/v1/violations",
+    response_model=List[ViolationEntry],
+    status_code=status.HTTP_200_OK,
+)
+async def list_violations(
+    document_id: Optional[str] = None,
+    service_container: ServiceContainer = Depends(get_service_container),
+):
+    """Return violation records from the review database."""
+    vr_db = await service_container.get_service("violation_review_db")
+    records = vr_db.fetch_violations(document_id=document_id)
+    return [ViolationEntry.model_validate(r.__dict__) for r in records]
+
+
+@app.get(
+    "/api/v1/violations/reviewed",
+    response_model=List[ViolationEntry],
+    status_code=status.HTTP_200_OK,
+)
+async def list_reviewed_violations(
+    service_container: ServiceContainer = Depends(get_service_container),
+):
+    """Return violations that have been reviewed."""
+    vr_db = await service_container.get_service("violation_review_db")
+    records = vr_db.fetch_reviewed_violations()
+    return [ViolationEntry.model_validate(r.__dict__) for r in records]
+
+
+@app.put(
+    "/api/v1/violations/{violation_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def update_violation_status_endpoint(
+    violation_id: str,
+    update: ViolationStatusUpdate,
+    service_container: ServiceContainer = Depends(get_service_container),
+):
+    """Update the status of a violation."""
+    vr_db = await service_container.get_service("violation_review_db")
+    success = vr_db.update_violation_status(
+        violation_id, update.status, reviewed_by=update.reviewed_by
+    )
+    if not success:
+        raise HTTPException(status_code=404, detail="Violation not found")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # --- WebSocket Endpoint ---
