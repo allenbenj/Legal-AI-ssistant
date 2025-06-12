@@ -899,11 +899,26 @@ class EnhancedPersistenceManager:
 
     def __init__(
         self,
+        *,
+        config: Optional[Dict[str, Any]] = None,
+        connection_pool: Optional[ConnectionPool] = None,
+        metrics_exporter: Optional[Any] = None,
+    ) -> None:
+        """Create a new ``EnhancedPersistenceManager`` instance."""
+
         self.config = config or {}
         cache_ttl = self.config.get("cache_default_ttl_seconds", 3600)
 
         if connection_pool is None:
+            connection_pool = ConnectionPool(
+                self.config.get("database_url"),
+                self.config.get("redis_url"),
+                self.config.get("min_pg_connections", 5),
+                self.config.get("max_pg_connections", 20),
+                self.config.get("max_redis_connections", 10),
             )
+        elif not isinstance(connection_pool, ConnectionPool):
+            raise TypeError("connection_pool must be a ConnectionPool instance")
 
         self.connection_pool = connection_pool
         self.entity_repo = EntityRepository(self.connection_pool)
@@ -1136,8 +1151,27 @@ class EnhancedPersistenceManager:
 
 
 # Factory function for service container
+
 def create_enhanced_persistence_manager(
+    *,
+    config: Optional[Dict[str, Any]] = None,
+    connection_pool: Optional[ConnectionPool] = None,
+    metrics_exporter: Optional[Any] = None,
+) -> EnhancedPersistenceManager:
+    """Convenience factory for creating a persistence manager."""
+
+    cfg = config or {}
     if connection_pool is None:
         connection_pool = ConnectionPool(
             cfg.get("database_url"),
             cfg.get("redis_url"),
+            cfg.get("min_pg_connections", 5),
+            cfg.get("max_pg_connections", 20),
+            cfg.get("max_redis_connections", 10),
+        )
+
+    return EnhancedPersistenceManager(
+        config=cfg,
+        connection_pool=connection_pool,
+        metrics_exporter=metrics_exporter,
+    )
