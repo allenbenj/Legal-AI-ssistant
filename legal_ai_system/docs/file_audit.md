@@ -165,6 +165,11 @@ The following packages are mostly stubs and were previously flagged in `cleanup_
 
 These modules contain minimal code and are primarily re-export or placeholder implementations. They can likely be removed or consolidated once the PyQt6 GUI (`legal_ai_system/gui/legal_ai_pyqt6_integrated.py`) is fully adopted.
 
+Additionally, the following scripts are not referenced in the documentation or CI workflows and appear unused:
+
+- `legal_ai_system/scripts/migrate_database.py`
+- `legal_ai_system/scripts/start_linkage_check.py`
+
 ## Documentation Review
 
 The following documentation files reference modules or behaviour that no longer
