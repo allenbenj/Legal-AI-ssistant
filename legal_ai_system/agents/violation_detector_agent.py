@@ -55,9 +55,7 @@ class ViolationDetectionOutput:
     model_used_for_llm: Optional[str] = None  # Track LLM model if used
 
     def to_dict(self) -> Dict[str, Any]:
-        data = asdict(self)
-        data["violations_found"] = [v.to_dict() for v in self.violations_found]
-        return data
+        return asdict(self)
 
 
 class ViolationDetectorAgent(BaseAgent, MemoryMixin):

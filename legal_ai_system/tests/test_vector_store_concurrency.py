@@ -1,11 +1,31 @@
 import asyncio
+import sys
+import types
 import pytest
+
+# Stub heavy dependencies before importing the vector store
+sys.modules.setdefault(
+    "legal_ai_system.core.enhanced_persistence", types.ModuleType("dummy_ep")
+)
+sys.modules.setdefault(
+    "legal_ai_system.services.service_container", types.ModuleType("dummy_sc")
+)
+sys.modules.setdefault(
+    "legal_ai_system.services.security_manager", types.ModuleType("dummy_sec")
+)
+sys.modules.setdefault(
+    "legal_ai_system.utils.user_repository", types.ModuleType("dummy_user_repo")
+)
+
 from legal_ai_system.core.vector_store import VectorStore, VectorMetadata, IndexType
 
-class DummyProvider:
+from legal_ai_system.core.vector_store import EmbeddingProviderVS
+
+
+class DummyProvider(EmbeddingProviderVS):
     def __init__(self):
-        self.model_name = "dummy"
-        self.dimension = 4
+        super().__init__(model_name="dummy")
+        self.dimension = 8
 
     async def initialize(self):
         pass

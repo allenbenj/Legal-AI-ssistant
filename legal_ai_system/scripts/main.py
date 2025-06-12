@@ -17,7 +17,7 @@ import uuid  # For generating IDs
 
 # import logging # Replaced by detailed_logging
 from contextlib import asynccontextmanager
-import datetime
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass, field, asdict
 from enum import Enum
 from pathlib import Path
@@ -30,6 +30,7 @@ try:
         get_detailed_logger,
         LogCategory,
     )
+
     main_api_logger = get_detailed_logger("MainAPI", LogCategory.API)
 except Exception:  # pragma: no cover - fallback minimal logger
     logging.basicConfig(level=logging.INFO)
@@ -74,9 +75,10 @@ try:
         status,
     )
     from fastapi.middleware.cors import CORSMiddleware
-    from fastapi.responses import (  # Added HTMLResponse for root
+    from fastapi.responses import (
         HTMLResponse,
         JSONResponse,
+        Response,
     )
     from fastapi.security import (
         HTTPAuthorizationCredentials,
@@ -87,8 +89,6 @@ except ImportError:  # pragma: no cover - optional web dependency
     print("FastAPI not installed; exiting.")
     sys.exit(0)
 
-from pydantic import BaseModel
-from pydantic import Field as PydanticField  # Alias Field
 from strawberry.fastapi import GraphQLRouter  # type: ignore
 
 try:
@@ -218,7 +218,8 @@ async def lifespan(app: FastAPI):
             from legal_ai_system.services.service_container import (
                 create_service_container,
             )
-            service_container_instance = create_service_container()
+
+            service_container_instance = await create_service_container()
         except Exception as e:
             main_api_logger.error(
                 "Failed to initialize service container.", exception=e
@@ -247,7 +248,9 @@ async def lifespan(app: FastAPI):
                     # Assuming encryption_password might not be directly in settings for security reasons
                     # but fetched from a secure store or env var by SecurityManager itself.
                     # For allowed_directories, they should be part of the app's config.
-                    allowed_dirs_list = sec_config.allowed_directories or allowed_dirs_list
+                    allowed_dirs_list = (
+                        sec_config.allowed_directories or allowed_dirs_list
+                    )
                     # encryption_pwd might be handled internally by SecurityManager based on env vars
 
             security_manager_instance = SecurityManager(
@@ -287,9 +290,7 @@ async def lifespan(app: FastAPI):
     )
     realtime_publisher_instance.start_system_monitoring()
 
-    main_api_logger.info(
-        "✅ Legal AI System API started successfully via lifespan."
-    )
+    main_api_logger.info("✅ Legal AI System API started successfully via lifespan.")
 
     yield  # API is running
 
@@ -404,10 +405,10 @@ class WorkflowConfig(ProcessingRequest):
     name: str
     description: Optional[str] = None
     created_at: datetime = PydanticField(
-        default_factory=lambda: datetime.datetime.now(tz=datetime.timezone.utc)
+        default_factory=lambda: datetime.now(tz=timezone.utc)
     )
     updated_at: datetime = PydanticField(
-        default_factory=lambda: datetime.datetime.now(tz=datetime.timezone.utc)
+        default_factory=lambda: datetime.now(tz=timezone.utc)
     )
 
 
@@ -434,14 +435,6 @@ class DocumentStatusResponse(BaseModel):  # Renamed for clarity
     result_summary: Optional[Dict[str, Any]] = None  # If processing is complete
 
 
-class ReviewDecisionRequest(BaseModel):
-    item_id: str  # Renamed from entity_id for generality
-    decision: str  # 'approve', 'reject', 'modify'
-    modified_data: Optional[Dict[str, Any]] = None
-    reviewer_notes: Optional[str] = None  # Added
-    # confidence_adjustment: Optional[float] = None # This might be complex to expose directly
-
-
 class ThresholdUpdateRequest(BaseModel):
     auto_approve_threshold: Optional[float] = PydanticField(None, ge=0.0, le=1.0)
     review_threshold: Optional[float] = PydanticField(None, ge=0.0, le=1.0)
@@ -460,21 +453,13 @@ class SystemHealthResponse(BaseModel):
     performance_metrics_summary: Dict[str, float]  # Renamed from performance_metrics
     active_documents_count: int  # Renamed
     pending_reviews_count: int  # Renamed
-    timestamp: str = PydanticField(
-        default_factory=lambda: datetime.datetime.now(
-            tz=datetime.timezone.utc
-        ).isoformat()
-    )
-
 
 # --- JWT Utilities & Auth Mock ---
 # In a real app, these would use SecurityManager
-def create_access_token(
-    data: dict, expires_delta: Optional[datetime.timedelta] = None
-) -> str:
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
-    expire_time = datetime.datetime.now(tz=datetime.timezone.utc) + (
-        expires_delta or datetime.timedelta(hours=Constants.Time.SESSION_TIMEOUT_HOURS)
+    expire_time = datetime.now(tz=timezone.utc) + (
+        expires_delta or timedelta(hours=Constants.Time.SESSION_TIMEOUT_HOURS)
     )
     to_encode.update(
         {
@@ -499,7 +484,7 @@ async def get_current_active_user(
             username="test_user",
             email="test@example.com",
             access_level=AccessLevel.ADMIN,
-            last_login=datetime.datetime.now(tz=datetime.timezone.utc),
+            last_login=datetime.now(tz=timezone.utc),
         )
 
     token = credentials.credentials
@@ -677,7 +662,7 @@ class Query:
                 healthy_services_count=0,
                 active_documents_count=0,
                 pending_reviews_count=0,
-                timestamp=datetime.datetime.now().isoformat(),
+                timestamp=datetime.now().isoformat(),
             )
         # This should call a method on service_container_instance or a dedicated status service
         # status_data = await service_container_instance.get_system_status_summary()
@@ -687,7 +672,7 @@ class Query:
             healthy_services_count=5,
             active_documents_count=2,
             pending_reviews_count=1,
-            timestamp=datetime.datetime.now().isoformat(),
+            timestamp=datetime.now().isoformat(),
         )  # Mock
 
 
@@ -840,7 +825,7 @@ async def upload_document_rest(  # Renamed to avoid conflict
             username="api_uploader",
             email="uploader@example.com",
             access_level=AccessLevel.ADMIN,
-            last_login=datetime.datetime.now(tz=datetime.timezone.utc),
+            last_login=datetime.now(tz=timezone.utc),
         )
 
         result = await integration_service_instance.upload_and_process_document(
@@ -1025,7 +1010,7 @@ async def update_workflow_config(config_id: str, update: WorkflowConfigUpdate):
     update_data = update.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(existing, key, value)
-    existing.updated_at = datetime.datetime.now(tz=datetime.timezone.utc)
+    existing.updated_at = datetime.now(tz=timezone.utc)
     workflow_configs[config_id] = existing
     save_workflow_configs()
     return existing
@@ -1062,7 +1047,7 @@ async def get_system_health_rest(  # Renamed
             performance_metrics_summary={},
             active_documents_count=0,
             pending_reviews_count=0,
-            timestamp=datetime.datetime.now(tz=datetime.timezone.utc).isoformat(),
+            timestamp=datetime.now(tz=timezone.utc).isoformat(),
         )
 
     try:
@@ -1080,115 +1065,6 @@ async def get_system_health_rest(  # Renamed
             ),
             active_documents_count=health_summary.get("active_documents_count", 0),
             pending_reviews_count=health_summary.get("pending_reviews_count", 0),
-            timestamp=health_summary.get(
-                "timestamp", datetime.datetime.now(tz=datetime.timezone.utc).isoformat()
-            ),
-        )
-    except Exception as e:
-        main_api_logger.error("Failed to get system health.", exception=e)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Health check failed: {str(e)}",
-        )
-
-
-@app.get("/api/v1/config/thresholds", response_model=ThresholdResponse)
-async def get_thresholds(service_container: ServiceContainer = Depends(get_service_container)):
-    rev_mem = await service_container.get_service("reviewable_memory")
-    thresholds = await rev_mem.get_thresholds_async()
-    return ThresholdResponse(**thresholds)
-
-
-@app.put("/api/v1/config/thresholds", response_model=ThresholdResponse)
-async def update_thresholds(
-    update: ThresholdUpdateRequest,
-    service_container: ServiceContainer = Depends(get_service_container),
-):
-    rev_mem = await service_container.get_service("reviewable_memory")
-    await rev_mem.update_thresholds_async(update.model_dump(exclude_none=True))
-    thresholds = await rev_mem.get_thresholds_async()
-    return ThresholdResponse(**thresholds)
-
-
-@app.post("/api/v1/config/thresholds/optimize", response_model=ThresholdResponse)
-async def optimize_thresholds(service_container: ServiceContainer = Depends(get_service_container)):
-    ml_opt = await service_container.get_service("ml_optimizer")
-    rev_mem = await service_container.get_service("reviewable_memory")
-    result = ml_opt.train_threshold_model()
-    if not result:
-        raise HTTPException(status_code=400, detail="Not enough feedback data")
-    await rev_mem.update_thresholds_async(asdict(result))
-    return ThresholdResponse(**asdict(result))
-
-
-@app.post("/api/v1/calibration/review", status_code=status.HTTP_200_OK)
-async def submit_review_decision_rest(  # Renamed
-    review_request: ReviewDecisionRequest,
-    # current_user: AuthUser = Depends(require_permission(AccessLevel.WRITE)) # Auth
-    service_container: ServiceContainer = Depends(get_service_container),
-):
-    main_api_logger.info(
-        "Review decision submitted.", parameters=review_request.model_dump()
-    )
-    if not service_container:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Review service not configured.",
-        )
-
-    review_service = service_container.get_service(
-        "reviewable_memory"
-    )  # Or 'confidence_calibration_manager'
-    if not review_service or not hasattr(review_service, "submit_review_decision"):
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Review submission component not available.",
-        )
-
-    try:
-        # Assuming submit_review_decision on the service takes similar params
-        # success = await review_service.submit_review_decision(
-        #     item_id=review_request.item_id,
-        #     decision_status=review_request.decision, # Map string to enum if needed by service
-        #     modified_content=review_request.modified_data,
-        #     notes=review_request.reviewer_notes
-        # )
-        # Mocking success for now
-        success = True
-
-        if success:
-            if websocket_manager_instance:  # Check if initialized
-                await websocket_manager_instance.broadcast_to_topic(
-                    {
-                        "type": "review_processed",  # Standardized event type
-                        "item_id": review_request.item_id,
-                        "decision": review_request.decision,
-                        # "user": current_user.username, # If auth is on
-                        "user": "mock_reviewer",
-                        "timestamp": datetime.datetime.now(
-                            tz=datetime.timezone.utc
-                        ).isoformat(),
-                    },
-                    "calibration_updates",
-                )  # Specific topic for calibration
-            return {"status": "review_processed", "item_id": review_request.item_id}
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Failed to process review decision.",
-            )
-
-    except Exception as e:
-        main_api_logger.error(
-            "Review decision submission failed.",
-            parameters={"item_id": review_request.item_id},
-            exception=e,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Review processing failed: {str(e)}",
-        )
-
 
 # --- WebSocket Endpoint ---
 @app.websocket("/ws/{client_id}")
@@ -1227,7 +1103,7 @@ async def websocket_endpoint_route(websocket: WebSocket, client_id: str):
                     )
             elif msg_type == "ping":
                 await websocket_manager_instance.send_personal_message(
-                    {"type": "pong", "timestamp": datetime.datetime.now().isoformat()},
+                    {"type": "pong", "timestamp": datetime.now().isoformat()},
                     client_id,
                 )
             # Add more message type handlers as needed

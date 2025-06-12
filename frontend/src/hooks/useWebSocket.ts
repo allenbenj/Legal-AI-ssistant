@@ -5,7 +5,11 @@ export interface WebSocketHook {
   send: (data: any) => void;
 }
 
-export default function useWebSocket(url: string, onMessage: (msg: any) => void): WebSocketHook {
+export default function useWebSocket(
+  url: string,
+  onMessage: (msg: any) => void,
+  topics: string[] = [],
+): WebSocketHook {
   const wsRef = useRef<WebSocket>();
   const reconnectRef = useRef<ReturnType<typeof setTimeout>>();
   const [connected, setConnected] = useState(false);
@@ -42,6 +46,16 @@ export default function useWebSocket(url: string, onMessage: (msg: any) => void)
       wsRef.current.send(JSON.stringify(data));
     }
   };
+
+  // Subscribe to topics when connected
+  useEffect(() => {
+    if (connected && topics.length > 0) {
+      topics.forEach(t => send({ type: 'subscribe', topic: t }));
+      return () => {
+        topics.forEach(t => send({ type: 'unsubscribe', topic: t }));
+      };
+    }
+  }, [connected, topics.join('|')]);
 
   return { connected, send };
 }

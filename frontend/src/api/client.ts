@@ -1,5 +1,17 @@
 // Centralized API client for backend REST endpoints
-import { WorkflowConfig, WorkflowConfigCreate, DocumentUploadResponse, ProcessingRequest, DocumentStatusResponse } from "../types/workflow";
+import {
+  WorkflowConfig,
+  WorkflowConfigCreate,
+  DocumentUploadResponse,
+  ProcessingRequest,
+  DocumentStatusResponse,
+} from "../types/workflow";
+import {
+  ReviewItem,
+  ReviewDecisionRequest,
+  ReviewDecisionResponse,
+  ReviewStats,
+} from "../types/review";
 
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -49,4 +61,28 @@ export async function processDocument(documentId: string, request: ProcessingReq
 export async function getDocumentStatus(documentId: string): Promise<DocumentStatusResponse> {
   const res = await fetch(`/api/v1/documents/${documentId}/status`);
   return handleResponse<DocumentStatusResponse>(res);
+}
+
+export async function fetchPendingReviews(limit = 20): Promise<ReviewItem[]> {
+  const res = await fetch(`/api/v1/reviews/pending?limit=${limit}`);
+  return handleResponse<ReviewItem[]>(res);
+}
+
+export async function submitReviewDecision(
+  data: ReviewDecisionRequest
+): Promise<ReviewDecisionResponse> {
+  const res = await fetch(`/api/v1/reviews/decision`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<ReviewDecisionResponse>(res);
+}
+
+export async function fetchReviewStats(): Promise<ReviewStats> {
+  const res = await fetch(`/api/v1/reviews/stats`);
+  return handleResponse<ReviewStats>(res);
+}
+
+
 }

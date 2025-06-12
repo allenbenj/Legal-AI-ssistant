@@ -68,3 +68,4 @@ class SummaryNode(BaseNode):
 
 
 __all__ = ["AnalysisNode", "SummaryNode"]
+BaseNode = LangGraphBaseNode

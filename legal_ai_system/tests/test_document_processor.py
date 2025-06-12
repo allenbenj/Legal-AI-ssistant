@@ -8,6 +8,10 @@ import pytest
 import yaml  # type: ignore
 
 from legal_ai_system.agents.document_processor_agent import DocumentProcessorAgent
+from legal_ai_system.agents.document_processor_agent import (
+    DocumentProcessingOutput,
+    DocumentContentType,
+)
 
 
 @pytest.mark.asyncio
@@ -54,4 +58,23 @@ async def test_process_json_and_yaml(tmp_path: Path) -> None:
 
     res_yaml = await agent.process(yaml_path)
     assert "b: 2" in res_yaml.data["text_content"]
+
+
+def test_document_processing_output_to_dict() -> None:
+    output = DocumentProcessingOutput(
+        file_path="foo.txt",
+        file_name="foo.txt",
+        file_size_bytes=4,
+        document_content_type=DocumentContentType.TXT,
+        processing_strategy_used="test",
+        text_content="foo",
+    )
+    data = output.to_dict()
+    expected_keys = {
+        "file_path",
+        "file_name",
+        "file_size_bytes",
+        "document_content_type",
+    }
+    assert expected_keys.issubset(set(data.keys()))
 

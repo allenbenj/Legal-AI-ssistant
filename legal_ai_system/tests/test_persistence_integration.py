@@ -2,7 +2,12 @@ import os
 import asyncio
 import pytest
 
-from legal_ai_system.core.enhanced_persistence import create_enhanced_persistence_manager, EntityRecord, EntityStatus
+from legal_ai_system.core.enhanced_persistence import (
+    create_enhanced_persistence_manager,
+    ConnectionPool,
+    EntityRecord,
+    EntityStatus,
+)
 
 @pytest.mark.asyncio
 async def test_entity_create_and_fetch():
@@ -10,7 +15,11 @@ async def test_entity_create_and_fetch():
     if not dsn:
         pytest.skip("TEST_DATABASE_URL not set")
 
-    manager = create_enhanced_persistence_manager({"database_url": dsn})
+    pool = ConnectionPool(dsn, None)
+    manager = create_enhanced_persistence_manager(
+        config={"database_url": dsn},
+        connection_pool=pool,
+    )
     await manager.initialize()
 
     record = EntityRecord(

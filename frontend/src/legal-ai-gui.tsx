@@ -12,6 +12,7 @@ import {
   DashboardErrorBoundary,
   DocumentProcessingErrorBoundary,
 } from '@/components/AsyncErrorBoundary';
+import ReviewQueueWindow from '@/components/ReviewQueueWindow';
 
 
 
@@ -85,6 +86,11 @@ export default function LegalAISystem() {
                   <WorkflowDesigner />
                 </ErrorBoundary>
               )}
+              {currentView === 'reviews' && (
+                <ErrorBoundary level="view">
+                  <ReviewQueueWindow />
+                </ErrorBoundary>
+              )}
               {currentView === 'monitoring' && (
                 <ErrorBoundary level="view">
                   <Monitoring />
@@ -118,6 +124,7 @@ function Sidebar() {
     { id: 'knowledge', label: 'Knowledge Graph', icon: Network },
     { id: 'agents', label: 'Agent Management', icon: Cpu },
     { id: 'workflows', label: 'Workflow Designer', icon: Workflow },
+    { id: 'reviews', label: 'Review Queue', icon: Eye },
     { id: 'monitoring', label: 'Monitoring', icon: Activity },
     { id: 'security', label: 'Security', icon: Shield },
     { id: 'settings', label: 'Settings', icon: Settings }

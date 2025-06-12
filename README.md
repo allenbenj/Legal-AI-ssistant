@@ -102,19 +102,52 @@ Before invoking `pytest`, install the development dependencies:
 pip install -e .[dev]
 ```
 
+Running tests with coverage is enabled by default via `pytest-cov`. After
+installing the development dependencies simply run `pytest`:
+
+```bash
+pytest
+```
+
 Alternatively, run the installation helper:
 
 ```bash
 python legal_ai_system/scripts/install_all_dependencies.py
 ```
 
-Missing packages such as `pytest-mock` will cause test failures. After installation execute:
-
-```bash
-pytest
-```
+Missing packages such as `pytest-mock` will cause test failures.
 
 See [docs/test_setup.md](docs/test_setup.md) for more information.
+
+## Using the GUIs
+
+The repository provides three optional interfaces. Install the dependencies and
+choose the one that suits your workflow:
+
+1. **Streamlit Dashboard** – run `python -m legal_ai_system` after installing
+   `requirements.txt`. This launches a browser-based dashboard connected to the
+   backend. Development builds are supported with the React frontend.
+   Use `npm run build` to generate `frontend/dist`, which FastAPI serves
+   automatically when present.
+
+2. **Memory Brain Demo** – run
+   `python -m legal_ai_system.gui.scripts.memory_brain_gui` to launch a focused
+   Streamlit interface for testing the memory management features.
+
+### PyQt6 Interface
+
+Install `PyQt6` and launch the desktop GUI module:
+
+```bash
+pip install PyQt6
+python -m legal_ai_system.gui.main_gui
+```
+
+This interface can open local documents and run the default analysis workflow
+without a browser. It is primarily a demo and lacks the advanced features of the
+Streamlit and React frontends.
+
+Detailed instructions are available in [docs/gui_setup.md](docs/gui_setup.md).
 
 ### Extraction Options
 
