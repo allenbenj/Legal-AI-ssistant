@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ..legal_ai_charts import BarChartWidget, PieChartWidget, ChartData
-from ..legal_ai_desktop import FlipCard, TagCloud, TimelineWidget
+from legal_ai_widgets import FlipCard, TagCloud, TimelineWidget
 
 
 class DashboardSection:

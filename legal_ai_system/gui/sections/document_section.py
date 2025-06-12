@@ -20,8 +20,8 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
 )
 
-from ..legal_ai_desktop import DocumentViewer, DocumentTableModel, Document
-from ..legal_ai_widgets import NotificationWidget, SearchableComboBox
+from legal_ai_desktop import DocumentViewer, DocumentTableModel, Document
+from legal_ai_widgets import NotificationWidget, SearchableComboBox
 
 
 class DocumentSection:
