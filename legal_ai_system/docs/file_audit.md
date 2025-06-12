@@ -57,19 +57,13 @@ legal_ai_system/frontend/src/components/AsyncErrorBoundary.tsx
 legal_ai_system/frontend/src/components/DocumentProcessing.tsx
 legal_ai_system/frontend/src/components/ErrorBoundary.tsx
 legal_ai_system/frontend/src/components/Login.tsx
-legal_ai_system/frontend/src/components/MetricsChart.tsx
 legal_ai_system/frontend/src/components/ProgressiveLoader.tsx
-legal_ai_system/frontend/src/components/ReviewQueue.tsx
 legal_ai_system/frontend/src/components/ReviewQueueWindow.tsx
 legal_ai_system/frontend/src/components/StatusDashboard.tsx
-legal_ai_system/frontend/src/components/SystemHealth.tsx
 legal_ai_system/frontend/src/components/WorkflowDesigner.tsx
-legal_ai_system/frontend/src/components/skeletons/CardSkeleton.tsx
-legal_ai_system/frontend/src/components/skeletons/DashboardSkeleton.tsx
 legal_ai_system/frontend/src/components/skeletons/Skeleton.tsx
 legal_ai_system/frontend/src/components/skeletons/TableSkeleton.tsx
 legal_ai_system/frontend/src/contexts/AuthContext.tsx
-legal_ai_system/frontend/src/design-system/components/Alert.tsx
 legal_ai_system/frontend/src/design-system/components/Button.tsx
 legal_ai_system/frontend/src/design-system/components/Card.tsx
 legal_ai_system/frontend/src/design-system/components/Grid.tsx
@@ -151,6 +145,21 @@ SystemInitializationError  # unused import (legal_ai_system/services/service_con
 14:      "source": "src/apiClient.ts",
 ```
 
+### Frontend Component Usage Audit
+
+Using `grep`, the following components were not imported anywhere in `frontend/src`:
+
+- `components/MetricsChart.tsx`
+- `components/ReviewQueue.tsx`
+- `components/SystemHealth.tsx`
+- `components/skeletons/CardSkeleton.tsx`
+- `components/skeletons/DashboardSkeleton.tsx`
+- `design-system/components/Alert.tsx`
+
+These unused components were removed from the source tree to reduce maintenance
+overhead. If future features require them, they can be restored from version
+history.
+
 ## Candidates for Cleanup
 
 The following packages are mostly stubs and were previously flagged in `cleanup_backlog.md`:
@@ -165,52 +174,4 @@ The following packages are mostly stubs and were previously flagged in `cleanup_
 
 These modules contain minimal code and are primarily re-export or placeholder implementations. They can likely be removed or consolidated once the PyQt6 GUI (`legal_ai_system/gui/legal_ai_pyqt6_integrated.py`) is fully adopted.
 
-## Documentation Review
 
-The following documentation files reference modules or behaviour that no longer
-match the current codebase:
-
-- `gui_setup.md` – states that running `python -m legal_ai_system` launches the
-  Streamlit dashboard. The entry point now starts the PyQt6 GUI located at
-  `gui/legal_ai_pyqt6_integrated.py`. Update the instructions accordingly.
-- `api_endpoints.md` – describes REST endpoints for a FastAPI backend, but the
-  repository does not include the corresponding FastAPI application. Consider
-  removing this file or replacing it with up‑to‑date API documentation when the
-  backend is implemented.
-- `legacy/violation_review_agent_original.md` – contains archived code for a
-  deleted agent. Keep only if historical reference is required; otherwise it can
-  be removed.
-- `legacy/removed_backends.md` – documents removed FastAPI servers. This file is
-  redundant once those services are fully retired.
-
-Please update or prune these documents during the next cleanup cycle.
-
-## Task Summary and Recommendations
-
-### Collected Tasks
-
-The repository contains several task lists that inform upcoming cleanup and
-development work:
-
-- The [Code Cleanup Backlog](cleanup_backlog.md) flags stub modules such as
-  `legal_ai_desktop`, `legal_ai_widgets`, `legal_ai_charts`, and
-  `legal_ai_network` for removal or replacement with real implementations【F:docs/cleanup_backlog.md†L5-L16】.
-- The [Agent Task List](tasks/agent_tasks.md) outlines improvements like
-  auditing `asyncio.to_thread` usage, expanding async streaming, integrating
-  Legal‑BERT models, adding caching, and ensuring persistence across the
-  workflow【F:docs/tasks/agent_tasks.md†L5-L14】.
-- The [Application Assessment](application_assessment.md) suggests expanding
-  documentation, introducing stronger typing, improving configuration
-  management, adding asynchronous task orchestration, and enhancing
-  monitoring and the React GUI【F:docs/application_assessment.md†L31-L36】.
-
-### Recommended Actions
-
-- **Keep** the consolidated PyQt6 GUI as the primary interface
-  (`gui/legal_ai_pyqt6_integrated.py`)【F:docs/legacy/removed_backends.md†L9-L14】.
-- **Remove** or replace stub packages listed in `cleanup_backlog.md` once their
-  functionality is migrated.
-- **Refactor** the core workflow and service modules to adopt the asynchronous
-  and persistence improvements described in `agent_tasks.md`.
-- **Update** documentation and typing per the recommendations in
-  `application_assessment.md`.
