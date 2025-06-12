@@ -453,50 +453,11 @@ class IntegratedMainWindow(QMainWindow):
         theme = self.prefs_manager.get("theme", "dark")
         
         if theme == "dark":
-            self.setStyleSheet("""
-                QMainWindow {
-                    background-color: #1a1a1a;
-                }
-                QWidget {
-                    background-color: #1a1a1a;
-                    color: #ffffff;
-                }
-                QGroupBox {
-                    border: 2px solid #444;
-                    border-radius: 5px;
-                    margin-top: 10px;
-                    padding-top: 10px;
-                }
-                QGroupBox::title {
-                    subcontrol-origin: margin;
-                    left: 10px;
-                    padding: 0 5px 0 5px;
-                }
-                QTabWidget::pane {
-                    border: 1px solid #444;
-                    background-color: #2d2d2d;
-                }
-                QTabBar::tab {
-                    background-color: #3d3d3d;
-                    color: white;
-                    padding: 8px 16px;
-                    margin-right: 2px;
-                }
-                QTabBar::tab:selected {
-                    background-color: #dc143c;
-                }
-                QTableView {
-                    background-color: #2d2d2d;
-                    alternate-background-color: #3d3d3d;
-                    gridline-color: #444;
-                }
-                QHeaderView::section {
-                    background-color: #3d3d3d;
-                    color: white;
-                    padding: 5px;
-                    border: none;
-                }
-            """)
+            theme_path = Path(__file__).parent / "themes" / "dark_theme.qss"
+            file = QFile(str(theme_path))
+            if file.open(QFile.OpenModeFlag.ReadOnly | QFile.OpenModeFlag.Text):
+                self.setStyleSheet(bytes(file.readAll()).decode("utf-8"))
+            file.close()
             
     def startServices(self):
         """Start background services"""
