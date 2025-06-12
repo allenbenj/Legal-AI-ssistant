@@ -141,7 +141,7 @@ Install `PyQt6` and launch the desktop GUI module:
 
 ```bash
 pip install PyQt6
-python -m legal_ai_system.gui.main_gui
+python -m legal_ai_system.gui.integrated_gui
 ```
 
 This interface can open local documents and run the default analysis workflow
