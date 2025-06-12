@@ -1,4 +1,3 @@
-export interface ViolationEntry {
   id: string;
   document_id: string;
   violation_type: string;
@@ -9,5 +8,4 @@ export interface ViolationEntry {
   detected_time: string;
   reviewed_by?: string | null;
   review_time?: string | null;
-  recommended_motion?: string | null;
 }
