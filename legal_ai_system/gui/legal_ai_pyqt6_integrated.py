@@ -20,6 +20,7 @@ from legal_ai_system.gui.widgets.legal_ai_charts import (
     ChartData,
     AnalyticsDashboardWidget,
 )
+from legal_ai_system.gui.widgets.agent_manager_widget import AgentManagerWidget
 from legal_ai_system.legal_ai_network import (
     NetworkManager,
     LegalAIAPIClient,
@@ -358,10 +359,7 @@ class IntegratedMainWindow(QMainWindow):
         self.queue_widget = self.createQueueView()
         self.main_tabs.addTab(self.queue_widget, "Processing Queue")
 
-        # Workflow Builder tab
-        self.builder_widget = self.createWorkflowBuilderView()
-        self.main_tabs.addTab(self.builder_widget, "Workflow Builder")
-        
+       
         main_layout.addWidget(self.main_tabs)
         
     def createDashboard(self) -> QWidget:

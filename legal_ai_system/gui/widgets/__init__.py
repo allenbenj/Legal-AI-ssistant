@@ -5,10 +5,12 @@ from .legal_ai_charts import (
     PieChartWidget,
     BarChartWidget,
 )
+from .agent_manager_widget import AgentManagerWidget
 
 __all__ = [
     "AnalyticsDashboardWidget",
     "PieChartWidget",
     "BarChartWidget",
+    "AgentManagerWidget",
 ]
 
