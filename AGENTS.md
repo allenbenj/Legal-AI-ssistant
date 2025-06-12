@@ -29,6 +29,7 @@ Diagnostic Tools: Actively use browser developer tools (console, network tab) to
 Detect & Report Gaps: If a frontend component needs dynamic data but lacks a backend API, or a UI action lacks a backend handler, immediately flag this as a missing component or incomplete integration.
 5. Manage Stubs Systematically
 Clear Marking: Every stub MUST be clearly marked with AGENT_STUB comments and added to an internal "Stub Backlog".
+See [docs/stub_backlog.md](docs/stub_backlog.md) for the current list of stubs and their planned replacements.
 Prioritized Implementation: Immediately prioritize and schedule implementation of critical path stubs, followed by dependency-blocking stubs.
 Full Implementation: For each stub, replace all dummy data and placeholder logic with robust, tested, and error-handled code.
 Remove Markers: Delete all AGENT_STUB markers and remove from backlog only upon full implementation and testing.
