@@ -174,4 +174,3 @@ The following packages are mostly stubs and were previously flagged in `cleanup_
 
 These modules contain minimal code and are primarily re-export or placeholder implementations. They can likely be removed or consolidated once the PyQt6 GUI (`legal_ai_system/gui/legal_ai_pyqt6_integrated.py`) is fully adopted.
 
-
