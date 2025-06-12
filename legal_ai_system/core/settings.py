@@ -333,6 +333,11 @@ class LegalAISettings(BaseSettings):
     )  # Default, should be in .env
     neo4j_database: str = Field(default="neo4j", env="NEO4J_DATABASE")
 
+    # PostgreSQL and Redis
+    database_url: Optional[str] = Field(default=None, env="DATABASE_URL")
+    redis_url_cache: Optional[str] = Field(default=None, env="REDIS_URL_CACHE")
+    redis_url_queue: Optional[str] = Field(default=None, env="REDIS_URL_QUEUE")
+
     # =================== DOCUMENT PROCESSING ===================
     # File Processing
     supported_formats: List[str] = Field(
@@ -486,6 +491,10 @@ def get_db_url(db_type: str) -> str:
     """Get database connection URL"""
     if db_type == "sqlite":
         return f"sqlite:///{settings.sqlite_path}"
+    elif db_type in ("postgres", "postgresql"):
+        if settings.database_url:
+            return settings.database_url
+        raise ValueError("PostgreSQL database_url not configured")
     elif db_type == "neo4j":
         return f"{settings.neo4j_uri}"  # Neo4j uses its own driver, URI is enough
     else:

@@ -581,7 +581,7 @@ async def create_service_container(
     db_conf = config_manager_service.get_database_config()
     await container.register_service(
         "connection_pool",
-        factory=lambda sc, db_url=db_conf.neo4j_uri, redis_url=config_manager_service.get("REDIS_URL_CACHE"): create_connection_pool(
+        factory=lambda sc, db_url=db_conf.database_url, redis_url=db_conf.redis_url_cache: create_connection_pool(
             sc,
             database_url=db_url,
             redis_url=redis_url,
@@ -605,7 +605,7 @@ async def create_service_container(
     # Task Queue setup for background processing
     from .task_queue import TaskQueue
 
-    queue_url = config_manager_service.get(
+    queue_url = db_conf.redis_url_queue or config_manager_service.get(
         "REDIS_URL_QUEUE", "redis://localhost:6379/0"
     )
     await container.register_service(

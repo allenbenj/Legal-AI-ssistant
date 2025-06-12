@@ -39,6 +39,9 @@ vector_store_backup_interval: 86400
 vector_store_instances: 1
 vector_store_hosts: []
 load_balancing_strategy: round_robin
+database_url: postgresql://localhost:5432/legal_ai
+redis_url_cache: redis://localhost:6379/0
+redis_url_queue: redis://localhost:6379/1
 sqlite_path: /workspace/Legal-AI-ssistant/legal_ai_system/storage/databases/legal_ai.db
 memory_db_path: /workspace/Legal-AI-ssistant/legal_ai_system/storage/databases/memory.db
 violations_db_path: /workspace/Legal-AI-ssistant/legal_ai_system/storage/databases/violations.db

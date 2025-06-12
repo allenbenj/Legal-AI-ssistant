@@ -254,6 +254,9 @@ class ConfigurationManager:
         
         data_dir = Path(self._settings.data_dir or Path('.'))
         config = {
+            'database_url': self.get('database_url'),
+            'redis_url_cache': self.get('redis_url_cache'),
+            'redis_url_queue': self.get('redis_url_queue'),
             'sqlite_path': str(self.get('sqlite_path', data_dir / "databases/legal_ai.db")),
             'memory_db_path': str(self.get('memory_db_path', data_dir / "databases/memory.db")),
             'violations_db_path': str(self.get('violations_db_path', data_dir / "databases/violations.db")),
