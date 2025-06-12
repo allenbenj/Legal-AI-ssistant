@@ -30,6 +30,7 @@ try:
         get_detailed_logger,
         LogCategory,
     )
+
     main_api_logger = get_detailed_logger("MainAPI", LogCategory.API)
 except Exception:  # pragma: no cover - fallback minimal logger
     logging.basicConfig(level=logging.INFO)
@@ -74,9 +75,10 @@ try:
         status,
     )
     from fastapi.middleware.cors import CORSMiddleware
-    from fastapi.responses import (  # Added HTMLResponse for root
+    from fastapi.responses import (
         HTMLResponse,
         JSONResponse,
+        Response,
     )
     from fastapi.security import (
         HTTPAuthorizationCredentials,
@@ -87,24 +89,6 @@ except ImportError:  # pragma: no cover - optional web dependency
     print("FastAPI not installed; exiting.")
     sys.exit(0)
 
-from pydantic import BaseModel
-from pydantic import Field as PydanticField  # Alias Field
-from legal_ai_system.api.review_models import (
-    ReviewItem,
-    ReviewDecisionRequest,
-    ReviewDecisionResponse,
-    ReviewStatsResponse,
-)
-from legal_ai_system.api.violation_models import (
-    ViolationRecord,
-    ViolationDecisionRequest,
-    ViolationDecisionResponse,
-)
-from legal_ai_system.utils.reviewable_memory import (
-    ReviewPriority,
-    ReviewStatus,
-    ReviewDecision,
-)
 from strawberry.fastapi import GraphQLRouter  # type: ignore
 
 try:
@@ -234,7 +218,8 @@ async def lifespan(app: FastAPI):
             from legal_ai_system.services.service_container import (
                 create_service_container,
             )
-            service_container_instance = create_service_container()
+
+            service_container_instance = await create_service_container()
         except Exception as e:
             main_api_logger.error(
                 "Failed to initialize service container.", exception=e
@@ -263,7 +248,9 @@ async def lifespan(app: FastAPI):
                     # Assuming encryption_password might not be directly in settings for security reasons
                     # but fetched from a secure store or env var by SecurityManager itself.
                     # For allowed_directories, they should be part of the app's config.
-                    allowed_dirs_list = sec_config.allowed_directories or allowed_dirs_list
+                    allowed_dirs_list = (
+                        sec_config.allowed_directories or allowed_dirs_list
+                    )
                     # encryption_pwd might be handled internally by SecurityManager based on env vars
 
             security_manager_instance = SecurityManager(
@@ -303,9 +290,7 @@ async def lifespan(app: FastAPI):
     )
     realtime_publisher_instance.start_system_monitoring()
 
-    main_api_logger.info(
-        "✅ Legal AI System API started successfully via lifespan."
-    )
+    main_api_logger.info("✅ Legal AI System API started successfully via lifespan.")
 
     yield  # API is running
 
@@ -468,24 +453,10 @@ class SystemHealthResponse(BaseModel):
     performance_metrics_summary: Dict[str, float]  # Renamed from performance_metrics
     active_documents_count: int  # Renamed
     pending_reviews_count: int  # Renamed
-    timestamp: str = PydanticField(
-        default_factory=lambda: datetime.now(tz=timezone.utc).isoformat()
-    )
-
-
-class ServicesOverviewResponse(BaseModel):
-    services: Dict[str, Dict[str, Any]]
-    active_workflow_config: Dict[str, Any]
-    timestamp: str = PydanticField(
-        default_factory=lambda: datetime.now(tz=timezone.utc).isoformat()
-    )
-
 
 # --- JWT Utilities & Auth Mock ---
 # In a real app, these would use SecurityManager
-def create_access_token(
-    data: dict, expires_delta: Optional[timedelta] = None
-) -> str:
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
     expire_time = datetime.now(tz=timezone.utc) + (
         expires_delta or timedelta(hours=Constants.Time.SESSION_TIMEOUT_HOURS)
@@ -1094,202 +1065,6 @@ async def get_system_health_rest(  # Renamed
             ),
             active_documents_count=health_summary.get("active_documents_count", 0),
             pending_reviews_count=health_summary.get("pending_reviews_count", 0),
-            timestamp=health_summary.get(
-                "timestamp", datetime.now(tz=timezone.utc).isoformat()
-            ),
-        )
-    except Exception as e:
-        main_api_logger.error("Failed to get system health.", exception=e)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Health check failed: {str(e)}",
-        )
-
-
-@app.get("/api/v1/services", response_model=ServicesOverviewResponse)
-async def get_services_overview(
-    service_container: ServiceContainer = Depends(get_service_container),
-):
-    """Return status and config of registered services."""
-    main_api_logger.info("Services overview requested.")
-    try:
-        overview = service_container.get_services_status()
-        return ServicesOverviewResponse(**overview)
-    except Exception as e:
-        main_api_logger.error("Failed to get services overview.", exception=e)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get services status: {str(e)}",
-        )
-
-
-@app.get("/api/v1/config/thresholds", response_model=ThresholdResponse)
-async def get_thresholds(service_container: ServiceContainer = Depends(get_service_container)):
-    rev_mem = await service_container.get_service("reviewable_memory")
-    thresholds = await rev_mem.get_thresholds_async()
-    return ThresholdResponse(**thresholds)
-
-
-@app.put("/api/v1/config/thresholds", response_model=ThresholdResponse)
-async def update_thresholds(
-    update: ThresholdUpdateRequest,
-    service_container: ServiceContainer = Depends(get_service_container),
-):
-    rev_mem = await service_container.get_service("reviewable_memory")
-    await rev_mem.update_thresholds_async(update.model_dump(exclude_none=True))
-    thresholds = await rev_mem.get_thresholds_async()
-    return ThresholdResponse(**thresholds)
-
-
-@app.post("/api/v1/config/thresholds/optimize", response_model=ThresholdResponse)
-async def optimize_thresholds(service_container: ServiceContainer = Depends(get_service_container)):
-    ml_opt = await service_container.get_service("ml_optimizer")
-    rev_mem = await service_container.get_service("reviewable_memory")
-    result = ml_opt.train_threshold_model()
-    if not result:
-        raise HTTPException(status_code=400, detail="Not enough feedback data")
-    await rev_mem.update_thresholds_async(asdict(result))
-    return ThresholdResponse(**asdict(result))
-
-
-@app.get(
-    "/api/v1/reviews/pending",
-    response_model=List[ReviewItem],
-    status_code=status.HTTP_200_OK,
-)
-async def get_pending_reviews(
-    limit: int = 20,
-    priority: Optional[ReviewPriority] = None,
-    service_container: ServiceContainer = Depends(get_service_container),
-):
-    """Retrieve pending review items from the reviewable memory."""
-    rev_mem = await service_container.get_service("reviewable_memory")
-    items = await rev_mem.get_pending_reviews_async(priority=priority, limit=limit)
-    return [ReviewItem.model_validate(asdict(i)) for i in items]
-
-
-@app.post(
-    "/api/v1/reviews/decision",
-    response_model=ReviewDecisionResponse,
-    status_code=status.HTTP_200_OK,
-)
-@app.post(
-    "/api/v1/calibration/review",
-    response_model=ReviewDecisionResponse,
-    status_code=status.HTTP_200_OK,
-    include_in_schema=False,
-)
-async def submit_review_decision_rest(
-    review_request: ReviewDecisionRequest,
-    service_container: ServiceContainer = Depends(get_service_container),
-):
-    """Submit an approve/reject/modify decision for a review item."""
-    main_api_logger.info(
-        "Review decision submitted.", parameters=review_request.model_dump()
-    )
-    rev_mem = await service_container.get_service("reviewable_memory")
-    decision = ReviewDecision(
-        item_id=review_request.item_id,
-        decision=review_request.decision,
-        reviewer_id=review_request.reviewer_id or "gui_user",
-        modified_content=review_request.modified_content,
-        reviewer_notes=review_request.reviewer_notes or "",
-        confidence_override=review_request.confidence_override,
-    )
-    success = await rev_mem.submit_review_decision_async(decision)
-    if not success:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Failed to process review decision.",
-        )
-
-    if websocket_manager_instance:
-        await websocket_manager_instance.broadcast_to_topic(
-            {
-                "type": "review_processed",
-                "item_id": decision.item_id,
-                "decision": decision.decision.value,
-                "user": decision.reviewer_id,
-                "timestamp": datetime.now(tz=timezone.utc).isoformat(),
-            },
-            "review_updates",
-        )
-
-    return ReviewDecisionResponse(status="review_processed", item_id=decision.item_id)
-
-
-@app.get(
-    "/api/v1/reviews/stats",
-    response_model=ReviewStatsResponse,
-    status_code=status.HTTP_200_OK,
-)
-async def get_review_stats(
-    service_container: ServiceContainer = Depends(get_service_container),
-):
-    """Return summary statistics for the review queue."""
-    rev_mem = await service_container.get_service("reviewable_memory")
-    stats = await rev_mem.get_review_stats_async()
-    return ReviewStatsResponse(**stats)
-
-
-@app.get(
-    "/api/v1/violations",
-    response_model=List[ViolationRecord],
-    status_code=status.HTTP_200_OK,
-)
-async def list_violations(
-    status_filter: ReviewStatus = ReviewStatus.PENDING,
-    service_container: ServiceContainer = Depends(get_service_container),
-):
-    """Return violations filtered by status."""
-    vr_db = await service_container.get_service("violation_review_db")
-    entries = vr_db.fetch_violations()
-    results = []
-    for ent in entries:
-        if status_filter and ent.status != status_filter.value:
-            continue
-        results.append(
-            ViolationRecord(
-                id=ent.id,
-                document_id=ent.document_id,
-                violation_type=ent.violation_type,
-                severity=ent.severity,
-                status=ent.status,
-                description=ent.description,
-                confidence=ent.confidence,
-                detected_time=ent.detected_time,
-                reviewed_by=ent.reviewed_by,
-                review_time=ent.review_time,
-                comments=ent.recommended_motion,
-            )
-        )
-    return results
-
-
-@app.post(
-    "/api/v1/violations/{violation_id}/decision",
-    response_model=ViolationDecisionResponse,
-    status_code=status.HTTP_200_OK,
-)
-async def submit_violation_decision(
-    violation_id: str,
-    request: ViolationDecisionRequest,
-    service_container: ServiceContainer = Depends(get_service_container),
-):
-    """Update violation status and retrain the classifier."""
-    vr_db = await service_container.get_service("violation_review_db")
-    classifier = await service_container.get_service("violation_classifier")
-    success = vr_db.update_violation_status(
-        violation_id, request.decision.value, reviewed_by=request.reviewer_id
-    )
-    if not success:
-        raise HTTPException(status_code=400, detail="Failed to update violation")
-
-    if classifier:
-        classifier.train_from_review_db(vr_db)
-
-    return ViolationDecisionResponse(status="updated", violation_id=violation_id)
-
 
 # --- WebSocket Endpoint ---
 @app.websocket("/ws/{client_id}")

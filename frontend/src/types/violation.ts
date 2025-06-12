@@ -1,4 +1,3 @@
-export interface ViolationRecord {
   id: string;
   document_id: string;
   violation_type: string;
@@ -9,10 +8,4 @@ export interface ViolationRecord {
   detected_time: string;
   reviewed_by?: string | null;
   review_time?: string | null;
-  comments?: string | null;
-}
-
-export interface ViolationDecisionRequest {
-  decision: string;
-  reviewer_id?: string;
 }
