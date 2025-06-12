@@ -92,3 +92,91 @@ Important Considerations for the Agent:
 Risk Assessment: Always prioritize safety. Operations like git clean -f and history rewriting (git rebase -i, git filter-repo) are powerful and potentially destructive. Avoid history rewriting unless explicitly tasked and with robust undo mechanisms.
 Context Awareness: If the agent is aware of specific build systems (e.g., Python, Node.js, Java), it can use that knowledge to suggest more accurate .gitignore entries or temporary file locations.
 Feedback Loop: If any step encounters an unexpected error or state, the agent should immediately pause, report the issue with full error logs, and await further instructions.
+Category 1: Safe, Local Cleanup (High Confidence, Generally Reversible)
+These operations primarily affect the agent's local repository copy and do not rewrite shared history.
+
+Branch Cleanup (Local Branches):
+
+Goal: Remove local branches that are no longer needed, especially those already merged.
+Agent Actions:
+Identify Merged Branches:
+git branch --merged (lists branches merged into the current HEAD).
+git branch --merged <target_branch> (lists branches merged into a specific target branch, e.g., main).
+Identify Stale Branches (not pushed or tracked by remote):
+git branch -vv (shows local branches and their remote tracking status). Look for [gone] or branches without remote tracking.
+Exclusions: Always exclude protected branches (main, master, develop, etc.) and the currently checked-out branch.
+Deletion:
+git branch -d <branch-name>: Deletes a merged branch. If not merged, it will warn.
+git branch -D <branch-name>: Force-deletes a branch, whether merged or not. (Use with caution; ideally, git branch -d should be preferred).
+Automated Approach:
+Bash
+
+# List all merged local branches (excluding current, main, master, develop)
+git branch --merged | grep -v "\*" | grep -Ev "(main|master|develop)" | xargs -n 1 git branch -d
+The agent should still internally log what it's about to delete and confirm the list before executing.
+Remote-Tracking Branch Cleanup (Local References to Remote):
+
+Goal: Remove local references to remote branches that no longer exist on the actual remote.
+Agent Actions:
+git remote prune origin --dry-run: Shows what would be pruned.
+git remote prune origin: Executes the pruning.
+Rationale: This keeps the local origin/ references synchronized with the actual remote, preventing clutter from deleted remote branches.
+Stash Management:
+
+Goal: Clean up old or unnecessary stashes.
+Agent Actions:
+git stash list: View existing stashes.
+git stash drop <stash@{n}>: Remove a specific stash.
+git stash clear: Remove all stashes (use with extreme caution).
+Recommendation: Only remove stashes that are clearly old, resolved, or explicitly indicated for deletion.
+Git Repository Housekeeping (git gc):
+
+Goal: Optimize the local repository, clean up loose objects, and pack them efficiently.
+Agent Actions:
+git gc --prune=now: Performs aggressive garbage collection. This is generally safe and improves performance and reduces repository size.
+git prune: Removes unreachable objects from the object database. git gc typically includes this.
+Category 2: History-Rewriting Operations (Extreme Caution Required!)
+These operations alter the commit history. If these commits have been pushed to a shared remote, force-pushing the rewritten history will cause major problems for anyone else who has pulled the original history. These should almost never be performed autonomously on shared branches. They are more suitable for cleaning up personal, unpushed feature branches or for very specific, pre-approved scenarios (e.g., removing a large file from all history before initial push).
+
+General Safeguard for History Rewriting:
+
+NEVER perform on shared branches (e.g., main, master, develop) that have been pushed.
+Always clone the repository to a temporary location before attempting history rewriting, or ensure the agent has a robust undo mechanism (e.g., git reflog).
+Informational/Reporting: If instructed to do this, the agent MUST report the high risk and request explicit confirmation.
+Squashing Commits:
+
+Goal: Combine multiple small, related commits into a single, more meaningful commit.
+Agent Actions:
+git rebase -i HEAD~N: Interactively rebase the last N commits. The agent would need to parse the interactive rebase editor to squash or fixup commits.
+Complexity: Requires sophisticated NLP to understand commit messages and identify which ones are "related" and should be squashed. Manual confirmation is almost always required.
+Automation Difficulty: High.
+Rewriting Commit Messages:
+
+Goal: Correct typos or improve clarity of a commit message.
+Agent Actions:
+git commit --amend: For the most recent commit.
+git rebase -i <commit-hash-before-target>: To change older commit messages (similar to squashing, agent needs to reword).
+Automation Difficulty: Moderate (for amend) to High (for older commits).
+Removing Sensitive Data/Large Files from History:
+
+Goal: Permanently remove specific files from all history branches and tags, typically for sensitive data accidentally committed or very large files.
+Agent Actions:
+git filter-repo --path <path/to/file> --invert-paths: Removes a file from all history.
+git filter-repo --path-glob "**/large_file.zip" --invert-paths
+Alternative (older, more complex): git filter-branch --tree-filter 'rm -rf <path/to/file>' HEAD
+Extreme Caution: This is the most destructive operation. It fundamentally changes commit SHAs, requiring force-pushes and making life difficult for other collaborators.
+Automation Difficulty: High (due to severe implications and need for precise file/path identification).
+Rebasing for Linear History:
+
+Goal: Reapply commits from one branch onto another to create a cleaner, linear history instead of merge commits.
+Agent Actions:
+git rebase <base-branch>: Reapplies current branch's commits onto base-branch.
+Caution: If the current branch has been pushed and other developers have pulled it, rebasing and force-pushing will create divergent histories.
+Automation Difficulty: Moderate.
+Instructions for Agent on History-Rewriting (If Permitted for Personal Branches)
+If the agent is given permission to perform history-rewriting on personal, unpushed branches only, its instructions must be even more stringent:
+
+Strict Scope: Confine history-rewriting operations only to the currently active feature branch, and only if it has not been pushed to a remote accessible by others.
+Confirmation: Before any history-rewriting operation, the agent MUST log the proposed change (e.g., "Proposing to squash commits X, Y, Z into one") and request explicit human confirmation.
+Reflog Dependency: Acknowledge that git reflog is the primary mechanism for undoing local history rewrites.
+Force Push Awareness: Understand that any history rewrite will require a git push --force-with-lease or git push --force. The agent must never perform a force push to main, master, develop, or any other shared integration branch.
