@@ -82,6 +82,19 @@ python legal_ai_system/scripts/fix_langgraph_typing.py
 
 For more detailed instructions see [ENV_SETUP.md](legal_ai_system/docs/ENV_SETUP.md).
 
+### PostgreSQL Setup
+
+Run the initialization script to create the PostgreSQL database before applying migrations:
+
+```bash
+python legal_ai_system/scripts/init_postgres_db.py
+python legal_ai_system/scripts/migrate_database.py
+```
+
+The script reads the `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, and
+`POSTGRES_DB` environment variables to determine the connection details. Set `POSTGRES_ADMIN_DB` if
+you need to use an administrative database other than `postgres`.
+
 The older `setup_environment_task.py` script can also be used to create the vir
 tual environment and run the tests:
 ```bash
