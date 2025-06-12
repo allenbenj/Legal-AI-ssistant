@@ -215,6 +215,9 @@ class IntegratedMainWindow(QtWidgets.QMainWindow):
         tools_menu.addSeparator()
         
         plugin_manager_action = tools_menu.addAction("Plugin Manager...")
+
+        db_conn_action = tools_menu.addAction("Database Connections...")
+        db_conn_action.triggered.connect(self.showDatabaseConnections)
         
         # Help menu
         help_menu = menubar.addMenu("&Help")
@@ -411,6 +414,13 @@ class IntegratedMainWindow(QtWidgets.QMainWindow):
             self.prefs_manager.set("openai_key", dialog.openai_key.text())
             self.prefs_manager.set("enable_ner", dialog.enable_ner.isChecked())
             self.prefs_manager.set("enable_llm", dialog.enable_llm.isChecked())
+
+    def showDatabaseConnections(self):
+        """Show dialog for database connection configuration"""
+        from .db_connection_dialog import DBConnectionDialog
+
+        dialog = DBConnectionDialog(self)
+        dialog.exec()
             
     def showAbout(self):
         """Show about dialog"""
