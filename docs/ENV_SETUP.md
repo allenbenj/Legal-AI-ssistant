@@ -32,6 +32,7 @@ errors:
 ```bash
 pip install "packaging<25"
 pip install -r requirements.txt
+pip install -r requirements-dev.txt
 ```
 
 If you plan to use LangGraph-based workflows, install the optional dependency:

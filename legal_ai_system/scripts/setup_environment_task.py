@@ -56,6 +56,9 @@ def main() -> None:
 
     pip(venv_path, ["install", "--upgrade", "pip"])
     pip(venv_path, ["install", "-r", str(repo_root / "requirements.txt")])
+    dev_reqs = repo_root / "requirements-dev.txt"
+    if dev_reqs.exists():
+        pip(venv_path, ["install", "-r", str(dev_reqs)])
 
     verify_imports(venv_path)
     run_tests(venv_path)

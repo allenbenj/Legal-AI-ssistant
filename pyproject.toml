@@ -141,6 +141,35 @@ factory-boy = "^3.3.0"
 faker = "^19.3.0"
 hypothesis = "^6.82.0"
 
+[tool.poetry.extras]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "pytest-cov",
+    "pytest-mock",
+    "pytest-xdist",
+    "black",
+    "isort",
+    "flake8",
+    "mypy",
+    "pylint",
+    "bandit",
+    "vulture",
+    "sphinx",
+    "sphinx-rtd-theme",
+    "sphinx-autodoc-typehints",
+    "myst-parser",
+    "pre-commit",
+    "jupyter",
+    "ipython",
+    "notebook",
+    "line-profiler",
+    "memory-profiler",
+    "factory-boy",
+    "faker",
+    "hypothesis",
+]
+
 [tool.poetry.scripts]
 legal-ai = "legal_ai_system.main:main"
 legal-ai-cli = "legal_ai_system.cli.system_commands:main"
