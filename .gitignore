@@ -15,3 +15,9 @@ frontend/dist/
 .ipynb_checkpoints/
 *.log
 *~
+
+# Environment files
+.env
+# Python artifacts
+*.py[cod]
+*.egg-info/
