@@ -150,6 +150,7 @@ async def test_process_document_realtime_returns_result_structure() -> None:
         "graph_updates",
         "vector_updates",
         "memory_updates",
+        "text_rewriting",
     }
     assert expected_keys.issubset(set(data.keys()))
     assert result.document_id
@@ -172,6 +173,14 @@ async def test_process_document_realtime_updates_graph_and_vectors() -> None:
 
     wf._update_knowledge_graph_realtime.assert_awaited()
     wf._update_vector_store_realtime.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_process_document_realtime_invokes_rewriter() -> None:
+    wf = DummyWorkflow()
+    await wf.process_document_realtime("sample.txt")
+
+    wf.document_rewriter.rewrite_text.assert_awaited()
 
 
 @pytest.mark.asyncio
