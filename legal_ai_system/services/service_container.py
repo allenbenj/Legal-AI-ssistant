@@ -632,6 +632,13 @@ async def create_service_container(
 
     connection_pool_service = await container.get_service("connection_pool")
 
+    from .database_manager import DatabaseManager
+    db_path = str(config_manager_service.get("data_dir") / "databases" / "legal_ai_gui.db")
+    await container.register_service(
+        "database_manager",
+        instance=DatabaseManager(db_path),
+    )
+
     # 3. Persistence Manager
     persistence_cfg = config_manager_service.get("persistence_layer_details", {})
     await container.register_service(

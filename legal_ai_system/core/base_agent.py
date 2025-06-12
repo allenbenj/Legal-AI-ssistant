@@ -23,6 +23,7 @@ Typical usage example:
 import asyncio
 import logging
 import time
+import json
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, TypeVar, Generic
 from dataclasses import dataclass, field
@@ -387,6 +388,56 @@ class BaseAgent(ABC):
                 )
         return None
 
+    async def _get_service_async(self, name: str) -> Any:
+        """Async helper to retrieve a service, awaiting coroutines."""
+        svc = self._get_service(name)
+        if asyncio.iscoroutine(svc):
+            try:
+                return await svc
+            except Exception as e:  # pragma: no cover - service failure
+                self.logger.warning(
+                    f"Async service retrieval failed for '{name}'",
+                    parameters={"error": str(e)},
+                )
+                return None
+        return svc
+
+    async def _log_result_to_services(self, result: AgentResult) -> None:
+        """Persist agent result via memory and database managers."""
+        metadata = result.metadata or {}
+        session_id = metadata.get("session_id")
+
+        mem_mgr = await self._get_service_async("unified_memory_manager")
+        if mem_mgr and hasattr(mem_mgr, "log_agent_decision"):
+            try:
+                await mem_mgr.log_agent_decision(
+                    agent_name=self.name,
+                    session_id=session_id,
+                    input_summary=str(metadata)[:200],
+                    decision_details={"result": result.data},
+                    context_used=metadata.get("context"),
+                    confidence=metadata.get("confidence", 1.0),
+                    tags=metadata.get("tags"),
+                )
+            except Exception as e:
+                self.logger.warning(
+                    "Failed to record decision in memory manager",
+                    parameters={"error": str(e)},
+                )
+
+        db_mgr = await self._get_service_async("database_manager")
+        if db_mgr and hasattr(db_mgr, "save_agent_result"):
+            try:
+                db_mgr.save_agent_result(
+                    agent_name=self.name,
+                    session_id=session_id,
+                    result=result.to_dict(),
+                )
+            except Exception as e:
+                self.logger.warning(
+                    "Failed to persist agent result", parameters={"error": str(e)}
+                )
+
     # =================== AGENT PROCESSING METHODS ===================
 
     @abstractmethod
@@ -469,6 +520,8 @@ class BaseAgent(ABC):
             logger.info(
                 f"Agent {self.name} completed task {task_id} in {execution_time:.2f}s"
             )
+
+            await self._log_result_to_services(result)
 
             return result
 
