@@ -189,6 +189,25 @@ class ConfigurationManager:
         
         config_manager_logger.info(f"Runtime configuration override set", parameters={'key': key, 'new_value_type': type(value).__name__})
 
+    @detailed_log_function(LogCategory.CONFIG)
+    def update_setting(self, key: str, value: Any, persist: bool = True) -> None:
+        """Update a setting and optionally persist changes to disk."""
+        config_manager_logger.info("Updating setting", parameters={"key": key})
+        setattr(self._settings, key, value)
+        if persist:
+            try:
+                self.DEFAULTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+                data = self.get_all_settings()
+                with self.DEFAULTS_FILE.open("w") as f:
+                    yaml.safe_dump(data, f, default_flow_style=False)
+                config_manager_logger.info(
+                    "Settings persisted", parameters={"path": str(self.DEFAULTS_FILE)}
+                )
+            except Exception as e:
+                config_manager_logger.error(
+                    "Failed to persist settings", parameters={"key": key}, exception=e
+                )
+
     # Methods like get_llm_config, get_database_config, etc., are good.
     # They centralize access to related groups of settings.
     # Ensure they use the `self.get()` method to benefit from overrides and logging.
