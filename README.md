@@ -66,7 +66,7 @@ separately:
 pip install langgraph==0.0.20
 ```
 
-The [advanced LangGraph guide](docs/advanced_langgraph.md) explains how this
+The [advanced LangGraph guide](legal_ai_system/docs/advanced_langgraph.md) explains how this
 optional dependency enables document classification routing, specialized
 subgraphs, and real-time progress updates over WebSocket. It also shows a
 `CaseWorkflowState` example for passing state between nodes.
@@ -80,7 +80,7 @@ aliased consistently:
 python legal_ai_system/scripts/fix_langgraph_typing.py
 ```
 
-For more detailed instructions see [ENV_SETUP.md](docs/ENV_SETUP.md).
+For more detailed instructions see [ENV_SETUP.md](legal_ai_system/docs/ENV_SETUP.md).
 
 The older `setup_environment_task.py` script can also be used to create the vir
 tual environment and run the tests:
@@ -118,7 +118,7 @@ python legal_ai_system/scripts/install_all_dependencies.py
 
 Missing packages such as `pytest-mock` will cause test failures.
 
-See [docs/test_setup.md](docs/test_setup.md) for more information.
+See [docs/test_setup.md](legal_ai_system/docs/test_setup.md) for more information.
 
 ## Using the GUIs
 
@@ -148,12 +148,12 @@ This interface can open local documents and run the default analysis workflow
 without a browser. It is primarily a demo and lacks the advanced features of the
 Streamlit and React frontends.
 
-Detailed instructions are available in [docs/gui_setup.md](docs/gui_setup.md).
+Detailed instructions are available in [docs/gui_setup.md](legal_ai_system/docs/gui_setup.md).
 
 ### Extraction Options
 
 The ontology extraction agent supports multiple NER backends. Enable them in
-`config/defaults.yaml`:
+`legal_ai_system/config/defaults.yaml`:
 
 - `enable_spacy_ner`: load a spaCy pipeline specified by `spacy_ner_model`.
 - `enable_legal_bert`: use a HuggingFace Legal‑BERT model defined by
@@ -177,7 +177,7 @@ print(result)
 ```
 
 You can customize the workflow builder to enable or disable specific agents.
-See the documents in the `docs/` folder for architecture details and advanced
-usage. The [Integration Guide](docs/integration_plan.md) summarises the
+See the documents in the `legal_ai_system/docs/` folder for architecture details and advanced
+usage. The [Integration Guide](legal_ai_system/docs/integration_plan.md) summarises the
 five-phase integration plan, WebSocket patterns and deployment tips and
 includes sections on security, testing, success metrics and troubleshooting.

@@ -70,7 +70,7 @@ python legal_ai_system/scripts/check_optional_dependencies.py
 ```
 
 ## Configuration Overrides
-The application loads defaults from `config/defaults.yaml`. Any environment variable
+The application loads defaults from `legal_ai_system/config/defaults.yaml`. Any environment variable
 beginning with `LEGAL_AI_` overrides the matching key. For example:
 
 ```bash
