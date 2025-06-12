@@ -545,6 +545,47 @@ def create_persistence_manager(
     )
 
 
+async def register_all_agents(
+    container: "ServiceContainer", config_manager_service: Any
+) -> None:
+    """Discover agents under ``legal_ai_system/agents`` and register them.
+
+    Modules are not imported until the agent instance is requested to avoid
+    heavy imports during container setup.  Each agent is registered under a
+    lowercase key derived from the class name.
+    """
+    import ast
+    from importlib import import_module
+    from pathlib import Path
+
+    agents_path = Path(__file__).resolve().parents[1] / "agents"
+    for file in agents_path.glob("*.py"):
+        module_name = f"legal_ai_system.agents.{file.stem}"
+        with open(file, "r", encoding="utf-8") as fh:
+            tree = ast.parse(fh.read(), filename=str(file))
+
+        class_names = [
+            n.name
+            for n in tree.body
+            if isinstance(n, ast.ClassDef)
+            and (n.name.endswith("Agent") or n.name.endswith("Engine"))
+        ]
+        for cls_name in class_names:
+            agent_id = cls_name.lower()
+            agent_config = config_manager_service.get(
+                f"agents.{agent_id}_config", {}
+            )
+
+            async def factory(sc, *, m=module_name, c=cls_name, cfg=agent_config):
+                mod = import_module(m)
+                cls = getattr(mod, c)
+                return cls(sc, **cfg)
+
+            await container.register_service(
+                agent_id, factory=factory, is_async_factory=True
+            )
+
+
 # Global factory function to create and populate the service container
 # This is where you define how your system's services are created and wired together.
 async def create_service_container(
@@ -891,93 +932,9 @@ async def create_service_container(
         is_async_factory=False,
     )
 
-    # Agents are often stateful per task, so factories are common.
-    # Or, if stateless, can be singletons. BaseAgent is typically instantiated per use or task.
-    # Here we register the classes themselves, and workflows will instantiate them.
-    # If agents are true "services" (long-lived, shared), then register instances.
-    # For now, let's assume workflows will get agent *classes* or factories.
-    # Or, if agents are simple enough to be singletons:
-    from ..agents.document_processor_agent import DocumentProcessorAgent
-    from ..agents.document_processor_agent_v2 import DocumentProcessorAgentV2
-    from ..agents.document_rewriter_agent import DocumentRewriterAgent
-    from ..agents.ontology_extraction_agent import OntologyExtractionAgent
-    from ..agents.entity_extraction_agent import StreamlinedEntityExtractionAgent
-    from ..agents.legal_reasoning_engine import LegalReasoningEngine
-    from ..agents.knowledge_graph_reasoning_agent import (
-        KnowledgeGraphReasoningAgent,
-    )
-
-    # Example: await container.register_service("document_processor_agent", instance=DocumentProcessorAgent(container))
-    # This needs careful thought: are agents services or instantiated by workflows?
-    # The original code often had agents take 'services' in __init__, implying they are created with access to container.
-    # Let's register them as factories that take the container.
-
-    agent_classes = {
-        "document_processor_agent": DocumentProcessorAgent,
-        "document_processor_agent_v2": DocumentProcessorAgentV2,
-        "ontology_extraction_agent": OntologyExtractionAgent,
-        "streamlined_entity_extraction_agent": StreamlinedEntityExtractionAgent,
-        # ... Add all other agent classes from agents/__init__.py
-        "semantic_analysis_agent": getattr(
-            __import__("legal_ai_system.agents", fromlist=["SemanticAnalysisAgent"]),
-            "SemanticAnalysisAgent",
-            None,
-        ),
-        "structural_analysis_agent": getattr(
-            __import__("legal_ai_system.agents", fromlist=["StructuralAnalysisAgent"]),
-            "StructuralAnalysisAgent",
-            None,
-        ),
-        "citation_analysis_agent": getattr(
-            __import__("legal_ai_system.agents", fromlist=["CitationAnalysisAgent"]),
-            "CitationAnalysisAgent",
-            None,
-        ),
-        "text_correction_agent": getattr(
-            __import__("legal_ai_system.agents", fromlist=["TextCorrectionAgent"]),
-            "TextCorrectionAgent",
-            None,
-        ),
-        "document_rewriter_agent": DocumentRewriterAgent,
-        "violation_detector_agent": getattr(
-            __import__("legal_ai_system.agents", fromlist=["ViolationDetectorAgent"]),
-            "ViolationDetectorAgent",
-            None,
-        ),
-        "auto_tagging_agent": getattr(
-            __import__("legal_ai_system.agents", fromlist=["AutoTaggingAgent"]),
-            "AutoTaggingAgent",
-            None,
-        ),
-        "note_taking_agent": getattr(
-            __import__("legal_ai_system.agents", fromlist=["NoteTakingAgent"]),
-            "NoteTakingAgent",
-            None,
-        ),
-        "legal_analysis_agent": getattr(
-            __import__("legal_ai_system.agents", fromlist=["LegalAnalysisAgent"]),
-            "LegalAnalysisAgent",
-            None,
-        ),
-        "knowledge_base_agent": getattr(
-            __import__("legal_ai_system.agents", fromlist=["KnowledgeBaseAgent"]),
-            "KnowledgeBaseAgent",
-            None,
-        ),
-        "knowledge_graph_reasoning_agent": KnowledgeGraphReasoningAgent,
-        "legal_reasoning_engine": LegalReasoningEngine,
-    }
-    for name, agent_cls in agent_classes.items():
-        if agent_cls:  # Check if import was successful
-            agent_config = config_manager_service.get(
-                f"agents.{name}_config", {}
-            )  # Agent specific config
-            # Pass the service_container (self) to the factory
-            await container.register_service(
-                name,
-                factory=lambda sc, cfg=agent_config, cls=agent_cls: cls(sc, **cfg),
-                is_async_factory=False,
-            )
+    # Dynamically register all available agents. This defers module imports
+    # until the agent is actually requested from the container.
+    await register_all_agents(container, config_manager_service)
 
     # Register simple LangGraph node classes for builder workflows
     from ..agents.agent_nodes import AnalysisNode, SummaryNode
