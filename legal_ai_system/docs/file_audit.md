@@ -165,22 +165,4 @@ The following packages are mostly stubs and were previously flagged in `cleanup_
 
 These modules contain minimal code and are primarily re-export or placeholder implementations. They can likely be removed or consolidated once the PyQt6 GUI (`legal_ai_system/gui/legal_ai_pyqt6_integrated.py`) is fully adopted.
 
-## Documentation Review
 
-The following documentation files reference modules or behaviour that no longer
-match the current codebase:
-
-- `gui_setup.md` – states that running `python -m legal_ai_system` launches the
-  Streamlit dashboard. The entry point now starts the PyQt6 GUI located at
-  `gui/legal_ai_pyqt6_integrated.py`. Update the instructions accordingly.
-- `api_endpoints.md` – describes REST endpoints for a FastAPI backend, but the
-  repository does not include the corresponding FastAPI application. Consider
-  removing this file or replacing it with up‑to‑date API documentation when the
-  backend is implemented.
-- `legacy/violation_review_agent_original.md` – contains archived code for a
-  deleted agent. Keep only if historical reference is required; otherwise it can
-  be removed.
-- `legacy/removed_backends.md` – documents removed FastAPI servers. This file is
-  redundant once those services are fully retired.
-
-Please update or prune these documents during the next cleanup cycle.
