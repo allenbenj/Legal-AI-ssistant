@@ -65,7 +65,7 @@ Key services registered with the container include:
 - **SecurityManager** – authentication, authorization and PII detection.  Defined in `services/security_manager.py` lines 1‑11.
 - Provides encryption utilities and enforces secure access to all agents.
 - **MemoryManager** – manages persistent context and agent memory.  Defined in `services/memory_manager.py` lines 1‑9.
-- Stores conversation history and workflow results in SQLite or Redis backends.
+- Uses SQLite for session state while PostgreSQL persists entities and workflows. Redis provides fast caching.
 - **KnowledgeGraphManager** – handles graph storage and entity/relationship management.  Defined in `services/knowledge_graph_manager.py` lines 1‑9.
 - Interfaces with Neo4j and manages schema evolution for legal entities.
 - **RealTimeGraphManager** – synchronizes the semantic graph with vector store updates.  Defined in `services/realtime_graph_manager.py` lines 1‑9.

@@ -10,6 +10,9 @@ from pydantic import BaseModel, Field
 class DatabaseConfig(BaseModel):
     """Database related settings."""
 
+    database_url: Optional[str] = Field(None, description="PostgreSQL connection URL")
+    redis_url_cache: Optional[str] = Field(None, description="Redis cache URL")
+    redis_url_queue: Optional[str] = Field(None, description="Redis queue URL")
     sqlite_path: Path = Field(..., description="Path to SQLite database")
     memory_db_path: Path = Field(..., description="Path to unified memory DB")
     violations_db_path: Path = Field(..., description="Path to violations DB")
