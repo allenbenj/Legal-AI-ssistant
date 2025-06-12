@@ -13,6 +13,7 @@ import requests
 from PyQt6 import QtCore, QtGui, QtWidgets
 
 from .memory_brain_widget import MemoryBrainWidget
+from .tray_icon import TrayIcon
 
 from ..core.settings import settings
 from ..log_setup import init_logging
@@ -426,6 +427,9 @@ def main() -> None:
     init_logging()
     app = QtWidgets.QApplication([])
     window = MainWindow()
+    tray = TrayIcon(window)
+    tray.show()
+    app.aboutToQuit.connect(tray.shutdown)
     window.show()
     app.exec()
 
