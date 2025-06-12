@@ -23,6 +23,11 @@ from ..core.detailed_logging import (
 from .realtime_analysis_workflow import RealTimeAnalysisWorkflow
 from .metrics_exporter import metrics_exporter
 
+try:
+    from ..api.websocket_manager import ConnectionManager
+except Exception:  # pragma: no cover - optional during tests
+    ConnectionManager = None  # type: ignore
+
 wo_logger = get_detailed_logger("WorkflowOrchestrator", LogCategory.SYSTEM)
 
 
@@ -62,19 +67,22 @@ class WorkflowOrchestrator:
             task_queue=task_queue,
         )
 
+        self.connection_manager: ConnectionManager | None = None
+
 
         wo_logger.info("WorkflowOrchestrator initialized")
 
-    async def _forward_progress(self, message: str, progress: float) -> None:
-        """Forward workflow progress via WebSocket if manager available."""
-        if not self.websocket_manager:
+    async def _broadcast_progress(self, message: str, progress: float) -> None:
+        """Broadcast workflow progress using the connection manager."""
+        if not self.connection_manager:
             return
         try:
-            await self.websocket_manager.broadcast(
+            await self.connection_manager.broadcast(
                 f"workflow_progress_{self.topic}",
                 {
-                    "type": "processing_progress",
-                    "message": message,
+                    "type": "workflow_progress",
+                    "workflow_id": self.topic,
+                    "stage": message,
                     "progress": float(progress),
                 },
             )
@@ -88,8 +96,6 @@ class WorkflowOrchestrator:
 
         await self.workflow.initialize()
 
-        if self.websocket_manager:
-            self.workflow.register_progress_callback(self._forward_progress)
         # lazily build graph for builder-based workflow
         if self._graph is None:
             self._graph = self.graph_builder(self.topic)
@@ -104,17 +110,7 @@ class WorkflowOrchestrator:
                 self.connection_manager = None
 
         if self.connection_manager:
-            async def _progress_cb(message: str, progress: float) -> None:
-                await self.connection_manager.broadcast(
-                    "workflow_progress",
-                    {
-                        "type": "workflow_progress",
-                        "message": message,
-                        "progress": float(progress),
-                    },
-                )
-
-            self.workflow.register_progress_callback(_progress_cb)
+            self.workflow.register_progress_callback(self._broadcast_progress)
 
     def _create_builder_graph(self, topic: Optional[str] = None):
         """Return a LangGraph graph for the provided topic."""
