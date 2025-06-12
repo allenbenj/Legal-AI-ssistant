@@ -145,8 +145,20 @@ pip install PyQt6
 ```
 
 This interface can open local documents and run the default analysis workflow
-without a browser. It is primarily a demo and lacks the advanced features of the
-Streamlit and React frontends.
+without a browser. Under the hood the GUI starts a **BackendBridge** which
+initialises the asynchronous service container and forwards all actions to the
+`LegalAIIntegrationService`. Progress updates are emitted back to the widgets in
+real time.
+
+```python
+from legal_ai_system.gui import IntegratedMainWindow
+window = IntegratedMainWindow()
+window.show()
+```
+
+The bridge ensures the desktop app communicates with the same backend services
+as the API and other frontends. It is primarily a demo and lacks the advanced
+features of the Streamlit and React frontends.
 
 Detailed instructions are available in [docs/gui_setup.md](legal_ai_system/docs/gui_setup.md).
 
