@@ -782,13 +782,17 @@ class IntegratedMainWindow(QMainWindow):
         
     def filterDocuments(self):
         """Filter documents based on criteria"""
-        # Implement filtering logic
-        pass
-        
+        raise NotImplementedError(
+            "Document filtering is not implemented because the required \"
+            "DocumentTableModel\" from 'legal_ai_desktop' is unavailable."
+        )
+
     def exportDocuments(self):
         """Export selected documents"""
-        # Implement export logic
-        pass
+        raise NotImplementedError(
+            "Document exporting is not implemented because the required \"
+            "DocumentTableModel\" from 'legal_ai_desktop' is unavailable."
+        )
         
     def showDocumentContextMenu(self, pos: QPoint):
         """Show context menu for documents"""
