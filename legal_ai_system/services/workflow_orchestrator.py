@@ -70,13 +70,20 @@ class WorkflowOrchestrator:
         if not self.websocket_manager:
             return
         try:
+            payload = {
+                "type": "workflow_progress",
+                "workflow_id": self.topic,
+                "stage": message,
+                "progress": float(progress),
+            }
             await self.websocket_manager.broadcast(
                 f"workflow_progress_{self.topic}",
-                {
-                    "type": "processing_progress",
-                    "message": message,
-                    "progress": float(progress),
-                },
+                payload,
+            )
+            # Generic channel used by GUI dashboards
+            await self.websocket_manager.broadcast(
+                "workflow_updates",
+                payload,
             )
         except Exception as exc:  # pragma: no cover - network issues
             wo_logger.error(
@@ -105,13 +112,19 @@ class WorkflowOrchestrator:
 
         if self.connection_manager:
             async def _progress_cb(message: str, progress: float) -> None:
+                payload = {
+                    "type": "workflow_progress",
+                    "workflow_id": self.topic,
+                    "stage": message,
+                    "progress": float(progress),
+                }
                 await self.connection_manager.broadcast(
                     "workflow_progress",
-                    {
-                        "type": "workflow_progress",
-                        "message": message,
-                        "progress": float(progress),
-                    },
+                    payload,
+                )
+                await self.connection_manager.broadcast(
+                    "workflow_updates",
+                    payload,
                 )
 
             self.workflow.register_progress_callback(_progress_cb)
