@@ -7,6 +7,8 @@ from typing import Any, Dict, List
 
 from PyQt6 import QtCore, QtWidgets
 
+from .memory_table_model import MemoryTableWidget
+
 from .panels.memory_brain_panel import MemoryEntry
 from .memory_brain_core import MemoryBrainCore
 
@@ -21,8 +23,6 @@ class MemoryBrainWidget(QtWidgets.QWidget):
         self.memory_entries = self.core.memory_entries
         self._build_ui()
 
-
-
     # ------------------------------------------------------------------
     # UI construction
     # ------------------------------------------------------------------
@@ -31,6 +31,7 @@ class MemoryBrainWidget(QtWidgets.QWidget):
         tabs.addTab(self._build_intake_tab(), "Statement Intake")
         tabs.addTab(self._build_check_tab(), "Contradiction Check")
         tabs.addTab(self._build_curate_tab(), "Merge & Curate")
+        tabs.addTab(self._build_view_tab(), "Memory View")
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.addWidget(tabs)
@@ -95,11 +96,15 @@ class MemoryBrainWidget(QtWidgets.QWidget):
     def _build_curate_tab(self) -> QtWidgets.QWidget:
         widget = QtWidgets.QWidget()
         label = QtWidgets.QLabel(
-            "Additional curation tools would appear here.", alignment=QtCore.Qt.AlignmentFlag.AlignTop
+            "Additional curation tools would appear here.",
+            alignment=QtCore.Qt.AlignmentFlag.AlignTop,
         )
         layout = QtWidgets.QVBoxLayout(widget)
         layout.addWidget(label)
         return widget
+
+    def _build_view_tab(self) -> QtWidgets.QWidget:
+        return MemoryTableWidget(parent=self)
 
 
 __all__ = ["MemoryBrainWidget"]

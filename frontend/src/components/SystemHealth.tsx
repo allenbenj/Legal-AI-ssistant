@@ -20,8 +20,20 @@ interface HealthResponse {
   timestamp: string;
 }
 
+interface ServicesOverview {
+  services: {
+    [name: string]: {
+      state: string;
+      config_key?: string;
+    };
+  };
+  active_workflow_config: Record<string, any>;
+  timestamp: string;
+}
+
 const SystemHealth: React.FC = () => {
   const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [servicesInfo, setServicesInfo] = useState<ServicesOverview | null>(null);
   const [clientId] = useState(() => 'health-' + Math.random().toString(36).slice(2));
   const { status } = useRealtimeSystemStatus(clientId);
 
@@ -32,6 +44,17 @@ const SystemHealth: React.FC = () => {
       .catch((err) => {
         if (process.env.NODE_ENV !== 'production') {
           console.error('Failed to load system health', err);
+        }
+      });
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/v1/services')
+      .then(res => res.json())
+      .then((data: ServicesOverview) => setServicesInfo(data))
+      .catch(err => {
+        if (process.env.NODE_ENV !== 'production') {
+          console.error('Failed to load services info', err);
         }
       });
   }, []);
@@ -58,6 +81,16 @@ const SystemHealth: React.FC = () => {
       <Card style={cardStyle}>
         <div style={{ marginBottom: '0.5rem' }}>Services Healthy</div>
         <div style={valueStyle}>{healthyServices}/{totalServices}</div>
+      </Card>
+      <Card style={{ gridColumn: '1 / span 3' }}>
+        <div style={{ marginBottom: '0.5rem', fontWeight: 500 }}>Service States</div>
+        <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+          {Object.entries(servicesInfo?.services || {}).map(([name, info]) => (
+            <li key={name} style={{ marginBottom: '0.25rem' }}>
+              <strong>{name}</strong>: {info.state}
+            </li>
+          ))}
+        </ul>
       </Card>
     </Grid>
   );

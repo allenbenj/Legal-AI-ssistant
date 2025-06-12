@@ -13,6 +13,7 @@ import requests
 from PyQt6 import QtCore, QtGui, QtWidgets
 
 from .memory_brain_widget import MemoryBrainWidget
+from .tray_icon import TrayIcon
 
 from ..core.settings import settings
 from ..log_setup import init_logging
@@ -244,6 +245,9 @@ class UploadTab(QtWidgets.QWidget):
         upload_btn = QtWidgets.QPushButton("Upload && Process")
         upload_btn.clicked.connect(self.upload)
         self.progress = QtWidgets.QProgressBar()
+        self.progress_anim = QtCore.QPropertyAnimation(self.progress, b"value", self)
+        self.progress_anim.setDuration(400)
+        self.progress_anim.setEasingCurve(QtCore.QEasingCurve.Type.InOutCubic)
         self.output = QtWidgets.QTextEdit(readOnly=True)
 
         top = QtWidgets.QHBoxLayout()
@@ -283,28 +287,23 @@ class UploadTab(QtWidgets.QWidget):
         if not self.document_id:
             return
         url = f"{self.ws_base}/ws/{self.client_id}"
-        topics = [f"document_updates_{self.document_id}", "system_status"]
         self.ws_worker = WebSocketWorker(url, topics)
         self.ws_worker.message_received.connect(self.handle_update)
         self.ws_worker.start()
 
     def handle_update(self, data: Dict[str, Any]) -> None:
         msg_type = data.get("type")
-        if msg_type == "system_status":
-            self.output.append(
-                f"System CPU {data.get('cpu')}% MEM {data.get('memory')}%"
-            )
             return
 
         if data.get("document_id") != self.document_id:
             return
-
         if msg_type == "processing_progress":
             prog = int(float(data.get("progress", 0)) * 100)
-            self.progress.setValue(prog)
+            self.progress_anim.stop()
+            self.progress_anim.setStartValue(self.progress.value())
+            self.progress_anim.setEndValue(prog)
+            self.progress_anim.start()
             self.output.append(f"Stage: {data.get('stage')}")
-        elif msg_type == "processing_complete":
-            self.progress.setValue(100)
             self.output.append("Completed")
 
 
@@ -501,6 +500,9 @@ def main() -> None:
     init_logging()
     app = QtWidgets.QApplication([])
     window = MainWindow()
+    tray = TrayIcon(window)
+    tray.show()
+    app.aboutToQuit.connect(tray.shutdown)
     window.show()
     app.exec()
 
