@@ -181,3 +181,8 @@ See the documents in the `legal_ai_system/docs/` folder for architecture details
 usage. The [Integration Guide](legal_ai_system/docs/integration_plan.md) summarises the
 five-phase integration plan, WebSocket patterns and deployment tips and
 includes sections on security, testing, success metrics and troubleshooting.
+
+The audit report in
+[legal_ai_system/docs/file_audit.md](legal_ai_system/docs/file_audit.md)
+captures the current folder layout, dependency findings, and a cleanup plan.
+Refer to it when making structural changes or removing deprecated modules.
