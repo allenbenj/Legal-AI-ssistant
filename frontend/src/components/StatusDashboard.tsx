@@ -39,7 +39,6 @@ const StatusDashboard: React.FC<StatusDashboardProps> = ({ clientId }) => {
                       height: '0.5rem',
                       borderRadius: spacing.xs,
                     }}
-
     </div>
   );
 };
