@@ -1,9 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { Card, Grid } from '../design-system';
-import ProgressiveLoader, { LoaderStage } from './ProgressiveLoader';
-import useWebSocket, { subscribe, unsubscribe } from '../hooks/useWebSocket';
-import useMetrics from '../hooks/useMetrics';
-import MetricsChart from './MetricsChart';
 import { spacing, colors } from '../design-system/tokens';
 
 interface WorkflowUpdate {
@@ -18,10 +14,6 @@ export interface StatusDashboardProps {
 
 const StatusDashboard: React.FC<StatusDashboardProps> = ({ clientId }) => {
   const [workflows, setWorkflows] = useState<Record<string, WorkflowUpdate>>({});
-  const { connected, send } = useWebSocket(`/ws/${clientId}`, handleMessage);
-  const subscribed = useRef(false);
-  const metrics = useMetrics();
-
   function handleMessage(data: any) {
     if (data.type === 'workflow_progress') {
       setWorkflows(prev => ({
@@ -35,18 +27,6 @@ const StatusDashboard: React.FC<StatusDashboardProps> = ({ clientId }) => {
     }
   }
 
-  useEffect(() => {
-    if (connected && !subscribed.current) {
-      subscribe({ send }, 'workflow_updates');
-      subscribed.current = true;
-    }
-    return () => {
-      if (subscribed.current) {
-        unsubscribe({ send }, 'workflow_updates');
-        subscribed.current = false;
-      }
-    };
-  }, [connected]);
 
   const items = Object.values(workflows);
 
