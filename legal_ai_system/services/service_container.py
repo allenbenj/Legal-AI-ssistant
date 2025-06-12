@@ -462,6 +462,29 @@ class ServiceContainer:
         )
         return summary
 
+    @detailed_log_function(LogCategory.SYSTEM)
+    def get_services_status(self) -> Dict[str, Any]:
+        """Return lifecycle state and configuration of registered services."""
+        services_data: Dict[str, Any] = {}
+        for name in self._initialization_order:
+            state = self._service_states.get(name, ServiceLifecycleState.REGISTERED)
+            factory_info = self._service_factories.get(name, {})
+            services_data[name] = {
+                "state": state.value,
+                "config_key": factory_info.get("config_key"),
+                "factory_kwargs": {k: repr(v) for k, v in factory_info.get("kwargs", {}).items()},
+            }
+
+        overview = {
+            "services": services_data,
+            "active_workflow_config": self.get_active_workflow_config(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        service_container_logger.info(
+            "Services status overview generated.", parameters=overview
+        )
+        return overview
+
     def add_background_task(self, coro: Awaitable[Any]) -> None:
         """Adds an awaitable to be run as a background task, managed by the container."""
         task = asyncio.create_task(coro)
