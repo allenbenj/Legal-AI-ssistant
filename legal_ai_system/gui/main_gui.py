@@ -177,6 +177,9 @@ class UploadTab(QtWidgets.QWidget):
         upload_btn = QtWidgets.QPushButton("Upload && Process")
         upload_btn.clicked.connect(self.upload)
         self.progress = QtWidgets.QProgressBar()
+        self.progress_anim = QtCore.QPropertyAnimation(self.progress, b"value", self)
+        self.progress_anim.setDuration(400)
+        self.progress_anim.setEasingCurve(QtCore.QEasingCurve.Type.InOutCubic)
         self.output = QtWidgets.QTextEdit(readOnly=True)
 
         top = QtWidgets.QHBoxLayout()
@@ -226,10 +229,16 @@ class UploadTab(QtWidgets.QWidget):
             return
         if data.get("type") == "processing_progress":
             prog = int(float(data.get("progress", 0)) * 100)
-            self.progress.setValue(prog)
+            self.progress_anim.stop()
+            self.progress_anim.setStartValue(self.progress.value())
+            self.progress_anim.setEndValue(prog)
+            self.progress_anim.start()
             self.output.append(f"Stage: {data.get('stage')}")
         elif data.get("type") == "processing_complete":
-            self.progress.setValue(100)
+            self.progress_anim.stop()
+            self.progress_anim.setStartValue(self.progress.value())
+            self.progress_anim.setEndValue(100)
+            self.progress_anim.start()
             self.output.append("Completed")
 
 
