@@ -508,6 +508,43 @@ class ServiceContainer:
         return dict(self._active_workflow_config)
 
 
+# ----- Service Factories -------------------------------------------------
+def create_connection_pool(
+    service_container: "ServiceContainer",
+    database_url: Optional[str] = None,
+    redis_url: Optional[str] = None,
+    min_pg_connections: int = 5,
+    max_pg_connections: int = 20,
+    max_redis_connections: int = 10,
+) -> "ConnectionPool":
+    """Factory for :class:`ConnectionPool` used by the persistence layer."""
+    from ..core.enhanced_persistence import ConnectionPool
+
+    return ConnectionPool(
+        database_url,
+        redis_url,
+        min_pg_connections,
+        max_pg_connections,
+        max_redis_connections,
+    )
+
+
+def create_persistence_manager(
+    service_container: "ServiceContainer",
+    connection_pool: "ConnectionPool",
+    config: Optional[Dict[str, Any]] = None,
+    metrics_exporter: Optional[Any] = None,
+) -> Any:
+    """Factory for the persistence manager."""
+    from ..core.enhanced_persistence import EnhancedPersistenceManager
+
+    return EnhancedPersistenceManager(
+        connection_pool=connection_pool,
+        config=config or {},
+        metrics_exporter=metrics_exporter,
+    )
+
+
 # Global factory function to create and populate the service container
 # This is where you define how your system's services are created and wired together.
 async def create_service_container(
@@ -519,14 +556,6 @@ async def create_service_container(
     """
     service_container_logger.info("=== CREATE SERVICE CONTAINER START ===")
     container = ServiceContainer()
-
-    # Start Prometheus metrics exporter
-    from .metrics_exporter import init_metrics_exporter
-
-    await container.register_service(
-        "metrics_exporter",
-        instance=init_metrics_exporter(),
-    )
 
     # 1. Configuration Manager (must be first)
     from ..core.configuration_manager import create_configuration_manager
@@ -540,6 +569,39 @@ async def create_service_container(
     )
     config_manager_service = await container.get_service("configuration_manager")
 
+    # Register the metrics exporter after config so it can read settings if needed
+    from .metrics_exporter import init_metrics_exporter
+
+    await container.register_service(
+        "metrics_exporter",
+        instance=init_metrics_exporter(),
+    )
+
+    # 2. Database Connection Pool
+    db_conf = config_manager_service.get_database_config()
+    await container.register_service(
+        "connection_pool",
+        factory=lambda sc, db_url=db_conf.neo4j_uri, redis_url=config_manager_service.get("REDIS_URL_CACHE"): create_connection_pool(
+            sc,
+            database_url=db_url,
+            redis_url=redis_url,
+        ),
+        is_async_factory=False,
+    )
+
+    connection_pool_service = await container.get_service("connection_pool")
+
+    # 3. Persistence Manager
+    persistence_cfg = config_manager_service.get("persistence_layer_details", {})
+    await container.register_service(
+        "persistence_manager",
+        factory=create_persistence_manager,
+        is_async_factory=False,
+        connection_pool=connection_pool_service,
+        config=persistence_cfg,
+        metrics_exporter=await container.get_service("metrics_exporter"),
+    )
+
     # Task Queue setup for background processing
     from .task_queue import TaskQueue
 
@@ -551,41 +613,12 @@ async def create_service_container(
         instance=TaskQueue(redis_url=queue_url),
     )
 
-    # Create shared connection pool for all persistence layers
-    from ..core.enhanced_persistence import ConnectionPool
-
-    db_conf = config_manager_service.get_database_config()
-    pool = ConnectionPool(
-        db_conf.neo4j_uri,
-        config_manager_service.get("REDIS_URL_CACHE"),
-    )
-    await pool.initialize()
-    await container.register_service("connection_pool", instance=pool)
-
     # 2. Core Services (Loggers are implicitly available via get_detailed_logger)
     # ErrorHandler is a global singleton, usually not registered but can be if needed for explicit access.
     # from .unified_exceptions import get_error_handler
     # await container.register_service("error_handler", instance=get_error_handler())
 
-    # 3. Persistence Layer (Moved up as UserRepository depends on it)
-    from ..core.enhanced_persistence import (
-        create_enhanced_persistence_manager,
-    )
-
-    db_conf = config_manager_service.get_database_config()
-    connection_pool_service = await container.get_service("connection_pool")
-    persistence_cfg_for_factory = {
-        "persistence_config": config_manager_service.get(
-            "persistence_layer_details", {}
-        ),
-    }
-    await container.register_service(
-        "persistence_manager",
-        factory=create_enhanced_persistence_manager,
-        is_async_factory=False,
-        connection_pool=connection_pool_service,
-        config=persistence_cfg_for_factory,
-    )
+    # 3. Persistence Layer (moved above)
 
     # Get PersistenceManager first as UserRepository depends on its pool
     persistence_manager_service = await container.get_service("persistence_manager")
