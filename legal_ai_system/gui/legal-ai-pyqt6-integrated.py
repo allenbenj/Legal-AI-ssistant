@@ -5,9 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 from datetime import datetime
 
-from PyQt6.QtWidgets import *
-from PyQt6.QtCore import *
-from PyQt6.QtGui import *
+from PyQt6 import QtWidgets, QtCore, QtGui
 
 # Import all our custom modules
 from legal_ai_desktop import (
@@ -41,7 +39,7 @@ from legal_ai_database import (
 
 
 # ==================== INTEGRATED MAIN WINDOW ====================
-class IntegratedMainWindow(QMainWindow):
+class IntegratedMainWindow(QtWidgets.QMainWindow):
     """Enhanced main window with all integrated features"""
     
     def __init__(self):
@@ -64,7 +62,7 @@ class IntegratedMainWindow(QMainWindow):
         self.applyTheme()
         
         # Start services
-        QTimer.singleShot(100, self.startServices)
+        QtCore.QTimer.singleShot(100, self.startServices)
         
     def initializeServices(self):
         """Initialize all backend services"""
@@ -90,17 +88,17 @@ class IntegratedMainWindow(QMainWindow):
         
     def setupUI(self):
         """Setup main UI"""
-        central = QWidget()
+        central = QtWidgets.QWidget()
         self.setCentralWidget(central)
-        main_layout = QVBoxLayout(central)
+        main_layout = QtWidgets.QVBoxLayout(central)
         
         # Top toolbar with quick actions
-        top_toolbar = QWidget()
-        top_layout = QHBoxLayout(top_toolbar)
+        top_toolbar = QtWidgets.QWidget()
+        top_layout = QtWidgets.QHBoxLayout(top_toolbar)
         top_layout.setContentsMargins(10, 5, 10, 5)
         
         # Search bar
-        self.global_search = QLineEdit()
+        self.global_search = QtWidgets.QLineEdit()
         self.global_search.setPlaceholderText("Search documents, entities, or legal terms...")
         self.global_search.returnPressed.connect(self.performGlobalSearch)
         top_layout.addWidget(self.global_search)
@@ -117,8 +115,8 @@ class IntegratedMainWindow(QMainWindow):
         main_layout.addWidget(top_toolbar)
         
         # Main content area with tabs
-        self.main_tabs = QTabWidget()
-        self.main_tabs.setTabPosition(QTabWidget.TabPosition.North)
+        self.main_tabs = QtWidgets.QTabWidget()
+        self.main_tabs.setTabPosition(QtWidgets.QTabWidget.TabPosition.North)
         self.main_tabs.setMovable(True)
         
         # Dashboard tab
@@ -139,15 +137,15 @@ class IntegratedMainWindow(QMainWindow):
         
         main_layout.addWidget(self.main_tabs)
         
-    def createDashboard(self) -> QWidget:
+    def createDashboard(self) -> QtWidgets.QWidget:
         """Create dashboard with overview widgets"""
-        dashboard = QWidget()
-        layout = QGridLayout(dashboard)
+        dashboard = QtWidgets.QWidget()
+        layout = QtWidgets.QGridLayout(dashboard)
         
         # Stats cards
-        stats_frame = QFrame()
-        stats_frame.setFrameStyle(QFrame.Shape.Box)
-        stats_layout = QHBoxLayout(stats_frame)
+        stats_frame = QtWidgets.QFrame()
+        stats_frame.setFrameStyle(QtWidgets.QFrame.Shape.Box)
+        stats_layout = QtWidgets.QHBoxLayout(stats_frame)
         
         # Create flip cards for stats
         self.doc_count_card = FlipCard(
@@ -172,15 +170,15 @@ class IntegratedMainWindow(QMainWindow):
         
         # Recent activity timeline
         self.timeline = TimelineWidget()
-        timeline_frame = QGroupBox("Recent Activity")
-        timeline_layout = QVBoxLayout(timeline_frame)
+        timeline_frame = QtWidgets.QGroupBox("Recent Activity")
+        timeline_layout = QtWidgets.QVBoxLayout(timeline_frame)
         timeline_layout.addWidget(self.timeline)
         layout.addWidget(timeline_frame, 1, 0)
         
         # Tag cloud
         self.tag_cloud = TagCloud()
-        tag_frame = QGroupBox("Popular Tags")
-        tag_layout = QVBoxLayout(tag_frame)
+        tag_frame = QtWidgets.QGroupBox("Popular Tags")
+        tag_layout = QtWidgets.QVBoxLayout(tag_frame)
         tag_layout.addWidget(self.tag_cloud)
         layout.addWidget(tag_frame, 1, 1)
         
@@ -195,23 +193,23 @@ class IntegratedMainWindow(QMainWindow):
         
         return dashboard
         
-    def createDocumentsView(self) -> QWidget:
+    def createDocumentsView(self) -> QtWidgets.QWidget:
         """Create documents management view"""
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
+        widget = QtWidgets.QWidget()
+        layout = QtWidgets.QVBoxLayout(widget)
         
         # Toolbar
-        toolbar = QWidget()
-        toolbar_layout = QHBoxLayout(toolbar)
+        toolbar = QtWidgets.QWidget()
+        toolbar_layout = QtWidgets.QHBoxLayout(toolbar)
         
         # Filter controls
-        toolbar_layout.addWidget(QLabel("Status:"))
+        toolbar_layout.addWidget(QtWidgets.QLabel("Status:"))
         self.status_filter = SearchableComboBox()
         self.status_filter.addItems(["All", "Pending", "Processing", "Completed", "Failed"])
         self.status_filter.currentTextChanged.connect(self.filterDocuments)
         toolbar_layout.addWidget(self.status_filter)
         
-        toolbar_layout.addWidget(QLabel("Type:"))
+        toolbar_layout.addWidget(QtWidgets.QLabel("Type:"))
         self.type_filter = SearchableComboBox()
         self.type_filter.addItems(["All", "Contract", "Legal Brief", "Patent", "Compliance"])
         toolbar_layout.addWidget(self.type_filter)
@@ -219,43 +217,43 @@ class IntegratedMainWindow(QMainWindow):
         toolbar_layout.addStretch()
         
         # Export button
-        export_btn = QPushButton("Export Selected")
+        export_btn = QtWidgets.QPushButton("Export Selected")
         export_btn.clicked.connect(self.exportDocuments)
         toolbar_layout.addWidget(export_btn)
         
         layout.addWidget(toolbar)
         
         # Document table
-        self.doc_table = QTableView()
+        self.doc_table = QtWidgets.QTableView()
         self.doc_model = DocumentTableModel()
         self.doc_table.setModel(self.doc_model)
-        self.doc_table.setSelectionBehavior(QTableView.SelectionBehavior.SelectRows)
+        self.doc_table.setSelectionBehavior(QtWidgets.QTableView.SelectionBehavior.SelectRows)
         self.doc_table.setAlternatingRowColors(True)
         self.doc_table.doubleClicked.connect(self.viewDocument)
         
         # Context menu
-        self.doc_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.doc_table.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
         self.doc_table.customContextMenuRequested.connect(self.showDocumentContextMenu)
         
         layout.addWidget(self.doc_table)
         
         return widget
         
-    def createQueueView(self) -> QWidget:
+    def createQueueView(self) -> QtWidgets.QWidget:
         """Create processing queue view"""
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
+        widget = QtWidgets.QWidget()
+        layout = QtWidgets.QVBoxLayout(widget)
         
         # Queue controls
-        controls = QWidget()
-        controls_layout = QHBoxLayout(controls)
+        controls = QtWidgets.QWidget()
+        controls_layout = QtWidgets.QHBoxLayout(controls)
         
-        pause_btn = QPushButton("Pause Queue")
+        pause_btn = QtWidgets.QPushButton("Pause Queue")
         pause_btn.setCheckable(True)
         pause_btn.toggled.connect(self.toggleQueueProcessing)
         controls_layout.addWidget(pause_btn)
         
-        clear_btn = QPushButton("Clear Completed")
+        clear_btn = QtWidgets.QPushButton("Clear Completed")
         clear_btn.clicked.connect(self.clearCompletedItems)
         controls_layout.addWidget(clear_btn)
         
@@ -264,7 +262,7 @@ class IntegratedMainWindow(QMainWindow):
         layout.addWidget(controls)
         
         # Queue list
-        self.queue_list = QListWidget()
+        self.queue_list = QtWidgets.QListWidget()
         self.queue_list.setAlternatingRowColors(True)
         layout.addWidget(self.queue_list)
         
@@ -274,28 +272,28 @@ class IntegratedMainWindow(QMainWindow):
         """Setup dockable panels"""
         # File browser dock
         self.file_dock = DockablePanel("File Browser", self)
-        file_tree = QTreeView()
-        file_model = QFileSystemModel()
+        file_tree = QtWidgets.QTreeView()
+        file_model = QtWidgets.QFileSystemModel()
         file_model.setRootPath(str(Path.home()))
         file_tree.setModel(file_model)
         file_tree.setRootIndex(file_model.index(str(Path.home())))
         self.file_dock.setWidget(file_tree)
-        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.file_dock)
+        self.addDockWidget(QtCore.Qt.DockWidgetArea.LeftDockWidgetArea, self.file_dock)
         
         # Properties dock
         self.properties_dock = DockablePanel("Properties", self)
-        props_widget = QTextEdit()
+        props_widget = QtWidgets.QTextEdit()
         props_widget.setReadOnly(True)
         self.properties_dock.setWidget(props_widget)
-        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.properties_dock)
+        self.addDockWidget(QtCore.Qt.DockWidgetArea.RightDockWidgetArea, self.properties_dock)
         
         # Console dock
         self.console_dock = DockablePanel("Console", self)
-        self.console = QTextEdit()
+        self.console = QtWidgets.QTextEdit()
         self.console.setReadOnly(True)
         self.console.setMaximumHeight(200)
         self.console_dock.setWidget(self.console)
-        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.console_dock)
+        self.addDockWidget(QtCore.Qt.DockWidgetArea.BottomDockWidgetArea, self.console_dock)
         
     def setupMenuBar(self):
         """Setup application menu bar"""
@@ -363,7 +361,7 @@ class IntegratedMainWindow(QMainWindow):
     def setupToolBar(self):
         """Setup main toolbar"""
         toolbar = self.addToolBar("Main")
-        toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
+        toolbar.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
         
         # Create actions with icons
         upload_action = toolbar.addAction("Upload")
@@ -383,33 +381,33 @@ class IntegratedMainWindow(QMainWindow):
         self.status_bar = self.statusBar()
         
         # Status message
-        self.status_label = QLabel("Ready")
+        self.status_label = QtWidgets.QLabel("Ready")
         self.status_bar.addWidget(self.status_label)
         
         # Progress bar (hidden by default)
-        self.progress_bar = QProgressBar()
+        self.progress_bar = QtWidgets.QProgressBar()
         self.progress_bar.setMaximumWidth(200)
         self.progress_bar.hide()
         self.status_bar.addWidget(self.progress_bar)
         
         # Permanent widgets
-        self.doc_count_label = QLabel("Documents: 0")
+        self.doc_count_label = QtWidgets.QLabel("Documents: 0")
         self.status_bar.addPermanentWidget(self.doc_count_label)
         
-        self.connection_indicator = QLabel("● Offline")
+        self.connection_indicator = QtWidgets.QLabel("● Offline")
         self.connection_indicator.setStyleSheet("color: #f44336;")
         self.status_bar.addPermanentWidget(self.connection_indicator)
         
-        self.user_label = QLabel("User: Admin")
+        self.user_label = QtWidgets.QLabel("User: Admin")
         self.status_bar.addPermanentWidget(self.user_label)
         
     def setupSystemTray(self):
         """Setup system tray integration"""
-        self.tray_icon = QSystemTrayIcon(self)
+        self.tray_icon = QtWidgets.QSystemTrayIcon(self)
         self.tray_icon.setToolTip("Legal AI System")
         
         # Create tray menu
-        tray_menu = QMenu()
+        tray_menu = QtWidgets.QMenu()
         
         show_action = tray_menu.addAction("Show")
         show_action.triggered.connect(self.show)
@@ -487,7 +485,7 @@ class IntegratedMainWindow(QMainWindow):
     def onDatabaseError(self, error: str):
         """Handle database error"""
         self.log(f"Database error: {error}", level="error")
-        QMessageBox.critical(self, "Database Error", error)
+        QtWidgets.QMessageBox.critical(self, "Database Error", error)
         
     def onConnectionStatusChanged(self, connected: bool):
         """Handle connection status change"""
@@ -588,7 +586,7 @@ class IntegratedMainWindow(QMainWindow):
     # ==================== ACTIONS ====================
     def uploadDocuments(self):
         """Upload documents"""
-        files, _ = QFileDialog.getOpenFileNames(
+        files, _ = QtWidgets.QFileDialog.getOpenFileNames(
             self,
             "Select Documents",
             str(Path.home()),
@@ -626,7 +624,7 @@ class IntegratedMainWindow(QMainWindow):
                     {}
                 )
                 
-    def viewDocument(self, index: QModelIndex):
+    def viewDocument(self, index: QtCore.QModelIndex):
         """View document details"""
         row = index.row()
         doc_id = self.doc_model.documents.iloc[row]["ID"]
@@ -643,10 +641,10 @@ class IntegratedMainWindow(QMainWindow):
             self.log(f"Search returned {len(results)} results")
             
             # Show results in new tab
-            results_widget = QListWidget()
+            results_widget = QtWidgets.QListWidget()
             for result in results:
-                item = QListWidgetItem(f"{result['filename']}: {result['snippet']}")
-                item.setData(Qt.ItemDataRole.UserRole, result['document_id'])
+                item = QtWidgets.QListWidgetItem(f"{result['filename']}: {result['snippet']}")
+                item.setData(QtCore.Qt.ItemDataRole.UserRole, result['document_id'])
                 results_widget.addItem(item)
                 
             self.main_tabs.addTab(results_widget, f"Search: {query}")
@@ -655,7 +653,7 @@ class IntegratedMainWindow(QMainWindow):
     def showSettings(self):
         """Show settings dialog"""
         dialog = SettingsDialog(self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
+        if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
             # Save settings
             self.prefs_manager.set("api_url", dialog.api_url.text())
             self.prefs_manager.set("openai_key", dialog.openai_key.text())
@@ -692,7 +690,7 @@ class IntegratedMainWindow(QMainWindow):
         self.doc_count_card.front_content = f"Total Documents\n{doc_count}"
         
         # Update timeline
-        now = QDateTime.currentDateTime()
+        now = QtCore.QDateTime.currentDateTime()
         for i, (doc_id, doc) in enumerate(list(self.documents.items())[:5]):
             self.timeline.addEvent(
                 now.addSecs(-i * 3600),
@@ -760,9 +758,9 @@ class IntegratedMainWindow(QMainWindow):
             "DocumentTableModel\" from 'legal_ai_desktop' is unavailable."
         )
         
-    def showDocumentContextMenu(self, pos: QPoint):
+    def showDocumentContextMenu(self, pos: QtCore.QPoint):
         """Show context menu for documents"""
-        menu = QMenu(self)
+        menu = QtWidgets.QMenu(self)
         
         view_action = menu.addAction("View")
         view_action.triggered.connect(lambda: self.viewDocument(self.doc_table.currentIndex()))
@@ -797,7 +795,7 @@ class IntegratedMainWindow(QMainWindow):
             
     def trayIconActivated(self, reason):
         """Handle tray icon activation"""
-        if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+        if reason == QtWidgets.QSystemTrayIcon.ActivationReason.DoubleClick:
             if self.isVisible():
                 self.hide()
             else:
@@ -810,12 +808,12 @@ class IntegratedMainWindow(QMainWindow):
         # Window geometry
         geometry = self.prefs_manager.get("window_geometry")
         if geometry:
-            self.restoreGeometry(QByteArray.fromBase64(geometry.encode()))
+            self.restoreGeometry(QtCore.QByteArray.fromBase64(geometry.encode()))
             
         # Window state
         state = self.prefs_manager.get("window_state")
         if state:
-            self.restoreState(QByteArray.fromBase64(state.encode()))
+            self.restoreState(QtCore.QByteArray.fromBase64(state.encode()))
             
     def savePreferences(self):
         """Save user preferences"""
@@ -846,14 +844,14 @@ class IntegratedMainWindow(QMainWindow):
         self.processing_worker.wait()
         
         # Ask confirmation
-        reply = QMessageBox.question(
+        reply = QtWidgets.QMessageBox.question(
             self,
             "Confirm Exit",
             "Are you sure you want to exit?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No
         )
         
-        if reply == QMessageBox.StandardButton.Yes:
+        if reply == QtWidgets.QMessageBox.StandardButton.Yes:
             event.accept()
         else:
             event.ignore()
@@ -865,12 +863,12 @@ def main():
     app = LegalAIApplication(sys.argv)
     
     # Create splash screen
-    splash = QSplashScreen()
-    splash.setPixmap(QPixmap(600, 400))
+    splash = QtWidgets.QSplashScreen()
+    splash.setPixmap(QtGui.QPixmap(600, 400))
     splash.showMessage(
         "Loading Legal AI System...",
-        Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignCenter,
-        Qt.GlobalColor.white
+        QtCore.Qt.AlignmentFlag.AlignBottom | QtCore.Qt.AlignmentFlag.AlignCenter,
+        QtCore.Qt.GlobalColor.white
     )
     splash.show()
     
@@ -881,8 +879,8 @@ def main():
     window = IntegratedMainWindow()
     
     # Show window
-    QTimer.singleShot(2000, splash.close)
-    QTimer.singleShot(2000, window.show)
+    QtCore.QTimer.singleShot(2000, splash.close)
+    QtCore.QTimer.singleShot(2000, window.show)
     
     # Run application
     sys.exit(app.exec())
