@@ -20,6 +20,7 @@ const StatusDashboard: React.FC<StatusDashboardProps> = ({ clientId }) => {
   const [workflows, setWorkflows] = useState<Record<string, WorkflowUpdate>>({});
   const { connected, send } = useWebSocket(`/ws/${clientId}`, handleMessage);
   const subscribed = useRef(false);
+  const metrics = useMetrics();
 
   function handleMessage(data: any) {
     if (data.type === 'workflow_progress') {
@@ -58,6 +59,7 @@ const StatusDashboard: React.FC<StatusDashboardProps> = ({ clientId }) => {
                       height: '0.5rem',
                       borderRadius: spacing.xs,
                     }}
+
     </div>
   );
 };
