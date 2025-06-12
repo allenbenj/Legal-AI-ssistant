@@ -57,19 +57,13 @@ legal_ai_system/frontend/src/components/AsyncErrorBoundary.tsx
 legal_ai_system/frontend/src/components/DocumentProcessing.tsx
 legal_ai_system/frontend/src/components/ErrorBoundary.tsx
 legal_ai_system/frontend/src/components/Login.tsx
-legal_ai_system/frontend/src/components/MetricsChart.tsx
 legal_ai_system/frontend/src/components/ProgressiveLoader.tsx
-legal_ai_system/frontend/src/components/ReviewQueue.tsx
 legal_ai_system/frontend/src/components/ReviewQueueWindow.tsx
 legal_ai_system/frontend/src/components/StatusDashboard.tsx
-legal_ai_system/frontend/src/components/SystemHealth.tsx
 legal_ai_system/frontend/src/components/WorkflowDesigner.tsx
-legal_ai_system/frontend/src/components/skeletons/CardSkeleton.tsx
-legal_ai_system/frontend/src/components/skeletons/DashboardSkeleton.tsx
 legal_ai_system/frontend/src/components/skeletons/Skeleton.tsx
 legal_ai_system/frontend/src/components/skeletons/TableSkeleton.tsx
 legal_ai_system/frontend/src/contexts/AuthContext.tsx
-legal_ai_system/frontend/src/design-system/components/Alert.tsx
 legal_ai_system/frontend/src/design-system/components/Button.tsx
 legal_ai_system/frontend/src/design-system/components/Card.tsx
 legal_ai_system/frontend/src/design-system/components/Grid.tsx
@@ -150,6 +144,21 @@ SystemInitializationError  # unused import (legal_ai_system/services/service_con
 ```
 14:      "source": "src/apiClient.ts",
 ```
+
+### Frontend Component Usage Audit
+
+Using `grep`, the following components were not imported anywhere in `frontend/src`:
+
+- `components/MetricsChart.tsx`
+- `components/ReviewQueue.tsx`
+- `components/SystemHealth.tsx`
+- `components/skeletons/CardSkeleton.tsx`
+- `components/skeletons/DashboardSkeleton.tsx`
+- `design-system/components/Alert.tsx`
+
+These unused components were removed from the source tree to reduce maintenance
+overhead. If future features require them, they can be restored from version
+history.
 
 ## Candidates for Cleanup
 
