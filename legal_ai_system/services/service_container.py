@@ -41,6 +41,7 @@ if TYPE_CHECKING:
         SystemInitializationError,
     )
     from legal_ai_system.services.security_manager import AuthenticationManager
+    from legal_ai_system.services.workflow_orchestrator import WorkflowOrchestrator
 else:
     # Use absolute imports with fallback for runtime
     try:
@@ -95,6 +96,9 @@ else:
                 pass
 
             class AuthenticationManager:
+                pass
+
+            class WorkflowOrchestrator:
                 pass
 
     try:
@@ -472,7 +476,9 @@ class ServiceContainer:
             services_data[name] = {
                 "state": state.value,
                 "config_key": factory_info.get("config_key"),
-                "factory_kwargs": {k: repr(v) for k, v in factory_info.get("kwargs", {}).items()},
+                "factory_kwargs": {
+                    k: repr(v) for k, v in factory_info.get("kwargs", {}).items()
+                },
             }
 
         overview = {
@@ -506,6 +512,10 @@ class ServiceContainer:
     def get_active_workflow_config(self) -> Dict[str, Any]:
         """Return a copy of the currently active workflow configuration."""
         return dict(self._active_workflow_config)
+
+    async def get_workflow_orchestrator(self) -> "WorkflowOrchestrator":
+        """Convenience accessor for the :class:`WorkflowOrchestrator` service."""
+        return await self.get_service("workflow_orchestrator")
 
 
 # ----- Service Factories -------------------------------------------------
@@ -581,7 +591,9 @@ async def create_service_container(
     db_conf = config_manager_service.get_database_config()
     await container.register_service(
         "connection_pool",
-        factory=lambda sc, db_url=db_conf.neo4j_uri, redis_url=config_manager_service.get("REDIS_URL_CACHE"): create_connection_pool(
+        factory=lambda sc, db_url=db_conf.neo4j_uri, redis_url=config_manager_service.get(
+            "REDIS_URL_CACHE"
+        ): create_connection_pool(
             sc,
             database_url=db_url,
             redis_url=redis_url,
@@ -861,9 +873,7 @@ async def create_service_container(
     vr_db_service = await container.get_service("violation_review_db")
     classifier = ViolationClassifier()
     classifier.train_from_review_db(vr_db_service)
-    await container.register_service(
-        "violation_classifier", instance=classifier
-    )
+    await container.register_service("violation_classifier", instance=classifier)
 
     from .workflow_config import WorkflowConfig
     from .realtime_analysis_workflow import RealTimeAnalysisWorkflow
