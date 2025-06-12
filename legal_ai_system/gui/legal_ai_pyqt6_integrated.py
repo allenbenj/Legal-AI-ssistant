@@ -359,10 +359,7 @@ class IntegratedMainWindow(QMainWindow):
         self.queue_widget = self.createQueueView()
         self.main_tabs.addTab(self.queue_widget, "Processing Queue")
 
-        # AI Agents tab
-        self.agent_manager = AgentManagerWidget()
-        self.main_tabs.addTab(self.agent_manager, "AI Agents")
-        
+       
         main_layout.addWidget(self.main_tabs)
         
     def createDashboard(self) -> QWidget:
@@ -493,8 +490,14 @@ class IntegratedMainWindow(QMainWindow):
         self.queue_list = QListWidget()
         self.queue_list.setAlternatingRowColors(True)
         layout.addWidget(self.queue_list)
-        
+
         return widget
+
+    def createWorkflowBuilderView(self) -> QWidget:
+        """Create drag-and-drop workflow builder."""
+        from .workflow_builder import WorkflowBuilderWidget
+
+        return WorkflowBuilderWidget()
         
     def setupDocks(self):
         """Setup dockable panels"""
