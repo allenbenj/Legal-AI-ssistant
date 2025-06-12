@@ -216,19 +216,27 @@ class UploadTab(QtWidgets.QWidget):
         if not self.document_id:
             return
         url = f"{self.ws_base}/ws/{self.client_id}"
-        topics = [f"document_updates_{self.document_id}"]
+        topics = [f"document_updates_{self.document_id}", "workflow_updates"]
         self.ws_worker = WebSocketWorker(url, topics)
         self.ws_worker.message_received.connect(self.handle_update)
         self.ws_worker.start()
 
     def handle_update(self, data: Dict[str, Any]) -> None:
+        msg_type = data.get("type")
+        if msg_type == "workflow_progress":
+            prog = int(float(data.get("progress", 0)) * 100)
+            self.progress.setValue(prog)
+            if data.get("stage"):
+                self.output.append(f"Stage: {data['stage']}")
+            return
+
         if data.get("document_id") != self.document_id:
             return
-        if data.get("type") == "processing_progress":
+        if msg_type == "processing_progress":
             prog = int(float(data.get("progress", 0)) * 100)
             self.progress.setValue(prog)
             self.output.append(f"Stage: {data.get('stage')}")
-        elif data.get("type") == "processing_complete":
+        elif msg_type == "processing_complete":
             self.progress.setValue(100)
             self.output.append("Completed")
 

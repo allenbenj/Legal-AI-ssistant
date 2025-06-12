@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Card, Grid } from '../design-system';
+import ProgressiveLoader, { LoaderStage } from './ProgressiveLoader';
 import useWebSocket, { subscribe, unsubscribe } from '../hooks/useWebSocket';
 import { spacing, colors } from '../design-system/tokens';
 
@@ -17,6 +18,16 @@ const StatusDashboard: React.FC<StatusDashboardProps> = ({ clientId }) => {
   const [workflows, setWorkflows] = useState<Record<string, WorkflowUpdate>>({});
   const { connected, send } = useWebSocket(`/ws/${clientId}`, handleMessage);
   const subscribed = useRef(false);
+  const stages: string[] = [
+    'queued',
+    'document_processing',
+    'ontology_extraction',
+    'hybrid_extraction',
+    'graph_update',
+    'vector_update',
+    'memory_integration',
+    'completed',
+  ];
 
   function handleMessage(data: any) {
     if (data.type === 'workflow_progress') {
@@ -55,6 +66,11 @@ const StatusDashboard: React.FC<StatusDashboardProps> = ({ clientId }) => {
         <Grid columns={1} gap="md">
           {items.map(item => {
             const pct = Math.round((item.progress ?? 0) * 100);
+            const stageIdx = stages.indexOf(item.stage ?? '');
+            const loaderStages: LoaderStage[] = stages.map((label, idx) => ({
+              label,
+              completed: stageIdx >= idx,
+            }));
             return (
               <Card key={item.workflow_id} style={{ padding: spacing.sm }}>
                 <div style={{ marginBottom: spacing.xs, fontWeight: 500 }}>
@@ -77,6 +93,9 @@ const StatusDashboard: React.FC<StatusDashboardProps> = ({ clientId }) => {
                       transition: 'width 0.3s',
                     }}
                   />
+                </div>
+                <div style={{ marginTop: spacing.xs }}>
+                  <ProgressiveLoader stages={loaderStages} />
                 </div>
               </Card>
             );
