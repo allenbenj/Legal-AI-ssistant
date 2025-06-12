@@ -1,3 +1,4 @@
+# AGENT_STUB
 """Small collection of custom Qt widgets used by the GUI."""
 from __future__ import annotations
 

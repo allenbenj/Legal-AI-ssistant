@@ -1,3 +1,4 @@
+# AGENT_STUB
 """Networking stubs for the integrated GUI."""
 from __future__ import annotations
 from pathlib import Path

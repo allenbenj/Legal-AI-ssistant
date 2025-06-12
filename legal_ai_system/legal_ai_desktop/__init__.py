@@ -1,3 +1,4 @@
+# AGENT_STUB
 """Minimal desktop UI components for the integrated GUI."""
 from __future__ import annotations
 
