@@ -12,6 +12,9 @@ from typing import Any, Dict, List, Optional
 import requests
 from PyQt6 import QtCore, QtGui, QtWidgets
 
+from .memory_brain_widget import MemoryBrainWidget
+from .tray_icon import TrayIcon
+
 from ..core.settings import settings
 from ..log_setup import init_logging
 
@@ -175,6 +178,9 @@ class UploadTab(QtWidgets.QWidget):
         upload_btn = QtWidgets.QPushButton("Upload && Process")
         upload_btn.clicked.connect(self.upload)
         self.progress = QtWidgets.QProgressBar()
+        self.progress_anim = QtCore.QPropertyAnimation(self.progress, b"value", self)
+        self.progress_anim.setDuration(400)
+        self.progress_anim.setEasingCurve(QtCore.QEasingCurve.Type.InOutCubic)
         self.output = QtWidgets.QTextEdit(readOnly=True)
 
         top = QtWidgets.QHBoxLayout()
@@ -214,20 +220,29 @@ class UploadTab(QtWidgets.QWidget):
         if not self.document_id:
             return
         url = f"{self.ws_base}/ws/{self.client_id}"
-        topics = [f"document_updates_{self.document_id}"]
+        topics = [f"document_updates_{self.document_id}", "workflow_updates"]
         self.ws_worker = WebSocketWorker(url, topics)
         self.ws_worker.message_received.connect(self.handle_update)
         self.ws_worker.start()
 
     def handle_update(self, data: Dict[str, Any]) -> None:
-        if data.get("document_id") != self.document_id:
-            return
-        if data.get("type") == "processing_progress":
+        msg_type = data.get("type")
+        if msg_type == "workflow_progress":
             prog = int(float(data.get("progress", 0)) * 100)
             self.progress.setValue(prog)
+            if data.get("stage"):
+                self.output.append(f"Stage: {data['stage']}")
+            return
+
+        if data.get("document_id") != self.document_id:
+            return
+        if msg_type == "processing_progress":
+            prog = int(float(data.get("progress", 0)) * 100)
+            self.progress_anim.stop()
+            self.progress_anim.setStartValue(self.progress.value())
+            self.progress_anim.setEndValue(prog)
+            self.progress_anim.start()
             self.output.append(f"Stage: {data.get('stage')}")
-        elif data.get("type") == "processing_complete":
-            self.progress.setValue(100)
             self.output.append("Completed")
 
 
@@ -393,6 +408,7 @@ class MainWindow(QtWidgets.QMainWindow):
         tabs.addTab(ReviewTab(self.api), "Review Queue")
         tabs.addTab(WorkflowTab(self.api), "Workflow Designer")
         tabs.addTab(MonitoringTab(self.api), "Process Monitoring")
+        tabs.addTab(MemoryBrainWidget(), "Memory Brain")
         tabs.addTab(StatusTab(self.api), "System Status")
         settings_tab = SettingsTab(self.api)
         settings_tab.settings_changed.connect(self.reload_settings)
@@ -423,6 +439,9 @@ def main() -> None:
     init_logging()
     app = QtWidgets.QApplication([])
     window = MainWindow()
+    tray = TrayIcon(window)
+    tray.show()
+    app.aboutToQuit.connect(tray.shutdown)
     window.show()
     app.exec()
 

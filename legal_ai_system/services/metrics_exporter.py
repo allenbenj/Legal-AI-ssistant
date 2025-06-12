@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 from typing import Optional
+import threading
 
-from prometheus_client import Counter, Histogram, Gauge, start_http_server
+from fastapi import FastAPI
+from prometheus_client import Counter, Histogram, Gauge, make_asgi_app
+import uvicorn
 
 from ..core.detailed_logging import get_detailed_logger, LogCategory
 
@@ -12,8 +15,20 @@ class MetricsExporter:
 
     def __init__(self, port: int = 8001) -> None:
         self.logger = get_detailed_logger("MetricsExporter", LogCategory.SYSTEM)
-        start_http_server(port)
-        self.logger.info("Prometheus metrics server started", parameters={"port": port})
+
+        # FastAPI app exposing Prometheus and JSON metrics
+        self.app = FastAPI()
+        self.app.mount("/prometheus", make_asgi_app())
+        self.app.get("/metrics")(self._json_metrics)
+
+        config = uvicorn.Config(self.app, host="0.0.0.0", port=port, log_level="info")
+        self._server = uvicorn.Server(config)
+        thread = threading.Thread(target=self._server.run, daemon=True)
+        thread.start()
+
+        self.logger.info(
+            "Metrics server started", parameters={"port": port}
+        )
 
         self.workflow_execution_seconds = Histogram(
             "workflow_execution_seconds",
@@ -105,6 +120,10 @@ class MetricsExporter:
             "pg_pool_free": self.pg_pool_free._value.get(),
             "redis_pool_in_use": self.redis_pool_in_use._value.get(),
         }
+
+    async def _json_metrics(self) -> dict:
+        """FastAPI handler that returns current metrics as JSON."""
+        return self.snapshot()
 
 
 metrics_exporter: Optional[MetricsExporter] = None

@@ -12,7 +12,7 @@ import {
   DashboardErrorBoundary,
   DocumentProcessingErrorBoundary,
 } from '@/components/AsyncErrorBoundary';
-import ReviewQueue from '@/components/ReviewQueue';
+import ReviewQueueWindow from '@/components/ReviewQueueWindow';
 
 
 
@@ -88,7 +88,7 @@ export default function LegalAISystem() {
               )}
               {currentView === 'reviews' && (
                 <ErrorBoundary level="view">
-                  <ReviewQueue />
+                  <ReviewQueueWindow />
                 </ErrorBoundary>
               )}
               {currentView === 'monitoring' && (
