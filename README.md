@@ -126,9 +126,13 @@ choose the one that suits your workflow:
 
 1. **Streamlit Dashboard** – run `python -m legal_ai_system` after installing
    `requirements.txt`. This launches a browser-based dashboard connected to the
-   backend.
-   development. Use `npm run build` to generate `frontend/dist`, which FastAPI
-   serves automatically when present.
+   backend. Development builds are supported with the React frontend.
+   Use `npm run build` to generate `frontend/dist`, which FastAPI serves
+   automatically when present.
+
+2. **Memory Brain Demo** – run
+   `python -m legal_ai_system.gui.scripts.memory_brain_gui` to launch a focused
+   Streamlit interface for testing the memory management features.
 
 ### PyQt6 Interface
 

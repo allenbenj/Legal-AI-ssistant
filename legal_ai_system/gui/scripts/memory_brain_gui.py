@@ -2,7 +2,7 @@
 
 import streamlit as st
 
-from ..gui.panels.memory_brain_panel import MemoryBrainPanel
+from ..panels.memory_brain_panel import MemoryBrainPanel
 
 
 def main() -> None:
