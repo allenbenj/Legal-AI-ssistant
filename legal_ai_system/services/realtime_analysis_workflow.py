@@ -115,7 +115,23 @@ class RealTimeAnalysisWorkflow:
         # User feedback integration
         self.feedback_callback: Optional[Callable] = None
         self.pending_feedback: Dict[str, Any] = {}
-        self.preproc_predictor = PreprocessingErrorPredictor()
+
+        # Access lightweight analytics services if available
+        self.keyword_service = None
+        self.quality_service = None
+        if service_container is not None:
+            self.keyword_service = service_container._services.get(
+                "keyword_extraction_service"
+            )
+            self.quality_service = service_container._services.get(
+                "quality_assessment_service"
+            )
+
+        self.preproc_predictor = (
+            self.quality_service.preproc_predictor
+            if self.quality_service is not None
+            else PreprocessingErrorPredictor()
+        )
 
         # Synchronization primitives
         self.processing_lock = asyncio.Semaphore(self.max_concurrent_documents)
@@ -198,6 +214,12 @@ class RealTimeAnalysisWorkflow:
             self.policy_learner.update_agent_stats("document_processor", success)
             text = self._extract_text_from_result(document_result)
             doc_features = self._extract_document_features(text, document_path)
+
+            if self.keyword_service:
+                keywords = self.keyword_service.extract(text, top_k=10)
+                await self._notify_update(
+                    "keywords", {"document_id": document_id, "keywords": keywords}
+                )
             self.policy_learner.record_step(
                 "document_processing", doc_features, success, duration
             )
@@ -212,6 +234,10 @@ class RealTimeAnalysisWorkflow:
                     "content_preview": text[:1000] if text else "",
                     "size": Path(document_path).stat().st_size,
                 }
+            )
+            await self._notify_update(
+                "preprocessing_risk",
+                {"document_id": document_id, "risk": risk},
             )
             if risk > 0.5:
                 if hasattr(self.hybrid_extractor, "model_switcher"):
