@@ -198,6 +198,19 @@ class DatabaseManager:
             """
             )
 
+            # Agent results table for storing processed outputs
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS agent_results (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    agent_name TEXT NOT NULL,
+                    session_id TEXT,
+                    result_json TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+
             # Create indexes for better performance
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_violations_status ON violations(status)"
@@ -219,6 +232,13 @@ class DatabaseManager:
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_logs_component ON system_logs(component)"
+            )
+
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_agent_results_agent ON agent_results(agent_name)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_agent_results_session ON agent_results(session_id)"
             )
 
             conn.commit()
@@ -446,6 +466,65 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Failed to update memory access: {e}")
             return False
+
+    # Agent result storage
+    def save_agent_result(
+        self, agent_name: str, result: Dict[str, Any], session_id: Optional[str] = None
+    ) -> bool:
+        """Persist a serialized agent result."""
+        try:
+            with self._get_connection() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO agent_results (agent_name, session_id, result_json)
+                    VALUES (?, ?, ?)
+                """,
+                    (agent_name, session_id, json.dumps(result)),
+                )
+                conn.commit()
+                return True
+        except Exception as e:
+            logger.error(f"Failed to save agent result: {e}")
+            return False
+
+    def get_agent_results(
+        self,
+        agent_name: Optional[str] = None,
+        session_id: Optional[str] = None,
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        """Retrieve stored agent results with optional filtering."""
+        try:
+            query = "SELECT * FROM agent_results WHERE 1=1"
+            params = []
+
+            if agent_name:
+                query += " AND agent_name = ?"
+                params.append(agent_name)
+
+            if session_id:
+                query += " AND session_id = ?"
+                params.append(session_id)
+
+            query += " ORDER BY created_at DESC LIMIT ?"
+            params.append(limit)
+
+            with self._get_connection() as conn:
+                cursor = conn.execute(query, params)
+                rows = cursor.fetchall()
+                return [
+                    {
+                        "id": row["id"],
+                        "agent_name": row["agent_name"],
+                        "session_id": row["session_id"],
+                        "result": json.loads(row["result_json"]),
+                        "created_at": row["created_at"],
+                    }
+                    for row in rows
+                ]
+        except Exception as e:
+            logger.error(f"Failed to retrieve agent results: {e}")
+            return []
 
     # Knowledge graph methods
     def save_graph_node(self, node: GraphNode) -> bool:
