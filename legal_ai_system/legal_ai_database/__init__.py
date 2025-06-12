@@ -1,3 +1,4 @@
+# AGENT_STUB
 """Simplified database utilities and preference storage."""
 from __future__ import annotations
 
