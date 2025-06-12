@@ -86,6 +86,7 @@ class StubResult:
     document_id: str
     processing_times: dict = field(default_factory=dict)
     total_processing_time: float = 0.0
+    text_rewriting: dict = field(default_factory=dict)
     confidence_scores: dict = field(default_factory=dict)
     validation_results: dict = field(default_factory=dict)
     sync_status: dict = field(default_factory=dict)

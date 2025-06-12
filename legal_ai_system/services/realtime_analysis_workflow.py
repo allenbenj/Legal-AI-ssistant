@@ -24,6 +24,7 @@ from ..core.detailed_logging import (
     LogCategory,
     detailed_log_function,
 )
+from ..core.agent_unified_config import _get_service_sync
 from ..analytics.quality_classifier import PreprocessingErrorPredictor
 from ..core.model_switcher import TaskComplexity
 from .metrics_exporter import MetricsExporter, metrics_exporter
@@ -53,6 +54,7 @@ class RealTimeAnalysisResult:
 
     # Processing results
     document_processing: Any
+    text_rewriting: Any
     ontology_extraction: Any
     hybrid_extraction: Any
 
@@ -137,7 +139,7 @@ class RealTimeAnalysisWorkflow:
         self.processing_lock = asyncio.Semaphore(self.max_concurrent_documents)
         self.optimization_lock = asyncio.Lock()
 
-        # Placeholders for components initialized elsewhere
+        # Core components retrieved from the service container when available
         self.document_processor = None
         self.document_rewriter = None
         self.hybrid_extractor = None
@@ -145,6 +147,27 @@ class RealTimeAnalysisWorkflow:
         self.graph_manager = None
         self.vector_store = None
         self.reviewable_memory = None
+
+        if service_container is not None:
+            self.document_processor = _get_service_sync(
+                service_container, "documentprocessoragent"
+            )
+            self.document_rewriter = _get_service_sync(
+                service_container, "documentrewriteragent"
+            )
+            self.ontology_extractor = _get_service_sync(
+                service_container, "ontologyextractionagent"
+            )
+            self.hybrid_extractor = _get_service_sync(
+                service_container, "hybridlegalextractor"
+            )
+            self.graph_manager = _get_service_sync(
+                service_container, "realtime_graph_manager"
+            )
+            self.vector_store = _get_service_sync(service_container, "vector_store")
+            self.reviewable_memory = _get_service_sync(
+                service_container, "reviewable_memory"
+            )
 
         # ML optimizer and policy learner for dynamic routing
         try:
@@ -214,6 +237,28 @@ class RealTimeAnalysisWorkflow:
             self.policy_learner.update_agent_stats("document_processor", success)
             text = self._extract_text_from_result(document_result)
             doc_features = self._extract_document_features(text, document_path)
+
+            await self._notify_progress("text_rewrite", 0.10)
+            if self.policy_learner.should_run_step("text_rewrite", doc_features):
+                t0 = time.time()
+                rewrite_result = await self.document_rewriter.rewrite_text(text)
+                duration = time.time() - t0
+                success = bool(rewrite_result)
+                text = getattr(rewrite_result, "corrected_text", text)
+            else:
+                rewrite_result = SimpleNamespace(corrected_text=text)
+                duration = 0.0
+                success = True
+            processing_times["text_rewrite"] = duration
+            self.policy_learner.update_agent_stats("document_rewriter", success)
+            self.policy_learner.record_step(
+                "text_rewrite", doc_features, success, duration
+            )
+            self.ml_optimizer.record_step_metrics(
+                document_path,
+                "text_rewrite",
+                PerformanceMetrics(processing_time=duration, success=success),
+            )
 
             if self.keyword_service:
                 keywords = self.keyword_service.extract(text, top_k=10)
@@ -378,6 +423,7 @@ class RealTimeAnalysisWorkflow:
             document_path=document_path,
             document_id=document_id,
             document_processing=document_result,
+            text_rewriting=rewrite_result,
             ontology_extraction=ontology_result,
             hybrid_extraction=hybrid_result,
             graph_updates=graph_updates,
