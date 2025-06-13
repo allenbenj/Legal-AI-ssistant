@@ -18,9 +18,7 @@ import aiohttp
 import requests
 from urllib.parse import urljoin
 
-from PyQt6.QtWidgets import *
-from PyQt6.QtCore import *
-from PyQt6.QtGui import *
+
 
 # ==================== BACKEND API CLIENT ====================
 
@@ -5035,7 +5033,7 @@ class LegalAIEnhancedApplication(QApplication):
         palette.setColor(QPalette.ColorRole.Highlight, QColor(42, 130, 218))
         palette.setColor(QPalette.ColorRole.HighlightedText, QColor(0, 0, 0))
         
-        self.setPalette(palette)
+
 
 def main():
     """Main application entry point"""
@@ -5149,7 +5147,7 @@ def main():
     
     # Create main window
     try:
-        window = EnhancedMainWindow()
+
         
         # Show main window after splash
         QTimer.singleShot(3000, splash.close)
@@ -5164,4 +5162,4 @@ def main():
         return 1
 
 if __name__ == "__main__":
-    sys.exit(main())
+

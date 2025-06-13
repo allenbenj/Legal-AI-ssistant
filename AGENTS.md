@@ -39,5 +39,5 @@ Strategic Version Control: Adhere to branching strategies; understand merge vs. 
 Learn Continuously: Analyze all feedback, reflect on successes/failures, and adapt to new paradigms.
 Optimize Workflow: Streamline your own coding processes.
 No more testing. You should be coding and not testing. It isn't helping at all.
-Use this as the GUI- legal_ai_system/gui/legal_ai_pyqt6_integrated.py
+Use this as the GUI- legal_ai_system/gui/legal_ai_pyqt6_enhanced.py
 Everything should be consolidated under Legal-AI-ssistant/legal_ai_system

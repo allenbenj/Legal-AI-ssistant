@@ -2,7 +2,7 @@
 
 This document lists the tasks required to connect the agents under
 `legal_ai_system/agents` with the PyQt6 GUI application
-`legal_ai_system/gui/legal_ai_pyqt6_integrated.py`.
+`legal_ai_system/gui/legal_ai_pyqt6_enhanced.py`.
 
 ## Overview
 The current GUI relies on stubbed network and database modules.
@@ -36,7 +36,7 @@ appropriate services and agents.
      interact with the persistence services from the service container.
 
 4. **Wire GUI Actions**
-   - Update `legal_ai_pyqt6_integrated.py` so that the `uploadDocuments`
+   - Update `legal_ai_pyqt6_enhanced.py` so that the `uploadDocuments`
      and `processQueue` methods call the backend bridge instead of the
      current stubs.
    - Connect progress callbacks to update the dashboard and queue
