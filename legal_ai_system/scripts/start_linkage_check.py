@@ -29,7 +29,7 @@ def main() -> None:
     except Exception as exc:  # pragma: no cover - best effort
         print(f"Health check failed: {exc}")
 
-    run([python_exe, "-m", "pytest", str(repo_root / "legal_ai_system" / "tests")])
+    run([python_exe, "-m", "nose2", str(repo_root / "legal_ai_system" / "tests")])
 
 
 if __name__ == "__main__":

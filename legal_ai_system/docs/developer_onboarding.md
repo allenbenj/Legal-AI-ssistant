@@ -36,10 +36,11 @@ Welcome to the Legal AI System project! This guide helps new contributors set up
    [ENV_SETUP.md](ENV_SETUP.md). Install them as needed.
 
 ## Running Tests
-Tests use **pytest**. After installing the `dev` dependencies:
+Tests use **nose2** on top of the standard `unittest` framework. After
+installing the `dev` dependencies run `nose2` directly:
 ```bash
 pip install -e .[dev]
-pytest
+nose2
 ```
 See [docs/test_setup.md](test_setup.md) for details.
 
@@ -50,7 +51,7 @@ See [docs/test_setup.md](test_setup.md) for details.
    black .
    isort .
    ```
-3. Run `pytest` to verify that all tests pass.
+3. Run `nose2` to verify that all tests pass.
 4. Commit your work and open a pull request.
 
 ## Additional Resources
