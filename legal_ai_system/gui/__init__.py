@@ -2,10 +2,10 @@
 
 def __getattr__(name):
     if name == "IntegratedMainWindow":
-        from .legal-ai-pyqt6-enhanced import IntegratedMainWindow
+        from .legal_ai_pyqt6_enhanced import IntegratedMainWindow
         return IntegratedMainWindow
     if name == "main":
-        from .legal-ai-pyqt6-enhanced import main
+        from .legal_ai_pyqt6_enhanced import main
         return main
     if name == "StartupConfigDialog":
         from .startup_config_dialog import StartupConfigDialog

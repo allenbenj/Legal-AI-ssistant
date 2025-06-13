@@ -26,4 +26,4 @@ Each endpoint accepts a JSON payload and returns the structured result from the 
 
 The `get_system_health_rest` handler is provided in the integrated PyQt6
 application located at
-[`legal_ai_system/gui/legal-ai-pyqt6-enhanced.py`](../legal_ai_system/gui/legal-ai-pyqt6-enhanced.py).
+[`legal_ai_system/gui/legal_ai_pyqt6_enhanced.py`](../legal_ai_system/gui/legal_ai_pyqt6_enhanced.py).
