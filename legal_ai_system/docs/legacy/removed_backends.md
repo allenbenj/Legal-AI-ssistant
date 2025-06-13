@@ -7,8 +7,8 @@ The project previously included two large FastAPI server implementations:
 
 These files duplicated functionality and have been removed to avoid confusion.
 All desktop features are now consolidated in
-`legal_ai_system/gui/legal_ai_pyqt6_integrated.py`.
+`legal_ai_system/gui/legal-ai-pyqt6-enhanced.py`.
 
 The previous `integrated_gui.py` module and its helper `sections` package have
-been deprecated and removed. Use `legal_ai_pyqt6_integrated.py` as the single
+been deprecated and removed. Use `legal-ai-pyqt6-enhanced.py` as the single
 source for the PyQt6 application.

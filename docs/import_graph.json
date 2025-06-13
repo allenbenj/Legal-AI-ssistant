@@ -44,7 +44,7 @@
             "legal_ai_system.core.vector_store_manager",
             "legal_ai_system.gui",
             "legal_ai_system.gui.db_connection_dialog",
-            "legal_ai_system.gui.legal_ai_pyqt6_integrated",
+            "legal_ai_system.gui.legal-ai-pyqt6-enhanced",
             "legal_ai_system.gui.memory_brain_core",
             "legal_ai_system.gui.memory_brain_widget",
             "legal_ai_system.gui.memory_table_model",
@@ -104,7 +104,7 @@
             "legal_ai_system.core.embedding_manager",
             "legal_ai_system.core.providers",
             "legal_ai_system.core.settings",
-            "legal_ai_system.gui.legal_ai_pyqt6_integrated",
+            "legal_ai_system.gui.legal-ai-pyqt6-enhanced",
             "legal_ai_system.gui.streamlit_app",
             "legal_ai_system.legal_ai_charts",
             "legal_ai_system.legal_ai_desktop"
@@ -122,7 +122,7 @@
         ],
         "imports": [
             "legal_ai_system.gui",
-            "legal_ai_system.gui.legal_ai_pyqt6_integrated"
+            "legal_ai_system.gui.legal-ai-pyqt6-enhanced"
         ],
         "name": "legal_ai_system.__main__",
         "path": "/workspace/Legal-AI-ssistant/legal_ai_system/__main__.py"
@@ -625,7 +625,7 @@
             "legal_ai_system.legal_ai_desktop"
         ],
         "imports": [
-            "legal_ai_system.gui.legal_ai_pyqt6_integrated"
+            "legal_ai_system.gui.legal-ai-pyqt6-enhanced"
         ],
         "name": "legal_ai_system.gui",
         "path": "/workspace/Legal-AI-ssistant/legal_ai_system/gui/__init__.py"
@@ -634,12 +634,12 @@
         "bacon": 1,
         "imported_by": [
             "__main__",
-            "legal_ai_system.gui.legal_ai_pyqt6_integrated"
+            "legal_ai_system.gui.legal-ai-pyqt6-enhanced"
         ],
         "name": "legal_ai_system.gui.db_connection_dialog",
         "path": "/workspace/Legal-AI-ssistant/legal_ai_system/gui/db_connection_dialog.py"
     },
-    "legal_ai_system.gui.legal_ai_pyqt6_integrated": {
+    "legal_ai_system.gui.legal-ai-pyqt6-enhanced": {
         "bacon": 1,
         "imported_by": [
             "__main__",
@@ -655,8 +655,8 @@
             "legal_ai_system.legal_ai_network",
             "legal_ai_system.legal_ai_widgets"
         ],
-        "name": "legal_ai_system.gui.legal_ai_pyqt6_integrated",
-        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/gui/legal_ai_pyqt6_integrated.py"
+        "name": "legal_ai_system.gui.legal-ai-pyqt6-enhanced",
+        "path": "/workspace/Legal-AI-ssistant/legal_ai_system/gui/legal-ai-pyqt6-enhanced.py"
     },
     "legal_ai_system.gui.memory_brain_core": {
         "bacon": 1,
@@ -797,7 +797,7 @@
         "bacon": 1,
         "imported_by": [
             "__main__",
-            "legal_ai_system.gui.legal_ai_pyqt6_integrated"
+            "legal_ai_system.gui.legal-ai-pyqt6-enhanced"
         ],
         "imports": [
             "legal_ai_system",
@@ -812,7 +812,7 @@
         "bacon": 1,
         "imported_by": [
             "__main__",
-            "legal_ai_system.gui.legal_ai_pyqt6_integrated"
+            "legal_ai_system.gui.legal-ai-pyqt6-enhanced"
         ],
         "name": "legal_ai_system.legal_ai_database",
         "path": "/workspace/Legal-AI-ssistant/legal_ai_system/legal_ai_database/__init__.py"
@@ -821,7 +821,7 @@
         "bacon": 1,
         "imported_by": [
             "__main__",
-            "legal_ai_system.gui.legal_ai_pyqt6_integrated"
+            "legal_ai_system.gui.legal-ai-pyqt6-enhanced"
         ],
         "imports": [
             "legal_ai_system",
@@ -836,7 +836,7 @@
         "bacon": 1,
         "imported_by": [
             "__main__",
-            "legal_ai_system.gui.legal_ai_pyqt6_integrated"
+            "legal_ai_system.gui.legal-ai-pyqt6-enhanced"
         ],
         "name": "legal_ai_system.legal_ai_network",
         "path": "/workspace/Legal-AI-ssistant/legal_ai_system/legal_ai_network/__init__.py"
@@ -845,7 +845,7 @@
         "bacon": 1,
         "imported_by": [
             "__main__",
-            "legal_ai_system.gui.legal_ai_pyqt6_integrated"
+            "legal_ai_system.gui.legal-ai-pyqt6-enhanced"
         ],
         "name": "legal_ai_system.legal_ai_widgets",
         "path": "/workspace/Legal-AI-ssistant/legal_ai_system/legal_ai_widgets/__init__.py"

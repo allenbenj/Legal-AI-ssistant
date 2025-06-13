@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 from PyQt6.QtWidgets import QApplication
 
-from legal_ai_system.gui.legal_ai_pyqt6_integrated import IntegratedMainWindow
+from legal_ai_system.gui.legal-ai-pyqt6-enhanced import IntegratedMainWindow
 
 
 class GuiUploadIntegrationTest(unittest.TestCase):
