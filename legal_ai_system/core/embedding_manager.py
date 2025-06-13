@@ -13,9 +13,7 @@ from typing import Dict, List, Any
 from pathlib import Path
 import threading
 
-# Resolve the embedding client relative to this package so the module can be
-# executed directly from the repository without installing ``legal_ai_system``.
-from ..integration_ready.vector_store_enhanced import EmbeddingClient
+from legal_ai_system.integration_ready.vector_store_enhanced import EmbeddingClient
 
 logger = logging.getLogger(__name__)
 
