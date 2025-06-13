@@ -165,11 +165,11 @@ initialises the asynchronous service container and forwards all actions to the
 `LegalAIIntegrationService`. Progress updates are emitted back to the widgets in
 real time.
 
-```python
-from legal_ai_system.gui import IntegratedMainWindow
 
-window = IntegratedMainWindow()
-window.show()
+Launch the interface using the package entry point:
+
+```bash
+python -m legal_ai_system
 ```
 
 The bridge ensures the desktop app communicates with the same backend services
