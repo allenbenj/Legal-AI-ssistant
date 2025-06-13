@@ -24,6 +24,8 @@ pip install --upgrade pip
 pip install -r requirements.txt
 pip install -r requirements-dev.txt  # development and testing tools
 ```
+The optional command-line interface depends on the `typer` package which is now
+included in `requirements.txt`.
    The requirements file includes database drivers such as **asyncpg** for PostgreSQL and **aioredis** for Redis. Installing `requirements-dev.txt` pulls in optional tools like `nose2` and linters.
 3. Install Node packages for the React frontend:
    ```bash
