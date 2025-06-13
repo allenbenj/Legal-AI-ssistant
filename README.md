@@ -24,6 +24,10 @@ pip install --upgrade pip
 pip install -r requirements.txt
 pip install -r requirements-dev.txt  # development and testing tools
 ```
+The optional command-line interface depends on the `typer` package which is now
+included in `requirements.txt`. If PyQt6 or its system libraries are missing,
+running `python -m legal_ai_system` automatically launches this CLI instead of
+the desktop GUI.
    The requirements file includes database drivers such as **asyncpg** for PostgreSQL and **aioredis** for Redis. Installing `requirements-dev.txt` pulls in optional tools like `nose2` and linters.
 3. Install Node packages for the React frontend:
    ```bash
@@ -171,6 +175,8 @@ Launch the interface using the package entry point:
 ```bash
 python -m legal_ai_system
 ```
+If PyQt6 cannot be loaded for any reason, the command falls back to the CLI
+described above.
 
 The bridge ensures the desktop app communicates with the same backend services
 as the API and other frontends. It is primarily a demo and lacks the advanced
