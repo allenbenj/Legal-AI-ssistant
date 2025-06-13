@@ -44,9 +44,9 @@ def verify_imports(venv_path: Path) -> None:
 
 
 def run_tests(venv_path: Path) -> None:
-    """Run the project's pytest suite."""
+    """Run the project's nose2 test suite."""
     python_exe = venv_path / "bin" / "python"
-    run([str(python_exe), "-m", "pytest"])
+    run([str(python_exe), "-m", "nose2"])
 
 
 def main() -> None:
