@@ -19,4 +19,3 @@ if str(PACKAGE_ROOT) not in sys.path:
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 
-
