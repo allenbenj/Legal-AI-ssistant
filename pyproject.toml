@@ -25,19 +25,14 @@ python = "^3.9"
 
 # Core AI/ML Dependencies
 openai = "^1.0.0"
-anthropic = "^0.25.0"
 ollama = "^0.1.0"
 sentence-transformers = "^2.2.0"
 transformers = "^4.30.0"
-torch = "^2.0.0"
 spacy = "^3.6.0"
-flair = "^0.15.1"
 
 # Vector Stores and Databases
 faiss-cpu = "^1.7.0"
-lancedb = "^0.5.0"
 neo4j = "^5.0.0"
-sqlite-utils = "^3.34.0"
 asyncpg = "^0.28.0"
 aioredis = "^2.0.0"
 
@@ -45,23 +40,17 @@ aioredis = "^2.0.0"
 PyMuPDF = "^1.23.0"
 python-docx = "^0.8.11"
 openpyxl = "^3.1.0"
-pypdf = "^3.15.0"
 pdfplumber = "^0.11.6"
 pytesseract = "^0.3.10"
 Pillow = "^10.0.0"
 langdetect = "^1.0.9"
 
 # Audio and Speech Processing
-ffmpeg-python = "^0.2.0"
 openai-whisper = "^20240930"
-whisperx = "^3.3.4"
-'pyannote.audio' = "^3.3.2"
 
 # Web and API
 fastapi = "^0.100.0"
 uvicorn = "^0.23.0"
-httpx = "^0.27.0"
-aiohttp = "^3.8.0"
 requests = "^2.31.0"
 
 # Data Processing
@@ -80,26 +69,19 @@ aiofiles = "^23.0.0"
 
 # Security
 cryptography = "^43.0.3"
-bcrypt = "^4.0.0"
 
 # Logging and Monitoring
 structlog = "^23.0.0"
-rich = "^13.0.0"
 pybreaker = "^1.3.0"
 prometheus-client = "^0.17.1"
 cachetools = "^6.0.0"
 
 # Configuration and Environment
-python-dotenv = "^1.0.0"
-toml = "^0.10.2"
 pyyaml = "^6.0"
 
 # Utilities
-click = "^8.1.0"
 typer = "^0.9.0"
-tqdm = "^4.65.0"
 pathlib = "^1.0.1"
-typing-extensions = "^4.7.0"
 pyspellchecker = "^0.7.2"
 
 [tool.poetry.group.dev.dependencies]
@@ -211,25 +193,19 @@ use_parentheses = true
 ensure_newline_before_comments = true
 known_first_party = ["legal_ai_system"]
 known_third_party = [
-    "anthropic",
     "openai",
     "sentence_transformers",
     "transformers",
-    "torch",
     "spacy",
-    "flair",
     "faiss",
-    "lancedb",
     "neo4j",
     "PyQt6",
     "fastapi",
     "pydantic",
     "structlog",
     "ffmpeg",
-    "whisperx",
     "whisper",
     "pdfplumber",
-    "pyannote",
 ]
 
 [tool.mypy]
@@ -251,9 +227,7 @@ show_error_codes = true
 [[tool.mypy.overrides]]
 module = [
     "spacy.*",
-    "flair.*",
     "faiss.*",
-    "lancedb.*",
     "neo4j.*",
     "PyQt6.*",
     "sentence_transformers.*",

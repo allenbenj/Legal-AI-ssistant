@@ -2,7 +2,24 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from ...utils.reviewable_memory import ReviewPriority, ReviewableMemory
+try:  # pragma: no cover - optional dependency during lightweight tests
+    from ...utils.reviewable_memory import ReviewPriority, ReviewableMemory
+except Exception:  # pragma: no cover - define minimal fallbacks
+    from enum import Enum
+    from typing import Protocol
+
+    class ReviewPriority(Enum):
+        LOW = "low"
+        MEDIUM = "medium"
+        HIGH = "high"
+        CRITICAL = "critical"
+
+    class ReviewableMemory(Protocol):  # type: ignore[misc]
+        async def process_extraction_result(self, extraction: Any, doc_id: str) -> None:
+            ...
+
+        async def get_pending_reviews_async(self, *, priority: ReviewPriority) -> List[Any]:
+            ...
 
 
 class HumanReviewNode:
@@ -38,7 +55,12 @@ class HumanReviewNode:
 
         high_risk: List[Dict[str, Any]] = []
         for prio in (ReviewPriority.CRITICAL, ReviewPriority.HIGH):
-            for item in await self.review_memory.get_pending_reviews_async(priority=prio):
+            pending = await self.review_memory.get_pending_reviews_async(priority=prio)
+            try:
+                iterator = list(pending)  # type: ignore[arg-type]
+            except Exception:
+                iterator = []
+            for item in iterator:
                 to_add = item.to_dict() if hasattr(item, "to_dict") else item
                 high_risk.append(to_add)
 

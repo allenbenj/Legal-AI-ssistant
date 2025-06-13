@@ -24,7 +24,8 @@ pip install --upgrade pip
 pip install -r requirements.txt
 pip install -r requirements-dev.txt  # development and testing tools
 ```
-   The requirements file includes database drivers such as **asyncpg** for PostgreSQL and **aioredis** for Redis. Installing `requirements-dev.txt` pulls in optional tools like `pytest` and linters.
+The optional command-line interface depends on the `typer` package which is now
+   The requirements file includes database drivers such as **asyncpg** for PostgreSQL and **aioredis** for Redis. Installing `requirements-dev.txt` pulls in optional tools like `nose2` and linters.
 3. Install Node packages for the React frontend:
    ```bash
    (cd frontend && npm install)
@@ -66,7 +67,7 @@ separately:
 pip install langgraph==0.0.20
 ```
 
-The [advanced LangGraph guide](docs/advanced_langgraph.md) explains how this
+The [advanced LangGraph guide](legal_ai_system/docs/advanced_langgraph.md) explains how this
 optional dependency enables document classification routing, specialized
 subgraphs, and real-time progress updates over WebSocket. It also shows a
 `CaseWorkflowState` example for passing state between nodes.
@@ -80,7 +81,20 @@ aliased consistently:
 python legal_ai_system/scripts/fix_langgraph_typing.py
 ```
 
-For more detailed instructions see [ENV_SETUP.md](docs/ENV_SETUP.md).
+For more detailed instructions see [ENV_SETUP.md](legal_ai_system/docs/ENV_SETUP.md).
+
+### PostgreSQL Setup
+
+Run the initialization script to create the PostgreSQL database before applying migrations:
+
+```bash
+python legal_ai_system/scripts/init_postgres_db.py
+python legal_ai_system/scripts/migrate_database.py
+```
+
+The script reads the `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, and
+`POSTGRES_DB` environment variables to determine the connection details. Set `POSTGRES_ADMIN_DB` if
+you need to use an administrative database other than `postgres`.
 
 The older `setup_environment_task.py` script can also be used to create the vir
 tual environment and run the tests:
@@ -89,7 +103,7 @@ python legal_ai_system/scripts/setup_environment_task.py
 ```
 For a faster workflow, you can run the helper script below. It automatically
 creates `.venv` if needed, installs all development dependencies, and invokes
-`pytest`:
+`nose2`:
 
 ```bash
 ./scripts/run_tests.sh
@@ -97,17 +111,17 @@ creates `.venv` if needed, installs all development dependencies, and invokes
 
 ## Running Tests
 
-Before invoking `pytest`, install the development dependencies:
+Before invoking `nose2`, install the development dependencies:
 
 ```bash
 pip install -e .[dev]
 ```
 
 Running tests with coverage is enabled by default via `pytest-cov`. After
-installing the development dependencies simply run `pytest`:
+installing the development dependencies simply run `nose2`:
 
 ```bash
-pytest
+nose2
 ```
 
 Alternatively, run the installation helper:
@@ -118,7 +132,7 @@ python legal_ai_system/scripts/install_all_dependencies.py
 
 Missing packages such as `pytest-mock` will cause test failures.
 
-See [docs/test_setup.md](docs/test_setup.md) for more information.
+See [docs/test_setup.md](legal_ai_system/docs/test_setup.md) for more information.
 
 ## Using the GUIs
 
@@ -137,7 +151,9 @@ choose the one that suits your workflow:
 
 ### PyQt6 Interface
 
-Install `PyQt6` and launch the integrated desktop GUI:
+Install `PyQt6` and launch the integrated desktop GUI. The interface now bundles
+its own widgets and utility classes so no extra prototype packages are
+required:
 
 ```bash
 pip install PyQt6
@@ -145,15 +161,42 @@ pip install PyQt6
 ```
 
 This interface can open local documents and run the default analysis workflow
-without a browser. It is primarily a demo and lacks the advanced features of the
-Streamlit and React frontends.
+without a browser. Under the hood the GUI starts a **BackendBridge** which
+initialises the asynchronous service container and forwards all actions to the
+`LegalAIIntegrationService`. Progress updates are emitted back to the widgets in
+real time.
 
-Detailed instructions are available in [docs/gui_setup.md](docs/gui_setup.md).
+
+Launch the interface using the package entry point:
+
+```bash
+python -m legal_ai_system
+```
+If PyQt6 cannot be loaded for any reason, the command falls back to the CLI
+described above.
+
+The bridge ensures the desktop app communicates with the same backend services
+as the API and other frontends. It is primarily a demo and lacks the advanced
+features of the Streamlit and React frontends.
+It now includes an experimental **Agent Management** tab for viewing registered
+agents. Real‑time metrics and control actions require a future backend API.
+
+To connect the GUI to a remote PostgreSQL instance, open **Database Connections**
+from the *Settings* menu. The dialog stores the host, port, user, password and
+database name using ``QSettings`` and updates ``DATABASE_URL`` for the running
+session.
+
+The asynchronous network and database layers have been consolidated into the
+application itself, so document uploads and preference storage no longer rely on
+stub modules. Metrics can be streamed to connected clients by enabling the
+`RealtimePublisher` in the configuration.
+
+Detailed instructions are available in [docs/gui_setup.md](legal_ai_system/docs/gui_setup.md).
 
 ### Extraction Options
 
 The ontology extraction agent supports multiple NER backends. Enable them in
-`config/defaults.yaml`:
+`legal_ai_system/config/defaults.yaml`:
 
 - `enable_spacy_ner`: load a spaCy pipeline specified by `spacy_ner_model`.
 - `enable_legal_bert`: use a HuggingFace Legal‑BERT model defined by
@@ -161,6 +204,10 @@ The ontology extraction agent supports multiple NER backends. Enable them in
 - `enable_regex_extraction`: apply regex patterns from the configuration files.
 
 All enabled methods are combined with confidence weighting during extraction.
+
+The integrated PyQt6 GUI exposes checkboxes for each backend under
+**Preferences**, making it easy to toggle regex, spaCy or Legal‑BERT
+extraction without editing configuration files.
 
 
 ### Start Task
@@ -177,7 +224,18 @@ print(result)
 ```
 
 You can customize the workflow builder to enable or disable specific agents.
-See the documents in the `docs/` folder for architecture details and advanced
-usage. The [Integration Guide](docs/integration_plan.md) summarises the
+See the documents in the `legal_ai_system/docs/` folder for architecture details and advanced
+usage. The [Integration Guide](legal_ai_system/docs/integration_plan.md) summarises the
 five-phase integration plan, WebSocket patterns and deployment tips and
 includes sections on security, testing, success metrics and troubleshooting.
+For a high level diagram showing how services, agents and workflows connect, see
+[docs/integration_map.md](docs/integration_map.md).
+
+The audit report in
+[legal_ai_system/docs/file_audit.md](legal_ai_system/docs/file_audit.md)
+captures the current folder layout, dependency findings, and a cleanup plan.
+Refer to it when making structural changes or removing deprecated modules.
+
+If PostgreSQL becomes unavailable, the application enters a degraded mode.
+Refer to [legal_ai_system/docs/postgres_downtime_impact.md](legal_ai_system/docs/postgres_downtime_impact.md)
+for a detailed list of features that are disabled or limited during downtime.

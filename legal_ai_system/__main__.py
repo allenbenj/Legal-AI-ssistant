@@ -18,7 +18,4 @@ if str(PACKAGE_ROOT) not in sys.path:
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
-from .gui.legal_ai_pyqt6_integrated import main as start_gui
 
-if __name__ == "__main__":
-    start_gui()

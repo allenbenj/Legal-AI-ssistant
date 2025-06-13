@@ -24,6 +24,7 @@ from ..core.detailed_logging import (
     LogCategory,
     detailed_log_function,
 )
+from ..core.agent_unified_config import _get_service_sync
 from ..analytics.quality_classifier import PreprocessingErrorPredictor
 from ..core.model_switcher import TaskComplexity
 from .metrics_exporter import MetricsExporter, metrics_exporter
@@ -53,6 +54,7 @@ class RealTimeAnalysisResult:
 
     # Processing results
     document_processing: Any
+    text_rewriting: Any
     ontology_extraction: Any
     hybrid_extraction: Any
 
@@ -115,13 +117,29 @@ class RealTimeAnalysisWorkflow:
         # User feedback integration
         self.feedback_callback: Optional[Callable] = None
         self.pending_feedback: Dict[str, Any] = {}
-        self.preproc_predictor = PreprocessingErrorPredictor()
+
+        # Access lightweight analytics services if available
+        self.keyword_service = None
+        self.quality_service = None
+        if service_container is not None:
+            self.keyword_service = service_container._services.get(
+                "keyword_extraction_service"
+            )
+            self.quality_service = service_container._services.get(
+                "quality_assessment_service"
+            )
+
+        self.preproc_predictor = (
+            self.quality_service.preproc_predictor
+            if self.quality_service is not None
+            else PreprocessingErrorPredictor()
+        )
 
         # Synchronization primitives
         self.processing_lock = asyncio.Semaphore(self.max_concurrent_documents)
         self.optimization_lock = asyncio.Lock()
 
-        # Placeholders for components initialized elsewhere
+        # Core components retrieved from the service container when available
         self.document_processor = None
         self.document_rewriter = None
         self.hybrid_extractor = None
@@ -129,6 +147,27 @@ class RealTimeAnalysisWorkflow:
         self.graph_manager = None
         self.vector_store = None
         self.reviewable_memory = None
+
+        if service_container is not None:
+            self.document_processor = _get_service_sync(
+                service_container, "documentprocessoragent"
+            )
+            self.document_rewriter = _get_service_sync(
+                service_container, "documentrewriteragent"
+            )
+            self.ontology_extractor = _get_service_sync(
+                service_container, "ontologyextractionagent"
+            )
+            self.hybrid_extractor = _get_service_sync(
+                service_container, "hybridlegalextractor"
+            )
+            self.graph_manager = _get_service_sync(
+                service_container, "realtime_graph_manager"
+            )
+            self.vector_store = _get_service_sync(service_container, "vector_store")
+            self.reviewable_memory = _get_service_sync(
+                service_container, "reviewable_memory"
+            )
 
         # ML optimizer and policy learner for dynamic routing
         try:
@@ -172,9 +211,23 @@ class RealTimeAnalysisWorkflow:
                 self._run_realtime_pipeline, document_path, **kwargs
             )
             await self._notify_progress("queued", 0.0)
+            await self._notify_update(
+                "workflow_queued",
+                {"document_id": document_id, "job_id": getattr(job, "id", None)},
+            )
             return job
 
-        return await self._run_realtime_pipeline(document_path, **kwargs)
+        try:
+            result = await self._run_realtime_pipeline(document_path, **kwargs)
+            await self._notify_update(
+                "workflow_completed", {"document_id": document_id}
+            )
+            return result
+        except Exception as e:
+            await self._notify_update(
+                "workflow_failed", {"document_id": document_id, "error": str(e)}
+            )
+            raise
 
     async def _run_realtime_pipeline(self, document_path: str, **kwargs):
         """Run the end-to-end real-time processing pipeline."""
@@ -198,6 +251,34 @@ class RealTimeAnalysisWorkflow:
             self.policy_learner.update_agent_stats("document_processor", success)
             text = self._extract_text_from_result(document_result)
             doc_features = self._extract_document_features(text, document_path)
+
+            await self._notify_progress("text_rewrite", 0.10)
+            if self.policy_learner.should_run_step("text_rewrite", doc_features):
+                t0 = time.time()
+                rewrite_result = await self.document_rewriter.rewrite_text(text)
+                duration = time.time() - t0
+                success = bool(rewrite_result)
+                text = getattr(rewrite_result, "corrected_text", text)
+            else:
+                rewrite_result = SimpleNamespace(corrected_text=text)
+                duration = 0.0
+                success = True
+            processing_times["text_rewrite"] = duration
+            self.policy_learner.update_agent_stats("document_rewriter", success)
+            self.policy_learner.record_step(
+                "text_rewrite", doc_features, success, duration
+            )
+            self.ml_optimizer.record_step_metrics(
+                document_path,
+                "text_rewrite",
+                PerformanceMetrics(processing_time=duration, success=success),
+            )
+
+            if self.keyword_service:
+                keywords = self.keyword_service.extract(text, top_k=10)
+                await self._notify_update(
+                    "keywords", {"document_id": document_id, "keywords": keywords}
+                )
             self.policy_learner.record_step(
                 "document_processing", doc_features, success, duration
             )
@@ -212,6 +293,10 @@ class RealTimeAnalysisWorkflow:
                     "content_preview": text[:1000] if text else "",
                     "size": Path(document_path).stat().st_size,
                 }
+            )
+            await self._notify_update(
+                "preprocessing_risk",
+                {"document_id": document_id, "risk": risk},
             )
             if risk > 0.5:
                 if hasattr(self.hybrid_extractor, "model_switcher"):
@@ -352,6 +437,7 @@ class RealTimeAnalysisWorkflow:
             document_path=document_path,
             document_id=document_id,
             document_processing=document_result,
+            text_rewriting=rewrite_result,
             ontology_extraction=ontology_result,
             hybrid_extraction=hybrid_result,
             graph_updates=graph_updates,

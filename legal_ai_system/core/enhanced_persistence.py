@@ -8,6 +8,7 @@
 import asyncio
 import asyncpg # For PostgreSQL
 import aioredis # For Redis
+import aiofiles
 from typing import Any, Dict, List, Optional, Union, AsyncGenerator
 from dataclasses import dataclass, asdict, field # Added field
 from datetime import datetime, timezone # Added timezone
@@ -893,17 +894,79 @@ class CacheManager:
             self.logger.error("Unexpected error fetching cache stats.", exception=e)
             return {"error": f"Unexpected error: {str(e)}"}
 
+    @detailed_log_function(LogCategory.DATABASE)
+    async def persist_to_disk(self, file_path: str) -> bool:
+        """Persist all cached values to a JSON file for durability."""
+        if not self.pool.redis_pool:
+            self.logger.warning("Redis pool not initialized, cannot persist cache.")
+            return False
+        try:
+            async with self.pool.get_redis_connection() as redis:
+                keys = await redis.keys("*")
+                data: Dict[str, Any] = {}
+                for key in keys:
+                    val = await redis.get(key)
+                    if val is not None:
+                        try:
+                            data[key.decode("utf-8") if isinstance(key, bytes) else key] = json.loads(val.decode("utf-8"))
+                        except Exception:
+                            continue
+            async with aiofiles.open(file_path, "w") as f:
+                await f.write(json.dumps(data))
+            self.logger.info("Cache persisted to disk.", parameters={"file": file_path, "entries": len(data)})
+            return True
+        except Exception as e:
+            self.logger.error("Failed to persist cache to disk.", parameters={"file": file_path}, exception=e)
+            return False
+
+    @detailed_log_function(LogCategory.DATABASE)
+    async def load_from_disk(self, file_path: str) -> int:
+        """Load cached values from a JSON file. Returns number of entries restored."""
+        if not self.pool.redis_pool:
+            self.logger.warning("Redis pool not initialized, cannot load cache.")
+            return 0
+        try:
+            async with aiofiles.open(file_path, "r") as f:
+                content = await f.read()
+            data = json.loads(content)
+            async with self.pool.get_redis_connection() as redis:
+                for key, value in data.items():
+                    await redis.set(key, json.dumps(value))
+            self.logger.info("Cache loaded from disk.", parameters={"file": file_path, "entries": len(data)})
+            return len(data)
+        except FileNotFoundError:
+            self.logger.warning("Cache file not found during load.", parameters={"file": file_path})
+            return 0
+        except Exception as e:
+            self.logger.error("Failed to load cache from disk.", parameters={"file": file_path}, exception=e)
+            return 0
+
 
 class EnhancedPersistenceManager:
     """Central persistence manager coordinating all data operations."""
 
     def __init__(
         self,
+        *,
+        config: Optional[Dict[str, Any]] = None,
+        connection_pool: Optional[ConnectionPool] = None,
+        metrics_exporter: Optional[Any] = None,
+    ) -> None:
+        """Create a new ``EnhancedPersistenceManager`` instance."""
+
         self.config = config or {}
         cache_ttl = self.config.get("cache_default_ttl_seconds", 3600)
 
         if connection_pool is None:
+            connection_pool = ConnectionPool(
+                self.config.get("database_url"),
+                self.config.get("redis_url"),
+                self.config.get("min_pg_connections", 5),
+                self.config.get("max_pg_connections", 20),
+                self.config.get("max_redis_connections", 10),
             )
+        elif not isinstance(connection_pool, ConnectionPool):
+            raise TypeError("connection_pool must be a ConnectionPool instance")
 
         self.connection_pool = connection_pool
         self.entity_repo = EntityRepository(self.connection_pool)
@@ -1136,8 +1199,27 @@ class EnhancedPersistenceManager:
 
 
 # Factory function for service container
+
 def create_enhanced_persistence_manager(
+    *,
+    config: Optional[Dict[str, Any]] = None,
+    connection_pool: Optional[ConnectionPool] = None,
+    metrics_exporter: Optional[Any] = None,
+) -> EnhancedPersistenceManager:
+    """Convenience factory for creating a persistence manager."""
+
+    cfg = config or {}
     if connection_pool is None:
         connection_pool = ConnectionPool(
             cfg.get("database_url"),
             cfg.get("redis_url"),
+            cfg.get("min_pg_connections", 5),
+            cfg.get("max_pg_connections", 20),
+            cfg.get("max_redis_connections", 10),
+        )
+
+    return EnhancedPersistenceManager(
+        config=cfg,
+        connection_pool=connection_pool,
+        metrics_exporter=metrics_exporter,
+    )

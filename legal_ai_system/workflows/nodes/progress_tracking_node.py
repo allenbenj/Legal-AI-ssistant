@@ -2,7 +2,14 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from ...api.websocket_manager import ConnectionManager
+try:  # pragma: no cover - avoid mandatory fastapi dependency in tests
+    from ...api.websocket_manager import ConnectionManager
+except Exception:
+    from typing import Protocol
+
+    class ConnectionManager(Protocol):  # type: ignore[misc]
+        async def broadcast(self, topic: str, message: Dict[str, Any]) -> None:
+            ...
 
 
 class ProgressTrackingNode:

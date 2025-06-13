@@ -854,15 +854,71 @@ class AutoTaggingAgent(BaseAgent, MemoryMixin):
 
     async def get_learning_statistics_async(self) -> Dict[str, Any]:  # Public method
         """Retrieves learning statistics, potentially combining cache and UMM."""
-        # For simplicity, this example returns cached stats. A real version would query UMM.
-        if self.unified_memory_manager:
-            # Example: fetch global stats or stats for top N tags from UMM
-            # global_stats = await self.unified_memory_manager.get_overall_tag_learning_summary_async()
-            # For now, combine with cache:
-            # This is complex. Simplest is to return cache, assuming UMM is the source of truth updated by this agent.
-            pass
+        self.logger.debug(
+            "Collecting learning statistics.",
+            parameters={"umm_available": bool(self.unified_memory_manager)},
+        )
 
         cached_stats = self.tag_accuracy_scores_cache.copy()  # Operate on a copy
+
+        if self.unified_memory_manager:
+            tags_to_query = list(cached_stats.keys())
+            umm_stats: Dict[str, Dict[str, float]] = {}
+            try:
+                if tags_to_query:
+                    results = await asyncio.gather(
+                        *[
+                            self.unified_memory_manager.get_tag_learning_stats_async(t)
+                            for t in tags_to_query
+                        ],
+                        return_exceptions=True,
+                    )
+                    for tag, res in zip(tags_to_query, results):
+                        if isinstance(res, Exception):
+                            self.logger.error(
+                                "UMM retrieval failed for tag.",
+                                parameters={"tag": tag},
+                                exception=res,
+                            )
+                            continue
+                        if res:
+                            umm_stats[tag] = {
+                                "correct": float(res.get("correct_count", 0)),
+                                "incorrect": float(res.get("incorrect_count", 0)),
+                                "suggested": float(res.get("suggested_count", 0)),
+                                "last_updated_ts": (
+                                    datetime.fromisoformat(res.get("last_updated"))
+                                    .timestamp()
+                                    if res.get("last_updated")
+                                    else 0.0
+                                ),
+                            }
+                self.logger.debug(
+                    "Loaded tag stats from UMM.",
+                    parameters={"tags_loaded": len(umm_stats)},
+                )
+            except Exception as e:  # pragma: no cover - defensive
+                self.logger.error(
+                    "Failed to retrieve learning stats from UMM.", exception=e
+                )
+                umm_stats = {}
+
+            # Merge UMM stats with cached stats
+            for tag in set(cached_stats.keys()).union(umm_stats.keys()):
+                local = cached_stats.get(tag, {})
+                remote = umm_stats.get(tag, {})
+                cached_stats[tag] = {
+                    "correct": local.get("correct", 0.0) + remote.get("correct", 0.0),
+                    "incorrect": local.get("incorrect", 0.0)
+                    + remote.get("incorrect", 0.0),
+                    "suggested": local.get("suggested", 0.0)
+                    + remote.get("suggested", 0.0),
+                    "last_updated_ts": max(
+                        local.get("last_updated_ts", 0.0),
+                        remote.get("last_updated_ts", 0.0),
+                    ),
+                }
+
         total_feedback_events = sum(
             stats.get("correct", 0) + stats.get("incorrect", 0)
             for stats in cached_stats.values()

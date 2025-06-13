@@ -18,9 +18,28 @@ for name in [
     "sklearn",
     "sklearn.metrics",
     "sklearn.metrics.pairwise",
+    "sklearn.feature_extraction.text",
+    "sklearn.linear_model",
+    "pydantic",
+    "fastapi",
+    "prometheus_client",
+    "uvicorn",
 ]:
     if name not in sys.modules:
         sys.modules[name] = ModuleType(name)
+    if name == "pydantic":
+        sys.modules[name].BaseModel = object
+        sys.modules[name].BaseSettings = object
+        sys.modules[name].Field = lambda *a, **k: k.get("default") if "default" in k else (a[0] if a else None)
+    if name == "fastapi":
+        sys.modules[name].FastAPI = object
+    if name == "prometheus_client":
+        sys.modules[name].Counter = lambda *a, **k: object()
+        sys.modules[name].Histogram = lambda *a, **k: object()
+        sys.modules[name].Gauge = lambda *a, **k: object()
+        sys.modules[name].make_asgi_app = lambda *a, **k: None
+    if name == "uvicorn":
+        sys.modules[name].run = lambda *a, **k: None
 
 class _RedisError(Exception):
     pass
@@ -32,6 +51,12 @@ exc.RedisError = _RedisError
 exc.TimeoutError = TimeoutError = type("TimeoutError", (Exception,), {})
 sys.modules["aioredis.exceptions"] = exc
 sys.modules["sklearn.metrics.pairwise"].cosine_similarity = lambda *a, **k: []
+sys.modules.setdefault("sklearn.feature_extraction", ModuleType("sklearn.feature_extraction"))
+sys.modules["sklearn.feature_extraction"].text = ModuleType("text")
+sys.modules["sklearn.feature_extraction"].text.TfidfVectorizer = object
+sys.modules["sklearn.feature_extraction.text"] = sys.modules["sklearn.feature_extraction"].text
+sys.modules.setdefault("sklearn.linear_model", ModuleType("sklearn.linear_model"))
+sys.modules["sklearn.linear_model"].LogisticRegression = object
 if not hasattr(sys.modules["numpy"], "array"):
     sys.modules["numpy"].array = lambda *a, **k: a
 if not hasattr(sys.modules["numpy"], "ndarray"):
@@ -150,6 +175,7 @@ async def test_process_document_realtime_returns_result_structure() -> None:
         "graph_updates",
         "vector_updates",
         "memory_updates",
+        "text_rewriting",
     }
     assert expected_keys.issubset(set(data.keys()))
     assert result.document_id
@@ -175,6 +201,14 @@ async def test_process_document_realtime_updates_graph_and_vectors() -> None:
 
 
 @pytest.mark.asyncio
+async def test_process_document_realtime_invokes_rewriter() -> None:
+    wf = DummyWorkflow()
+    await wf.process_document_realtime("sample.txt")
+
+    wf.document_rewriter.rewrite_text.assert_awaited()
+
+
+@pytest.mark.asyncio
 async def test_process_document_realtime_queues_job_when_queue_available() -> None:
     queue = MagicMock()
     queue.enqueue = MagicMock(return_value="job")
@@ -185,6 +219,28 @@ async def test_process_document_realtime_queues_job_when_queue_available() -> No
     assert result == "job"
     queue.enqueue.assert_called_once()
     wf._notify_progress.assert_awaited_with("queued", 0.0)
+
+
+@pytest.mark.asyncio
+async def test_process_document_realtime_emits_completion_update() -> None:
+    wf = DummyWorkflow()
+    await wf.process_document_realtime("sample.txt")
+
+    wf._notify_update.assert_any_await(
+        "workflow_completed", pytest.ANY
+    )
+
+
+@pytest.mark.asyncio
+async def test_process_document_realtime_emits_failure_update() -> None:
+    wf = DummyWorkflow()
+    wf._run_realtime_pipeline = AsyncMock(side_effect=RuntimeError("boom"))
+    with pytest.raises(RuntimeError):
+        await wf.process_document_realtime("sample.txt")
+
+    wf._notify_update.assert_any_await(
+        "workflow_failed", pytest.ANY
+    )
 
 
 
