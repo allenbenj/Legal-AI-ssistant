@@ -202,6 +202,10 @@ The ontology extraction agent supports multiple NER backends. Enable them in
 
 All enabled methods are combined with confidence weighting during extraction.
 
+The integrated PyQt6 GUI exposes checkboxes for each backend under
+**Preferences**, making it easy to toggle regex, spaCy or Legal‑BERT
+extraction without editing configuration files.
+
 
 ### Start Task
 

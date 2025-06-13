@@ -237,20 +237,40 @@ class DocumentViewer(QWidget):
 
 
 class SettingsDialog(QDialog):
-    """Basic settings dialog with a few editable fields."""
+    """Application preferences dialog."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Settings")
         layout = QVBoxLayout(self)
-        self.api_url = QLabel("API URL: placeholder")
-        self.openai_key = QLabel("OpenAI Key: ********")
-        self.enable_ner = QLabel("NER Enabled")
-        self.enable_llm = QLabel("LLM Enabled")
-        layout.addWidget(self.api_url)
-        layout.addWidget(self.openai_key)
-        layout.addWidget(self.enable_ner)
-        layout.addWidget(self.enable_llm)
+
+        form = QFormLayout()
+
+        self.api_url_edit = QLineEdit()
+        form.addRow("API URL", self.api_url_edit)
+
+        self.openai_key_edit = QLineEdit()
+        self.openai_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        form.addRow("OpenAI Key", self.openai_key_edit)
+
+        self.regex_cb = QCheckBox("Regex Extraction")
+        self.spacy_cb = QCheckBox("spaCy NER")
+        self.bert_cb = QCheckBox("Legal-BERT")
+        self.llm_cb = QCheckBox("LLM Extraction")
+
+        form.addRow(self.regex_cb)
+        form.addRow(self.spacy_cb)
+        form.addRow(self.bert_cb)
+        form.addRow(self.llm_cb)
+
+        layout.addLayout(form)
+
+        btn_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        btn_box.accepted.connect(self.accept)
+        btn_box.rejected.connect(self.reject)
+        layout.addWidget(btn_box)
 
 
 class AboutDialog(QDialog):
@@ -581,6 +601,10 @@ class IntegratedMainWindow(QMainWindow):
 
         docs_action = help_menu.addAction("Documentation")
         docs_action.setShortcut("F1")
+        docs_action.triggered.connect(self.openDocumentation)
+
+        dashboard_action = help_menu.addAction("Open Dashboard")
+        dashboard_action.triggered.connect(self.openDashboard)
 
         help_menu.addSeparator()
 
@@ -883,7 +907,15 @@ class IntegratedMainWindow(QMainWindow):
                 self.api_client.uploadDocument(
                     path,
                     {
-                        "enable_ner": self.prefs_manager.get("enable_ner", True),
+                        "enable_regex_extraction": self.prefs_manager.get(
+                            "enable_regex_extraction", True
+                        ),
+                        "enable_spacy_ner": self.prefs_manager.get(
+                            "enable_spacy_ner", False
+                        ),
+                        "enable_legal_bert": self.prefs_manager.get(
+                            "enable_legal_bert", False
+                        ),
                         "enable_llm": self.prefs_manager.get("enable_llm", True),
                         "confidence_threshold": self.prefs_manager.get(
                             "confidence_threshold", 0.7
@@ -902,7 +934,15 @@ class IntegratedMainWindow(QMainWindow):
                 self.api_client.uploadDocument(
                     Path(doc.filename),
                     {
-                        "enable_ner": self.prefs_manager.get("enable_ner", True),
+                        "enable_regex_extraction": self.prefs_manager.get(
+                            "enable_regex_extraction", True
+                        ),
+                        "enable_spacy_ner": self.prefs_manager.get(
+                            "enable_spacy_ner", False
+                        ),
+                        "enable_legal_bert": self.prefs_manager.get(
+                            "enable_legal_bert", False
+                        ),
                         "enable_llm": self.prefs_manager.get("enable_llm", True),
                     },
                 )
@@ -936,12 +976,31 @@ class IntegratedMainWindow(QMainWindow):
     def showSettings(self):
         """Show settings dialog"""
         dialog = SettingsDialog(self)
+        dialog.api_url_edit.setText(
+            str(self.prefs_manager.get("api_url", "http://localhost:8000"))
+        )
+        dialog.openai_key_edit.setText(str(self.prefs_manager.get("openai_key", "")))
+        dialog.regex_cb.setChecked(
+            bool(self.prefs_manager.get("enable_regex_extraction", True))
+        )
+        dialog.spacy_cb.setChecked(
+            bool(self.prefs_manager.get("enable_spacy_ner", False))
+        )
+        dialog.bert_cb.setChecked(
+            bool(self.prefs_manager.get("enable_legal_bert", False))
+        )
+        dialog.llm_cb.setChecked(bool(self.prefs_manager.get("enable_llm", True)))
+
         if dialog.exec() == QDialog.DialogCode.Accepted:
             # Save settings
-            self.prefs_manager.set("api_url", dialog.api_url.text())
-            self.prefs_manager.set("openai_key", dialog.openai_key.text())
-            self.prefs_manager.set("enable_ner", dialog.enable_ner.isChecked())
-            self.prefs_manager.set("enable_llm", dialog.enable_llm.isChecked())
+            self.prefs_manager.set("api_url", dialog.api_url_edit.text())
+            self.prefs_manager.set("openai_key", dialog.openai_key_edit.text())
+            self.prefs_manager.set(
+                "enable_regex_extraction", dialog.regex_cb.isChecked()
+            )
+            self.prefs_manager.set("enable_spacy_ner", dialog.spacy_cb.isChecked())
+            self.prefs_manager.set("enable_legal_bert", dialog.bert_cb.isChecked())
+            self.prefs_manager.set("enable_llm", dialog.llm_cb.isChecked())
 
     def showDatabaseConnections(self):
         """Open database connection configuration dialog."""
@@ -954,6 +1013,15 @@ class IntegratedMainWindow(QMainWindow):
         """Show about dialog"""
         dialog = AboutDialog(self)
         dialog.exec()
+
+    def openDocumentation(self):
+        """Open project documentation in the default browser."""
+        doc_path = Path(__file__).resolve().parents[2] / "README.md"
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(doc_path)))
+
+    def openDashboard(self):
+        """Open the Streamlit dashboard if running."""
+        QDesktopServices.openUrl(QUrl("http://localhost:8501"))
 
     def showNotification(self, message: str, notification_type: str = "info"):
         """Show notification popup"""
