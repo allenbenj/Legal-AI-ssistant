@@ -46,6 +46,8 @@ PyYAML>=6.0
 # langgraph>=0.0.20 # Uncomment if LangGraph is a core dependency
 watchgod>=0.8
 
+typer>=0.9.0  # For the command-line interface
+
 # Standard Library (no need to list, but were identified)
 # asyncio
 # collections
