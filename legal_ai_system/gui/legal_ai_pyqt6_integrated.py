@@ -37,7 +37,6 @@ from legal_ai_system.legal_ai_network import (
 )
 
 from .backend_bridge import BackendBridge
-from .startup_config_dialog import StartupConfigDialog
 
 
 class GlowingButton(QPushButton):
@@ -1151,11 +1150,6 @@ class IntegratedMainWindow(QMainWindow):
 def main():
     # Create application
     app = LegalAIApplication(sys.argv)
-
-    # Display initial configuration dialog
-    setup_dialog = StartupConfigDialog()
-    if setup_dialog.exec() != QDialog.DialogCode.Accepted:
-        return
 
     # Create splash screen
     splash = QSplashScreen()
