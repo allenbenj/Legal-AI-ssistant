@@ -765,28 +765,28 @@
 <text text-anchor="middle" x="229.5" y="-707.71" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">gui.</text>
 <text text-anchor="middle" x="229.5" y="-696.71" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">db_connection_dialog</text>
 </g>
-<!-- legal_ai_system_gui_legal_ai_pyqt6_integrated -->
+<!-- legal_ai_system_gui_legal_ai_pyqt6_enhanced -->
 <g id="node35" class="node">
-<title>legal_ai_system_gui_legal_ai_pyqt6_integrated</title><style>.edge>path:hover{stroke-width:8}</style>
+<title>legal_ai_system_gui_legal_ai_pyqt6_enhanced</title><style>.edge>path:hover{stroke-width:8}</style>
 <polygon fill="blue" stroke="black" points="301,-621.17 158,-621.17 158,-580.17 301,-580.17 301,-621.17"/>
 <text text-anchor="middle" x="229.5" y="-609.17" font-family="Helvetica,sans-Serif" font-size="10.00" fill="white">legal_ai_system.</text>
 <text text-anchor="middle" x="229.5" y="-598.17" font-family="Helvetica,sans-Serif" font-size="10.00" fill="white">gui.</text>
-<text text-anchor="middle" x="229.5" y="-587.17" font-family="Helvetica,sans-Serif" font-size="10.00" fill="white">legal_ai_pyqt6_integrated</text>
+<text text-anchor="middle" x="229.5" y="-587.17" font-family="Helvetica,sans-Serif" font-size="10.00" fill="white">legal_ai_pyqt6_enhanced</text>
 </g>
-<!-- legal_ai_system_gui_db_connection_dialog&#45;&gt;legal_ai_system_gui_legal_ai_pyqt6_integrated -->
+<!-- legal_ai_system_gui_db_connection_dialog&#45;&gt;legal_ai_system_gui_legal_ai_pyqt6_enhanced -->
 <g id="edge71" class="edge">
-<title>legal_ai_system_gui_db_connection_dialog&#45;&gt;legal_ai_system_gui_legal_ai_pyqt6_integrated</title><style>.edge>path:hover{stroke-width:8}</style>
+<title>legal_ai_system_gui_db_connection_dialog&#45;&gt;legal_ai_system_gui_legal_ai_pyqt6_enhanced</title><style>.edge>path:hover{stroke-width:8}</style>
 <path fill="none" stroke="black" d="M229.5,-680.95C229.5,-665.68 229.5,-646.84 229.5,-631.35"/>
 <polygon fill="#c24747" stroke="black" points="233,-631.25 229.5,-621.25 226,-631.25 233,-631.25"/>
 </g>
-<!-- legal_ai_system_gui_legal_ai_pyqt6_integrated&#45;&gt;legal_ai_system___main__ -->
+<!-- legal_ai_system_gui_legal_ai_pyqt6_enhanced&#45;&gt;legal_ai_system___main__ -->
 <g id="edge72" class="edge">
-<title>legal_ai_system_gui_legal_ai_pyqt6_integrated&#45;&gt;legal_ai_system___main__</title><style>.edge>path:hover{stroke-width:8}</style>
+<title>legal_ai_system_gui_legal_ai_pyqt6_enhanced&#45;&gt;legal_ai_system___main__</title><style>.edge>path:hover{stroke-width:8}</style>
 <path fill="none" stroke="black" d="M166.71,-580.13C130.94,-564.93 90.69,-539.6 77.5,-499.91"/>
 </g>
-<!-- legal_ai_system_gui_legal_ai_pyqt6_integrated&#45;&gt;legal_ai_system_gui -->
+<!-- legal_ai_system_gui_legal_ai_pyqt6_enhanced&#45;&gt;legal_ai_system_gui -->
 <g id="edge73" class="edge">
-<title>legal_ai_system_gui_legal_ai_pyqt6_integrated&#45;&gt;legal_ai_system_gui</title><style>.edge>path:hover{stroke-width:8}</style>
+<title>legal_ai_system_gui_legal_ai_pyqt6_enhanced&#45;&gt;legal_ai_system_gui</title><style>.edge>path:hover{stroke-width:8}</style>
 <path fill="none" stroke="black" d="M278.61,-621.17C301.85,-632.89 327.88,-650.12 343.5,-673.44 386,-736.87 386.63,-831.55 383.93,-877.7"/>
 <polygon fill="blue" stroke="black" points="380.42,-877.6 383.23,-887.82 387.41,-878.08 380.42,-877.6"/>
 </g>
@@ -901,9 +901,9 @@
 <title>legal_ai_system_gui_widgets_legal_ai_charts&#45;&gt;legal_ai_system_legal_ai_desktop</title><style>.edge>path:hover{stroke-width:8}</style>
 <path fill="none" stroke="black" d="M423.3,-1087.73C437.35,-1075.99 451.68,-1061.2 460.5,-1044.48 489.28,-989.9 432.86,-947.35 479.5,-906.95"/>
 </g>
-<!-- legal_ai_system_legal_ai_charts&#45;&gt;legal_ai_system_gui_legal_ai_pyqt6_integrated -->
+<!-- legal_ai_system_legal_ai_charts&#45;&gt;legal_ai_system_gui_legal_ai_pyqt6_enhanced -->
 <g id="edge84" class="edge">
-<title>legal_ai_system_legal_ai_charts&#45;&gt;legal_ai_system_gui_legal_ai_pyqt6_integrated</title><style>.edge>path:hover{stroke-width:8}</style>
+<title>legal_ai_system_legal_ai_charts&#45;&gt;legal_ai_system_gui_legal_ai_pyqt6_enhanced</title><style>.edge>path:hover{stroke-width:8}</style>
 <path fill="none" stroke="black" d="M57.42,-793.96C70.72,-766.55 99.54,-711.83 134.5,-673.44 150.41,-655.97 171.05,-639.79 189.02,-627.24"/>
 <polygon fill="blue" stroke="black" points="191.32,-629.9 197.6,-621.37 187.37,-624.13 191.32,-629.9"/>
 </g>
@@ -914,15 +914,15 @@
 <text text-anchor="middle" x="279.5" y="-814.97" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">legal_ai_system.</text>
 <text text-anchor="middle" x="279.5" y="-803.97" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">legal_ai_database</text>
 </g>
-<!-- legal_ai_system_legal_ai_database&#45;&gt;legal_ai_system_gui_legal_ai_pyqt6_integrated -->
+<!-- legal_ai_system_legal_ai_database&#45;&gt;legal_ai_system_gui_legal_ai_pyqt6_enhanced -->
 <g id="edge85" class="edge">
-<title>legal_ai_system_legal_ai_database&#45;&gt;legal_ai_system_gui_legal_ai_pyqt6_integrated</title><style>.edge>path:hover{stroke-width:8}</style>
+<title>legal_ai_system_legal_ai_database&#45;&gt;legal_ai_system_gui_legal_ai_pyqt6_enhanced</title><style>.edge>path:hover{stroke-width:8}</style>
 <path fill="none" stroke="black" d="M298.07,-791.4C308.01,-779.55 319.26,-763.55 324.5,-746.97 334.36,-715.81 339.07,-702.69 324.5,-673.44 314.76,-653.88 296.87,-638.23 279.22,-626.61"/>
 <polygon fill="#c24747" stroke="black" points="280.94,-623.56 270.61,-621.22 277.23,-629.49 280.94,-623.56"/>
 </g>
-<!-- legal_ai_system_legal_ai_desktop&#45;&gt;legal_ai_system_gui_legal_ai_pyqt6_integrated -->
+<!-- legal_ai_system_legal_ai_desktop&#45;&gt;legal_ai_system_gui_legal_ai_pyqt6_enhanced -->
 <g id="edge86" class="edge">
-<title>legal_ai_system_legal_ai_desktop&#45;&gt;legal_ai_system_gui_legal_ai_pyqt6_integrated</title><style>.edge>path:hover{stroke-width:8}</style>
+<title>legal_ai_system_legal_ai_desktop&#45;&gt;legal_ai_system_gui_legal_ai_pyqt6_enhanced</title><style>.edge>path:hover{stroke-width:8}</style>
 <path fill="none" stroke="black" d="M742.15,-793.88C710.82,-777.01 666.06,-748.37 639.5,-711.21"/>
 </g>
 <!-- legal_ai_system_legal_ai_network -->
@@ -932,9 +932,9 @@
 <text text-anchor="middle" x="480.5" y="-814.97" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">legal_ai_system.</text>
 <text text-anchor="middle" x="480.5" y="-803.97" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">legal_ai_network</text>
 </g>
-<!-- legal_ai_system_legal_ai_network&#45;&gt;legal_ai_system_gui_legal_ai_pyqt6_integrated -->
+<!-- legal_ai_system_legal_ai_network&#45;&gt;legal_ai_system_gui_legal_ai_pyqt6_enhanced -->
 <g id="edge87" class="edge">
-<title>legal_ai_system_legal_ai_network&#45;&gt;legal_ai_system_gui_legal_ai_pyqt6_integrated</title><style>.edge>path:hover{stroke-width:8}</style>
+<title>legal_ai_system_legal_ai_network&#45;&gt;legal_ai_system_gui_legal_ai_pyqt6_enhanced</title><style>.edge>path:hover{stroke-width:8}</style>
 <path fill="none" stroke="black" d="M522.26,-794.66C574.77,-772.94 656.17,-734.54 639.5,-711.21"/>
 <path fill="none" stroke="black" d="M639.5,-709.21C601.59,-656.16 419.68,-625.02 311.32,-610.88"/>
 <polygon fill="#c24747" stroke="black" points="311.75,-607.41 301.39,-609.6 310.86,-614.35 311.75,-607.41"/>
@@ -946,9 +946,9 @@
 <text text-anchor="middle" x="639.5" y="-814.97" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">legal_ai_system.</text>
 <text text-anchor="middle" x="639.5" y="-803.97" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">legal_ai_widgets</text>
 </g>
-<!-- legal_ai_system_legal_ai_widgets&#45;&gt;legal_ai_system_gui_legal_ai_pyqt6_integrated -->
+<!-- legal_ai_system_legal_ai_widgets&#45;&gt;legal_ai_system_gui_legal_ai_pyqt6_enhanced -->
 <g id="edge88" class="edge">
-<title>legal_ai_system_legal_ai_widgets&#45;&gt;legal_ai_system_gui_legal_ai_pyqt6_integrated</title><style>.edge>path:hover{stroke-width:8}</style>
+<title>legal_ai_system_legal_ai_widgets&#45;&gt;legal_ai_system_gui_legal_ai_pyqt6_enhanced</title><style>.edge>path:hover{stroke-width:8}</style>
 <path fill="none" stroke="black" d="M645.9,-790.53C651.37,-768.76 656.02,-734.31 639.5,-711.21"/>
 </g>
 <!-- legal_ai_system_tools -->
