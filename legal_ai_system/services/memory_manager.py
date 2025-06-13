@@ -13,13 +13,7 @@ from typing import Any, Dict, List, Optional
 from pathlib import Path
 import threading
 
-# Use a relative import so the package works even if the repository hasn't been
-# installed as a site package.  Windows users reported ``ModuleNotFoundError``
-# when the absolute import was used directly from the source tree.  By
-# resolving the dependency relative to this module we ensure the correct
-# ``integration_ready`` package is found regardless of how ``legal_ai_system``
-# is executed.
-from ..integration_ready.vector_store_enhanced import MemoryStore
+from legal_ai_system.integration_ready.vector_store_enhanced import MemoryStore
 
 logger = logging.getLogger(__name__)
 
