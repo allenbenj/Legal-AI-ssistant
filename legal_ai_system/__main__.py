@@ -22,7 +22,7 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 try:
     from .gui.legal_ai_pyqt6_integrated import main as start_gui
 except Exception as exc:  # pragma: no cover - runtime dependency check
-    logging.error("Failed to load PyQt6 GUI: %s", exc)
+    logging.error("Failed to load PyQt6 GUI: %s", exc, exc_info=True)
     start_gui = None
 
 

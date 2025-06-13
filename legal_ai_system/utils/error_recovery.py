@@ -162,8 +162,13 @@ class ErrorRecovery:
         error_str_lower = str(error).lower()
         error_class_name_lower = type(error).__name__.lower()
 
-        if isinstance(error, (FileNotFoundError, PermissionError)): return ErrorType.FILE_CORRUPTED # Or FILE_ACCESS_ERROR
-        if isinstance(error, (asyncio.TimeoutError, TimeoutError)): return ErrorType.LLM_TIMEOUT # Or GENERIC_TIMEOUT
+        if isinstance(error, (FileNotFoundError, PermissionError)):
+            return ErrorType.FILE_CORRUPTED  # Or FILE_ACCESS_ERROR
+        # ``asyncio.TimeoutError`` aliases the built-in ``TimeoutError`` as of
+        # Python 3.11+.  Checking only ``TimeoutError`` avoids accidental
+        # duplication when libraries import the alias under a different name.
+        if isinstance(error, TimeoutError):
+            return ErrorType.LLM_TIMEOUT  # Or GENERIC_TIMEOUT
         if "timeout" in error_str_lower: return ErrorType.LLM_TIMEOUT
 
         if isinstance(error, MemoryError): return ErrorType.MEMORY_ALLOCATION_ERROR
